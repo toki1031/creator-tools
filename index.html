@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#10131c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Creator Tools">
+<link rel="manifest" href="manifest.webmanifest">
+<title>Creator Tools｜動画制作ツール集</title>
+<style>
+:root{color-scheme:dark;--bg:#0b0e15;--panel:#171b27;--panel2:#202638;--text:#f5f7fb;--muted:#aab1c2;--line:#30384d;--accent:#7c8cff;--accent2:#a274ff;--ok:#55d6a5;--danger:#ff7185}
+*{box-sizing:border-box}html{-webkit-text-size-adjust:100%}body{margin:0;background:radial-gradient(circle at 20% 0,#1d2548 0,transparent 34%),var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic UI",sans-serif;padding:max(16px,env(safe-area-inset-top)) 14px max(30px,env(safe-area-inset-bottom))}
+.app{max-width:850px;margin:auto}.head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}.brand{display:flex;gap:11px;align-items:center}.logo{width:45px;height:45px;border-radius:15px;display:grid;place-items:center;background:linear-gradient(135deg,var(--accent),var(--accent2));font-size:22px}h1{font-size:20px;margin:0}.sub{font-size:12px;color:var(--muted);margin-top:3px}
+.tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;position:sticky;top:max(8px,env(safe-area-inset-top));z-index:10;background:rgba(11,14,21,.9);backdrop-filter:blur(12px);padding:7px 0 10px}.tab{min-height:46px;border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--muted);font-weight:800}.tab.active{background:linear-gradient(135deg,var(--accent),var(--accent2));color:white;border-color:transparent}
+.panel{display:none}.panel.active{display:block}.card{background:rgba(23,27,39,.95);border:1px solid var(--line);border-radius:20px;padding:15px;margin-bottom:12px;box-shadow:0 16px 40px rgba(0,0,0,.25)}.title{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}.title h2{font-size:15px;margin:0}.count,.hint{font-size:12px;color:var(--muted);line-height:1.65}
+textarea,input,select{width:100%;border:1px solid var(--line);background:#10141f;color:var(--text);border-radius:15px;padding:12px;font:inherit;font-size:16px;outline:none}textarea{min-height:260px;line-height:1.8;resize:vertical}textarea:focus,input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(124,140,255,.14)}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.field{display:flex;flex-direction:column;gap:7px;margin-top:10px}.field label{font-size:12px;color:var(--muted);font-weight:700}.toolbar{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.btn{border:1px solid var(--line);background:var(--panel2);color:var(--text);min-height:43px;padding:9px 13px;border-radius:13px;font-weight:800}.btn.primary{background:linear-gradient(135deg,var(--accent),var(--accent2));border-color:transparent}.btn.danger{background:rgba(255,113,133,.12);color:#ffd9de}.btn.small{font-size:13px;min-height:38px}.btn:active{transform:translateY(1px)}
+.controls{position:sticky;bottom:max(8px,env(safe-area-inset-bottom));z-index:9;display:grid;grid-template-columns:1.5fr 1fr 1fr;gap:8px}.status{font-size:13px;color:var(--muted);display:flex;gap:8px;align-items:center}.dot{width:9px;height:9px;border-radius:50%;background:#687086}.dot.live{background:var(--ok);box-shadow:0 0 0 5px rgba(85,214,165,.13)}
+.range{display:grid;grid-template-columns:1fr 48px;gap:8px;align-items:center}.range input{padding:0;accent-color:var(--accent)}.range span{text-align:center;font-size:12px;background:#10141f;padding:7px;border-radius:9px}
+.output{white-space:pre-wrap;min-height:150px;background:#10141f;border:1px solid var(--line);border-radius:15px;padding:13px;line-height:1.8;font-size:15px}.caption-line{padding:9px 10px;border-bottom:1px dashed var(--line)}.caption-line:last-child{border-bottom:0}.notice{border-left:3px solid var(--accent);padding-left:10px}
+@media(max-width:620px){.row{grid-template-columns:1fr}.tabs{font-size:12px}textarea{min-height:310px}.controls{grid-template-columns:1.4fr 1fr 1fr}}
+</style>
+</head>
+<body>
+<main class="app">
+<header class="head"><div class="brand"><div class="logo">✦</div><div><h1>Creator Tools</h1><div class="sub">YouTube・Instagram制作を、ひとつに。</div></div></div></header>
+
+<nav class="tabs">
+<button class="tab active" data-tab="voice">🎙 読み上げ</button>
+<button class="tab" data-tab="script">📝 台本整形</button>
+<button class="tab" data-tab="caption">✂️ 字幕分割</button>
+</nav>
+
+<section id="voice" class="panel active">
+<div class="card">
+<div class="title"><h2>読み上げる文章</h2><span id="voiceCount" class="count">0文字</span></div>
+<textarea id="voiceText" placeholder="ここにナレーション台本を貼り付けます。"></textarea>
+<div class="toolbar"><button class="btn small" id="sampleVoice">サンプル</button><button class="btn small" id="copyVoice">コピー</button><button class="btn small danger" id="clearVoice">消去</button></div>
+</div>
+<div class="card">
+<div class="title"><h2>声の設定</h2></div>
+<div class="field"><label>音声</label><select id="voiceSelect"><option>音声を読み込み中…</option></select></div>
+<div class="row">
+<div class="field"><label>速度</label><div class="range"><input id="rate" type="range" min=".5" max="1.8" value=".92" step=".01"><span id="rateVal">0.92</span></div></div>
+<div class="field"><label>高さ</label><div class="range"><input id="pitch" type="range" min=".5" max="1.5" value=".94" step=".01"><span id="pitchVal">0.94</span></div></div>
+</div>
+<div class="toolbar">
+<button class="btn small preset" data-rate=".90" data-pitch=".92">落ち着いた教養系</button>
+<button class="btn small preset" data-rate="1.05" data-pitch=".88">力強い</button>
+<button class="btn small preset" data-rate=".84" data-pitch="1.04">感動的</button>
+<button class="btn small preset" data-rate="1.16" data-pitch="1">テンポ良く</button>
+</div>
+</div>
+<div class="card controls"><button class="btn primary" id="play">▶ 読み上げ</button><button class="btn" id="pause">⏸ 一時停止</button><button class="btn danger" id="stop">■ 停止</button></div>
+<div class="card"><div class="status"><span id="dot" class="dot"></span><span id="status">待機中</span></div><p class="hint notice">この試作版はiPhone内蔵音声を利用します。MP3保存は、次のAI音声版で追加します。</p></div>
+</section>
+
+<section id="script" class="panel">
+<div class="card">
+<div class="title"><h2>元の台本</h2><span id="scriptCount" class="count">0文字</span></div>
+<textarea id="scriptInput" placeholder="ChatGPTやClaudeで作った台本を貼り付けます。"></textarea>
+<div class="field"><label>整形スタイル</label><select id="scriptStyle"><option value="shorts">YouTube Shorts向け</option><option value="narration">ナレーション向け</option><option value="clean">余分な記号だけ削除</option></select></div>
+<div class="toolbar"><button class="btn primary" id="formatScript">台本を整える</button><button class="btn small" id="sendVoice">読み上げへ送る</button></div>
+</div>
+<div class="card"><div class="title"><h2>整形後</h2><button class="btn small" id="copyScript">コピー</button></div><div id="scriptOutput" class="output">ここに結果が表示されます。</div></div>
+</section>
+
+<section id="caption" class="panel">
+<div class="card">
+<div class="title"><h2>字幕にする文章</h2><span id="captionCount" class="count">0文字</span></div>
+<textarea id="captionInput" placeholder="台本を貼り付けると、字幕用に短く分割します。"></textarea>
+<div class="row">
+<div class="field"><label>1行の目安</label><select id="captionLength"><option value="12">短め（12文字）</option><option value="16" selected>標準（16文字）</option><option value="20">長め（20文字）</option></select></div>
+<div class="field"><label>表示形式</label><select id="captionMode"><option value="line">1字幕ずつ改行</option><option value="number">番号付き</option></select></div>
+</div>
+<div class="toolbar"><button class="btn primary" id="makeCaption">字幕を作る</button><button class="btn small" id="sendScript">台本整形へ送る</button></div>
+</div>
+<div class="card"><div class="title"><h2>字幕結果</h2><button class="btn small" id="copyCaption">コピー</button></div><div id="captionOutput" class="output">ここに字幕が表示されます。</div></div>
+</section>
+</main>
+<script>
+(()=>{
+const $=id=>document.getElementById(id);
+const KEY='creator-tools-v1';
+const saved=JSON.parse(localStorage.getItem(KEY)||'{}');
+const save=()=>localStorage.setItem(KEY,JSON.stringify({voiceText:$('voiceText').value,scriptInput:$('scriptInput').value,captionInput:$('captionInput').value,rate:$('rate').value,pitch:$('pitch').value}));
+const toast=t=>{const old=document.title;document.title='✓ '+t;setTimeout(()=>document.title=old,900)};
+document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab,.panel').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.tab).classList.add('active')});
+const count=(el,out)=>{out.textContent=el.value.length.toLocaleString('ja-JP')+'文字';save()};
+['voiceText','scriptInput','captionInput'].forEach((id,i)=>{const el=$(id),out=$(['voiceCount','scriptCount','captionCount'][i]);el.value=saved[id]||'';el.oninput=()=>count(el,out);count(el,out)});
+const copy=async text=>{try{await navigator.clipboard.writeText(text);toast('コピーしました')}catch{prompt('コピーしてください',text)}};
+$('copyVoice').onclick=()=>copy($('voiceText').value);$('clearVoice').onclick=()=>{$('voiceText').value='';count($('voiceText'),$('voiceCount'))};
+$('sampleVoice').onclick=()=>{$('voiceText').value='社長でありながら、夜間学校へ通った男がいます。\\n\\nその男の名は、本田宗一郎。\\n\\n彼は、知らないことを認める勇気を持っていました。';count($('voiceText'),$('voiceCount'))};
+
+const synth=window.speechSynthesis;let voices=[],utt;
+function loadVoices(){voices=synth?.getVoices?.()||[];const list=voices.filter(v=>v.lang.toLowerCase().startsWith('ja'));const use=list.length?list:voices;$('voiceSelect').innerHTML='';use.forEach((v,i)=>{const o=document.createElement('option');o.value=i;o.textContent=v.name+'（'+v.lang+'）';$('voiceSelect').appendChild(o)});if(!use.length)$('voiceSelect').innerHTML='<option>音声がありません</option>';$('voiceSelect')._voices=use}
+loadVoices();if(synth)synth.onvoiceschanged=loadVoices;
+['rate','pitch'].forEach(id=>{const el=$(id),v=$(id+'Val');el.value=saved[id]||el.value;v.textContent=Number(el.value).toFixed(2);el.oninput=()=>{v.textContent=Number(el.value).toFixed(2);save()}});
+document.querySelectorAll('.preset').forEach(b=>b.onclick=()=>{$('rate').value=b.dataset.rate;$('pitch').value=b.dataset.pitch;$('rateVal').textContent=Number(b.dataset.rate).toFixed(2);$('pitchVal').textContent=Number(b.dataset.pitch).toFixed(2);save()});
+const status=(t,live=false)=>{$('status').textContent=t;$('dot').classList.toggle('live',live)};
+$('play').onclick=()=>{const text=$('voiceText').value.trim();if(!text)return alert('文章を入力してください。');synth.cancel();utt=new SpeechSynthesisUtterance(text);const list=$('voiceSelect')._voices||[];utt.voice=list[Number($('voiceSelect').value)]||null;utt.lang=utt.voice?.lang||'ja-JP';utt.rate=Number($('rate').value);utt.pitch=Number($('pitch').value);utt.onstart=()=>status('読み上げ中',true);utt.onend=()=>status('完了');utt.onerror=()=>status('読み上げに失敗しました');synth.speak(utt)};
+$('pause').onclick=()=>{if(synth.paused){synth.resume();status('読み上げ中',true);$('pause').textContent='⏸ 一時停止'}else{synth.pause();status('一時停止中');$('pause').textContent='▶ 再開'}};
+$('stop').onclick=()=>{synth.cancel();status('停止しました');$('pause').textContent='⏸ 一時停止'};
+
+function cleanText(t){return t.replace(/```[\s\S]*?```/g,'').replace(/^#{1,6}\s*/gm,'').replace(/^[・●■◆◇▶︎▷\-*]\s*/gm,'').replace(/\*\*/g,'').replace(/[ \t]+$/gm,'').replace(/\n{3,}/g,'\n\n').trim()}
+function formatScript(t,style){t=cleanText(t);if(style==='clean')return t;if(style==='narration')return t.replace(/([。！？])/g,'$1\n').replace(/\n{2,}/g,'\n\n').trim();return t.replace(/([。！？])/g,'$1\n\n').replace(/、/g,'、\n').replace(/\n{3,}/g,'\n\n').trim()}
+$('formatScript').onclick=()=>{$('scriptOutput').textContent=formatScript($('scriptInput').value,$('scriptStyle').value)||'文章を入力してください。'};
+$('copyScript').onclick=()=>copy($('scriptOutput').textContent);
+$('sendVoice').onclick=()=>{const t=$('scriptOutput').textContent==='ここに結果が表示されます。'?$('scriptInput').value:$('scriptOutput').textContent;$('voiceText').value=t;count($('voiceText'),$('voiceCount'));document.querySelector('[data-tab="voice"]').click()};
+
+function splitCaption(text,max){text=cleanText(text).replace(/\n+/g,'').trim();const parts=text.split(/(?<=[。！？])/);const lines=[];for(const p of parts){let s=p.trim();while(s.length>max){let cut=-1;for(const c of ['、','。','！','？',' ']){const i=s.lastIndexOf(c,max);if(i>cut)cut=i+1}if(cut<max*.55)cut=max;lines.push(s.slice(0,cut).trim());s=s.slice(cut).trim()}if(s)lines.push(s)}return lines}
+$('makeCaption').onclick=()=>{const lines=splitCaption($('captionInput').value,Number($('captionLength').value));const mode=$('captionMode').value;$('captionOutput').textContent=lines.length?lines.map((x,i)=>mode==='number'?`${i+1}. ${x}`:x).join('\n\n'):'文章を入力してください。'};
+$('copyCaption').onclick=()=>copy($('captionOutput').textContent);
+$('sendScript').onclick=()=>{$('scriptInput').value=$('captionInput').value;count($('scriptInput'),$('scriptCount'));document.querySelector('[data-tab="script"]').click()};
+})();
+</script>
+</body>
+</html>
