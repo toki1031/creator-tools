@@ -1,4 +1,4 @@
-import type { CreatorProject, Genre, Platform } from "../../types/project";
+import type { CreatorProject, Genre, Platform } from "./project";
 
 export function createProject(title: string, genre: Genre, platform: Platform): CreatorProject {
   const now = new Date().toISOString();

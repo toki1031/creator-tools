@@ -1,8 +1,10 @@
 {
-  "name": "Creator Tools",
-  "short_name": "Creator Tools",
-  "start_url": "./",
+  "name": "Creator OS",
+  "short_name": "Creator OS",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#0b0e15",
-  "theme_color": "#10131c"
+  "theme_color": "#10131c",
+  "lang": "ja",
+  "description": "台本から動画完成までを支援するクリエイター向け制作OS"
 }

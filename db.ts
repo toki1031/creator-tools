@@ -1,4 +1,4 @@
-import type { CreatorProject } from "../types/project";
+import type { CreatorProject } from "./project";
 
 const DB_NAME = "creator-os";
 const DB_VERSION = 1;

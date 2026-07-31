@@ -1,9 +1,9 @@
 import "./style.css";
-import { readRoute, goHome, goProject } from "./app/router";
-import { createProject } from "./features/projects/projectFactory";
-import { deleteProject, getProject, listProjects, saveProject } from "./storage/db";
-import type { CreatorProject, Genre, Platform } from "./types/project";
-import { downloadJson } from "./utils/download";
+import { readRoute, goHome, goProject } from "./router";
+import { createProject } from "./projectFactory";
+import { deleteProject, getProject, listProjects, saveProject } from "./db";
+import type { CreatorProject, Genre, Platform } from "./project";
+import { downloadJson } from "./download";
 
 const rootElement = document.querySelector<HTMLDivElement>("#app");
 if (!rootElement) throw new Error("#app がありません。");

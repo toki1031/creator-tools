@@ -1,0 +1,9 @@
+Creator OS Sprint 0 iPhone修正版
+
+このフォルダ内のファイルは、すべてGitHubリポジトリの一番上の階層へアップロードしてください。
+フォルダ構造は不要です。
+同名ファイルは上書きしてください。
+
+Cloudflare Pages:
+Build command: npm run build
+Build output directory: dist
