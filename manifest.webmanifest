@@ -1,7 +1,7 @@
 {
   "name": "Creator OS",
   "short_name": "Creator OS",
-  "start_url": "/",
+  "start_url": "./",
   "display": "standalone",
   "background_color": "#0b0e15",
   "theme_color": "#10131c",
