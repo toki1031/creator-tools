@@ -1,21 +1,22 @@
-# Creator OS — Sprint 0.2 安定版
+# Creator OS — Sprint 1
 
-Cloudflare Pagesでビルド不要の静的サイトとして動作する基盤です。
+Sprint 0.2の安定した静的サイト構成を維持しながら、ナレーション制作機能を追加しました。
 
-## Cloudflare設定
+## 実装済み
+
+- プロジェクト作成・保存・削除
+- 表示用原稿と音声用原稿の分離
+- 読み方辞書（追加・編集・削除・自動保存）
+- 辞書を音声原稿だけへ反映
+- 自然な語り口プリセット
+- iPhone内の日本語音声一覧
+- 速度・高さ調整
+- 選択範囲または全文の部分試聴
+- JSONバックアップ
+
+## Cloudflare Pages
+
 - Framework preset: なし
 - Build command: 空欄
-- Build output directory: `/` または空欄（画面の仕様に合わせる）
+- Build output directory: 空欄（必須なら `/`）
 - Root directory: 空欄
-- Production branch: main
-
-## 特徴
-- npm/Viteのインストール不要
-- iPhoneアップロードで階層が崩れないフラット構成
-- ES Modulesによる機能分割
-- IndexedDB自動保存
-- JSON書き出し
-- 起動エラー表示
-
-## 次のSprint
-読み方辞書、部分試聴、自然な語り口変換を追加します。
