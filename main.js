@@ -1,4 +1,4 @@
-import { readRoute, goHome, goStudio, goProject, goScenes, goBgm, goOutput, goPublish } from "./router.js";
+import { readRoute, goHome, goStudio, goProject, goScenes, goBgm, goOutput, goPublish, goAi } from "./router.js";
 import { createProject } from "./projectFactory.js";
 import { deleteProject, getProject, listProjects, saveProject } from "./db.js";
 import { downloadJson } from "./download.js";
@@ -70,7 +70,7 @@ async function renderStudio(studioKey) {
   root.innerHTML = `
     <main class="shell">
       <header class="editor-head"><button id="back">←</button><div><span>CREATOR OS</span><h1>${studio.icon} ${studio.title}</h1></div><button id="menu">•••</button></header>
-      <section class="studio-hero"><h2>${isBgm ? "長時間BGM動画を、迷わず組み立てる" : "企画から完成動画までを一つの制作線に"}</h2><p>${studio.desc}</p><button class="primary" id="openCreate">＋ 新しいプロジェクト</button></section>
+      <section class="studio-hero"><h2>${isBgm ? "長時間BGM動画を、迷わず組み立てる" : "企画から完成動画までを一つの制作線に"}</h2><p>${studio.desc}</p><div class="hero-buttons"><button class="primary" id="openCreate">＋ 新しいプロジェクト</button><button id="openAiGuide">🤖 AIスタッフの使い方</button></div></section>
       ${isBgm ? `<section class="workflow-grid">
         <article><b>1</b><h3>テーマ設計</h3><p>雨・窓辺・睡眠・読書など、用途と雰囲気を決める。</p></article>
         <article><b>2</b><h3>音源管理</h3><p>無料BGM・自作音源・将来のAI作曲を登録し、利用条件も保存。</p></article>
@@ -96,6 +96,7 @@ async function renderStudio(studioKey) {
   root.querySelectorAll(".project-card").forEach(card => card.onclick = () => goProject(card.dataset.id));
   const dialog = root.querySelector("#createDialog");
   root.querySelector("#openCreate").onclick = () => dialog.showModal();
+  root.querySelector("#openAiGuide").onclick = () => alert("プロジェクトを開き、上部の「AIスタッフ」から担当別プロンプトを作成できます。現在は追加料金のない手動コピーモードです。");
   root.querySelector("#cancelCreate").onclick = () => dialog.close();
   root.querySelector("#createForm").onsubmit = async event => {
     event.preventDefault();
@@ -112,7 +113,7 @@ async function renderProject(id) {
   root.innerHTML = `
     <main class="shell editor-shell">
       <header class="editor-head"><button id="back">←</button><div><span>${labelPlatform(project.platform)}</span><h1>${escapeHtml(project.title)}</h1></div><button id="menu">•••</button></header>
-      <nav class="steps"><button class="active">1 台本・音声</button><button id="stepScenes">2 シーン</button><button id="stepBgm">3 BGM</button><button id="stepOutput">4 出力</button></nav>
+      <nav class="steps"><button id="stepAi">0 AIスタッフ</button><button class="active">1 台本・音声</button><button id="stepScenes">2 シーン</button><button id="stepBgm">3 BGM</button><button id="stepOutput">4 出力</button></nav>
       <section class="editor-card"><div class="section-head"><div><h2>表示用の台本</h2><p>字幕や画面に表示する文章です。</p></div><span id="displayCount">${project.displayScript.length}文字</span></div><textarea id="displayScript" placeholder="台本を貼り付けてください。">${escapeHtml(project.displayScript)}</textarea></section>
       <section class="editor-card"><div class="section-head"><div><h2>音声用の台本</h2><p>読み方辞書と語り口調整を反映する専用原稿です。</p></div><button id="copyDisplay">表示用からコピー</button></div><textarea id="speechScript" placeholder="音声用原稿">${escapeHtml(project.speechScript)}</textarea><div class="tool-row"><select id="narrationStyle"><option value="standard">標準</option><option value="shorts">Shorts・テンポ重視</option><option value="documentary">ドキュメンタリー</option><option value="gentle">やさしい語り</option></select><button id="naturalize">自然な語り口に整える</button><button id="applyDictionary">辞書を反映</button></div></section>
       <section class="editor-card"><div class="section-head"><div><h2>読み方辞書</h2><p>字幕は漢字のまま、音声原稿だけ読みを置き換えます。</p></div><button id="addDictionary">＋ 追加</button></div><div id="dictionaryList" class="dictionary-list"></div></section>
@@ -123,11 +124,13 @@ async function renderProject(id) {
     </main>`;
 
   root.querySelector("#back").onclick = () => goStudio(studioForGenre(project.genre));
+  root.querySelector("#stepAi").onclick = () => goAi(project.id);
   root.querySelector("#stepScenes").onclick = () => goScenes(project.id);
   root.querySelector("#stepBgm").onclick = () => goBgm(project.id);
   root.querySelector("#stepOutput").onclick = () => goOutput(project.id);
   root.querySelector("#nextScenes").onclick = () => goScenes(project.id);
   attachProjectMenu(project, root.querySelector("#menu"), () => goStudio(studioForGenre(project.genre)));
+  const aiStep = root.querySelector("#stepAi"); if (aiStep) aiStep.onclick = () => goAi(project.id);
   const display = root.querySelector("#displayScript");
   const speech = root.querySelector("#speechScript");
   const duration = root.querySelector("#duration");
@@ -188,19 +191,21 @@ async function renderScenes(id) {
   root.innerHTML=`
     <main class="shell editor-shell">
       <header class="editor-head"><button id="back">←</button><div><span>${labelPlatform(project.platform)}</span><h1>${escapeHtml(project.title)}</h1></div><button id="menu">•••</button></header>
-      <nav class="steps"><button id="stepScript">1 台本・音声</button><button class="active">2 シーン</button><button id="stepBgm">3 BGM</button><button id="stepOutput">4 出力</button></nav>
+      <nav class="steps"><button id="stepAi">0 AIスタッフ</button><button id="stepScript">1 台本・音声</button><button class="active">2 シーン</button><button id="stepBgm">3 BGM</button><button id="stepOutput">4 出力</button></nav>
       <section class="editor-card"><div class="section-head"><div><h2>シーン編集</h2><p>台本を場面に分け、画像・表示秒数・演出を設定します。</p></div><span id="sceneCount">${project.scenes.length}シーン</span></div><div class="tool-row"><button class="primary" id="autoSplit">台本から自動分割</button><button id="addScene">＋ 空のシーン</button></div></section>
       <section id="sceneList" class="scene-list"></section>
       <section class="editor-card compact"><div><b>合計時間</b><p id="totalDuration">0秒</p></div><p id="saveState">保存済み</p></section>
       <section class="actions"><button id="backScript">← 台本へ</button><button id="exportJson">JSONを書き出す</button><button class="primary" id="nextBgm">次へ：BGM・字幕</button></section>
     </main>`;
   root.querySelector("#back").onclick=()=>goStudio(studioForGenre(project.genre));
+  root.querySelector("#stepAi").onclick=()=>goAi(project.id);
   root.querySelector("#stepScript").onclick=()=>goProject(project.id);
   root.querySelector("#stepBgm").onclick=()=>goBgm(project.id);
   root.querySelector("#stepOutput").onclick=()=>goOutput(project.id);
   root.querySelector("#nextBgm").onclick=()=>goBgm(project.id);
   root.querySelector("#backScript").onclick=()=>goProject(project.id);
   attachProjectMenu(project, root.querySelector("#menu"), () => goStudio(studioForGenre(project.genre)));
+  const aiStep = root.querySelector("#stepAi"); if (aiStep) aiStep.onclick = () => goAi(project.id);
   const saveState=root.querySelector("#saveState"); let timer;
   const save=()=>{saveState.textContent="保存中…";clearTimeout(timer);timer=setTimeout(async()=>{project.scenes.forEach((s,i)=>s.order=i+1);project.updatedAt=new Date().toISOString();await saveProject(project);saveState.textContent="保存済み";},400);};
   const total=()=>project.scenes.reduce((sum,s)=>sum+(Number(s.durationSec)||0),0);
@@ -253,7 +258,7 @@ async function renderBgm(id) {
   const project=await getProject(id); if(!project){goHome();return;} ensureProjectSettings(project); const b=project.bgm;
   root.innerHTML=`<main class="shell editor-shell">
     <header class="editor-head"><button id="back">←</button><div><span>${labelPlatform(project.platform)}</span><h1>${escapeHtml(project.title)}</h1></div><button id="menu">•••</button></header>
-    <nav class="steps"><button id="stepScript">1 台本・音声</button><button id="stepScenes">2 シーン</button><button class="active">3 BGM</button><button id="stepOutput">4 出力</button></nav>
+    <nav class="steps"><button id="stepAi">0 AIスタッフ</button><button id="stepScript">1 台本・音声</button><button id="stepScenes">2 シーン</button><button class="active">3 BGM</button><button id="stepOutput">4 出力</button></nav>
     <section class="editor-card"><div class="section-head"><div><h2>BGM・音源</h2><p>音源の種類、音量、ループ、利用条件を保存します。</p></div><span id="saveState">保存済み</span></div>
       <div class="form-grid"><label>音源の種類<select id="source"><option value="none">BGMなし</option><option value="upload">自分の音源をアップロード</option><option value="free">無料BGM（情報を登録）</option><option value="ai">AI生成BGM（後で追加）</option></select></label><label>雰囲気<select id="category"><option value="calm">教養・落ち着き</option><option value="history">歴史・重厚</option><option value="challenge">挑戦・前進</option><option value="emotion">感動・余韻</option><option value="rain">雨・環境音</option><option value="sleep">睡眠・リラックス</option></select></label></div>
       <label>BGM名<input id="bgmTitle" value="${escapeHtml(b.title||"")}" placeholder="例：静かなピアノと雨音"></label>
@@ -275,7 +280,7 @@ async function renderBgm(id) {
 async function renderOutput(id) {
   const project=await getProject(id); if(!project){goHome();return;} ensureProjectSettings(project); const o=project.output; const scenes=project.scenes||[]; const hasImages=scenes.filter(s=>s.imageData).length; const total=scenes.reduce((n,s)=>n+(Number(s.durationSec)||0),0);
   root.innerHTML=`<main class="shell editor-shell"><header class="editor-head"><button id="back">←</button><div><span>${labelPlatform(project.platform)}</span><h1>${escapeHtml(project.title)}</h1></div><button id="menu">•••</button></header>
-  <nav class="steps"><button id="stepScript">1 台本・音声</button><button id="stepScenes">2 シーン</button><button id="stepBgm">3 BGM</button><button class="active">4 出力</button></nav>
+  <nav class="steps"><button id="stepAi">0 AIスタッフ</button><button id="stepScript">1 台本・音声</button><button id="stepScenes">2 シーン</button><button id="stepBgm">3 BGM</button><button class="active">4 出力</button></nav>
   <section class="editor-card"><div class="section-head"><div><h2>動画出力設定</h2><p>完成動画の形式を設定します。</p></div><span id="saveState">保存済み</span></div><div class="form-grid"><label>解像度<select id="resolution"><option value="1080x1920">1080×1920（推奨）</option><option value="720x1280">720×1280（軽量）</option></select></label><label>フレームレート<select id="fps"><option value="30">30fps</option><option value="60">60fps</option></select></label><label>品質<select id="quality"><option value="standard">標準</option><option value="high">高品質</option></select></label><label class="check"><input id="subtitles" type="checkbox" ${o.subtitles?'checked':''}>字幕を表示</label><label>字幕位置<select id="subtitlePosition"><option value="top">上</option><option value="center">中央</option><option value="bottom">下</option></select></label><label class="check"><input id="bgmEnabled" type="checkbox" ${o.bgmEnabled?'checked':''}>BGMを使用</label></div></section>
   <section class="editor-card"><h2>素材チェック</h2><div class="check-list"><p class="${project.displayScript?'ok':'warn'}">${project.displayScript?'✓':'!'} 台本：${project.displayScript.length}文字</p><p class="${scenes.length?'ok':'warn'}">${scenes.length?'✓':'!'} シーン：${scenes.length}件</p><p class="${hasImages===scenes.length&&scenes.length?'ok':'warn'}">${hasImages===scenes.length&&scenes.length?'✓':'!'} 画像：${hasImages}/${scenes.length}件</p><p class="${project.bgm?.source&&project.bgm.source!=='none'?'ok':'muted'}">${project.bgm?.source&&project.bgm.source!=='none'?'✓':'−'} BGM：${escapeHtml(project.bgm?.title||'なし')}</p><p>予定尺：${total}秒</p></div></section>
   <section class="editor-card"><h2>書き出し</h2><p class="notice">現段階では設定・素材確認まで利用できます。実際のMP4生成エンジンは次のSprintで実装します。</p><div class="tool-row"><button id="exportPlan">制作プランJSONを書き出す</button><button class="primary" id="publish">投稿準備へ</button></div></section>
@@ -294,6 +299,184 @@ async function renderPublish(id) {
   const copy=async t=>{try{await navigator.clipboard.writeText(t);alert('コピーしました');}catch{prompt('コピーしてください',t);}};root.querySelector('#copyTitle').onclick=()=>copy(root.querySelector('#publishTitle').value);root.querySelector('#copyDescription').onclick=()=>copy(root.querySelector('#description').value);root.querySelector('#copyAll').onclick=()=>copy(`${root.querySelector('#publishTitle').value}\n\n${root.querySelector('#description').value}\n\n${root.querySelector('#tags').value}`);root.querySelector('#exportJson').onclick=()=>downloadJson(`${safeName(project.title)}-publish.json`,p);
 }
 
+
+const AI_ROLES = {
+  "great-person": [
+    {id:"editor", icon:"👔", name:"編集長AI", purpose:"人物・テーマ・視聴者・動画の狙いを決める"},
+    {id:"research", icon:"🔍", name:"リサーチAI", purpose:"史実・逸話・名言・出典候補を整理する"},
+    {id:"script", icon:"✍️", name:"脚本AI", purpose:"調査結果をShorts向けの台本へ変換する"},
+    {id:"image", icon:"🎨", name:"画像AI", purpose:"各シーンの画像生成プロンプトを作る"},
+    {id:"narration", icon:"🎙", name:"ナレーションAI", purpose:"聞きやすい語り口・読み・間へ整える"},
+    {id:"publish", icon:"📈", name:"投稿AI", purpose:"タイトル・概要欄・タグ・サムネ文言を作る"}
+  ],
+  "bgm": [
+    {id:"producer", icon:"🎧", name:"BGMプロデューサーAI", purpose:"用途・世界観・長さ・視聴場面を設計する"},
+    {id:"music", icon:"🎼", name:"音源設計AI", purpose:"作曲依頼または無料音源選定用の条件を作る"},
+    {id:"visual", icon:"🌧️", name:"背景映像AI", purpose:"背景画像・微細な動き・ループ演出を設計する"},
+    {id:"loop", icon:"🔁", name:"ループ品質AI", purpose:"音と映像が自然につながる確認項目を作る"},
+    {id:"publish", icon:"📈", name:"投稿AI", purpose:"タイトル・概要欄・タグ・サムネ文言を作る"}
+  ],
+  "education": [
+    {id:"editor", icon:"👔", name:"企画AI", purpose:"対象年齢・発達・保護者の悩みを整理する"},
+    {id:"safety", icon:"🛡️", name:"安全確認AI", purpose:"遊びや教材の安全上の注意を確認する"},
+    {id:"writer", icon:"✍️", name:"解説AI", purpose:"親子に分かりやすい投稿・動画構成を作る"},
+    {id:"visual", icon:"🎨", name:"画像AI", purpose:"カルーセル・リール用の画面指示を作る"},
+    {id:"publish", icon:"📈", name:"投稿AI", purpose:"キャプション・タイトル・タグを作る"}
+  ],
+  "fortune": [
+    {id:"calendar", icon:"📅", name:"暦調査AI", purpose:"暦・天体・五行など確認項目を整理する"},
+    {id:"editor", icon:"👔", name:"編集長AI", purpose:"その日の発信テーマと優先順位を決める"},
+    {id:"writer", icon:"✍️", name:"ライターAI", purpose:"生活に取り入れやすい投稿文へ変換する"},
+    {id:"review", icon:"✅", name:"審査AI", purpose:"根拠・断定表現・日付・文字数を確認する"},
+    {id:"visual", icon:"🎨", name:"画像AI", purpose:"投稿画像の生成指示を作る"}
+  ],
+  "sns": [
+    {id:"strategy", icon:"🧭", name:"運用AI", purpose:"媒体・目的・投稿形式を決める"},
+    {id:"writer", icon:"✍️", name:"投稿文AI", purpose:"媒体に合わせて文章を整える"},
+    {id:"visual", icon:"🎨", name:"クリエイティブAI", purpose:"画像・サムネ文言・構成を作る"},
+    {id:"review", icon:"✅", name:"品質管理AI", purpose:"文字数・重複・表現を確認する"},
+    {id:"analysis", icon:"📊", name:"分析AI", purpose:"結果を振り返り次の改善案を出す"}
+  ]
+};
+
+function rolesForProject(project) {
+  return AI_ROLES[studioForGenre(project.genre)] || AI_ROLES.sns;
+}
+function ensureAiWorkspace(project) {
+  project.aiWorkspace = project.aiWorkspace || {};
+}
+function buildAiPrompt(project, role, brief) {
+  const context = {
+    title: project.title,
+    genre: labelGenre(project.genre),
+    platform: labelPlatform(project.platform),
+    targetDurationSec: project.targetDurationSec,
+    displayScript: project.displayScript || "",
+    sceneCount: Array.isArray(project.scenes) ? project.scenes.length : 0,
+    bgm: project.bgm?.title || project.bgm?.category || ""
+  };
+  const roleRules = {
+    editor:"重複や偏りを避け、視聴者に人生で使える学びが残る企画にしてください。",
+    research:"事実と推測を分け、確認が必要な情報と出典候補を明示してください。断定できないことは断定しないでください。",
+    script:"冒頭3秒の引き、具体的な出来事、現代への翻訳、締めの順で、聞きやすい日本語にしてください。",
+    image:"画像は1シーンにつき1枚。縦9:16、人物・服装・時代・画風の一貫性を保つ指示にしてください。",
+    narration:"漢字の読み候補、息継ぎ、間、強調語を示し、字幕表示用と音声用を分けてください。",
+    publish:"誇張や虚偽を避け、タイトル、概要欄、タグ、サムネ文字を媒体に合わせて出してください。",
+    producer:"用途、視聴場面、感情曲線、尺、音と映像の役割を明確にしてください。",
+    music:"ループ可能で主張しすぎない音設計にし、商用利用条件を必ず確認する前提にしてください。",
+    visual:"長時間視聴を邪魔しない背景と微細な動きを設計してください。",
+    loop:"ループ境界、音量差、クリック音、映像の飛びを確認するチェックリストにしてください。",
+    safety:"対象年齢、誤飲、転倒、窒息、保護者の見守りなど安全面を優先してください。",
+    calendar:"日付に依存する情報は一次資料で確認する前提とし、不明点を明示してください。",
+    review:"仕様適合、根拠、誤字、断定、文字数、重複を順に審査してください。",
+    strategy:"目的、媒体、ターゲット、導線、投稿形式を整理してください。",
+    writer:"媒体の文字数と読みやすさに合わせて文章を作ってください。",
+    analysis:"数値と感想を分け、次回に試す改善を最大3件に絞ってください。"
+  };
+  return `# 役割
+あなたは「${role.name}」です。
+担当目的：${role.purpose}
+
+# プロジェクト情報
+タイトル：${context.title}
+ジャンル：${context.genre}
+投稿先：${context.platform}
+目標尺：${context.targetDurationSec}秒
+現在のシーン数：${context.sceneCount}
+BGM情報：${context.bgm || "未設定"}
+
+# 今回の依頼
+${brief || "この担当として、次に必要な成果物を作成してください。"}
+
+# 現在の台本
+${context.displayScript || "未入力"}
+
+# 重要ルール
+${roleRules[role.id] || "不明点は推測で埋めず、確認事項として示してください。"}
+回答はCreator OSへ貼り戻しやすいように、見出し付きのプレーンテキストで出力してください。`;
+}
+
+async function copyText(value) {
+  try { await navigator.clipboard.writeText(value); alert("コピーしました。"); }
+  catch { prompt("コピーしてください", value); }
+}
+
+async function renderAi(id) {
+  const project = await getProject(id);
+  if (!project) { goHome(); return; }
+  ensureAiWorkspace(project);
+  const roles = rolesForProject(project);
+  const firstRole = roles[0];
+  root.innerHTML = `
+    <main class="shell editor-shell">
+      <header class="editor-head"><button id="back">←</button><div><span>追加料金なし・手動モード</span><h1>🤖 AIスタッフ</h1></div><button id="menu">•••</button></header>
+      <nav class="steps"><button class="active">0 AIスタッフ</button><button id="stepScript">1 台本・音声</button><button id="stepScenes">2 シーン</button><button id="stepBgm">3 BGM</button><button id="stepOutput">4 出力</button></nav>
+      <section class="editor-card ai-mode-notice">
+        <div><strong>現在の接続方法：手動コピーモード</strong><p>Creator OSでプロンプトを作り、ChatGPTなどへ貼り付け、回答をここへ戻します。API料金は発生しません。</p></div>
+        <span class="status-chip">無料運用</span>
+      </section>
+      <section class="ai-layout">
+        <aside class="ai-role-list">
+          ${roles.map((role,index)=>`<button class="ai-role ${index===0?"active":""}" data-role="${role.id}"><span>${role.icon}</span><div><b>${role.name}</b><small>${role.purpose}</small></div></button>`).join("")}
+        </aside>
+        <section class="ai-workspace">
+          <div class="editor-card">
+            <div class="section-head"><div><h2 id="roleTitle">${firstRole.icon} ${firstRole.name}</h2><p id="rolePurpose">${firstRole.purpose}</p></div><span id="saveState">保存済み</span></div>
+            <label>今回この担当へ依頼すること<textarea id="aiBrief" placeholder="例：30〜40代の会社員に向けて、学び直しをテーマに人物と切り口を決めてください。"></textarea></label>
+            <div class="tool-row"><button class="primary" id="generatePrompt">プロンプトを作る</button><button id="copyPrompt">ChatGPT用にコピー</button></div>
+          </div>
+          <div class="editor-card"><div class="section-head"><div><h2>生成プロンプト</h2><p>内容を確認してからAIへ貼り付けます。</p></div></div><textarea id="aiPrompt" class="code-area" placeholder="ここにプロンプトが生成されます。"></textarea></div>
+          <div class="editor-card"><div class="section-head"><div><h2>AIからの回答</h2><p>返ってきた回答を貼り付けて保存します。</p></div><button id="useAsScript">台本へ反映</button></div><textarea id="aiResult" placeholder="AIの回答をここへ貼り付けます。"></textarea><div class="tool-row"><button class="primary" id="saveResult">回答を保存</button><button id="copyResult">回答をコピー</button></div></div>
+        </section>
+      </section>
+    </main>`;
+  root.querySelector("#back").onclick = () => goStudio(studioForGenre(project.genre));
+  root.querySelector("#stepScript").onclick = () => goProject(project.id);
+  root.querySelector("#stepScenes").onclick = () => goScenes(project.id);
+  root.querySelector("#stepBgm").onclick = () => goBgm(project.id);
+  root.querySelector("#stepOutput").onclick = () => goOutput(project.id);
+  attachProjectMenu(project, root.querySelector("#menu"), () => goStudio(studioForGenre(project.genre)));
+
+  let active = firstRole;
+  const brief = root.querySelector("#aiBrief");
+  const promptArea = root.querySelector("#aiPrompt");
+  const resultArea = root.querySelector("#aiResult");
+  const saveState = root.querySelector("#saveState");
+  const loadRole = role => {
+    active = role;
+    root.querySelector("#roleTitle").textContent = `${role.icon} ${role.name}`;
+    root.querySelector("#rolePurpose").textContent = role.purpose;
+    const saved = project.aiWorkspace[role.id] || {};
+    brief.value = saved.brief || "";
+    promptArea.value = saved.prompt || "";
+    resultArea.value = saved.result || "";
+    root.querySelectorAll(".ai-role").forEach(button => button.classList.toggle("active", button.dataset.role === role.id));
+  };
+  root.querySelectorAll(".ai-role").forEach(button => button.onclick = () => loadRole(roles.find(role => role.id === button.dataset.role)));
+  const saveWorkspace = async () => {
+    saveState.textContent = "保存中…";
+    project.aiWorkspace[active.id] = { brief:brief.value, prompt:promptArea.value, result:resultArea.value, updatedAt:new Date().toISOString() };
+    project.updatedAt = new Date().toISOString();
+    await saveProject(project);
+    saveState.textContent = "保存済み";
+  };
+  root.querySelector("#generatePrompt").onclick = async () => { promptArea.value = buildAiPrompt(project, active, brief.value.trim()); await saveWorkspace(); };
+  root.querySelector("#copyPrompt").onclick = async () => { if(!promptArea.value.trim()) promptArea.value=buildAiPrompt(project,active,brief.value.trim()); await saveWorkspace(); await copyText(promptArea.value); };
+  root.querySelector("#saveResult").onclick = saveWorkspace;
+  root.querySelector("#copyResult").onclick = () => copyText(resultArea.value);
+  root.querySelector("#useAsScript").onclick = async () => {
+    if (!resultArea.value.trim()) return alert("回答を貼り付けてください。");
+    if (!confirm("AIの回答を表示用台本へ反映しますか？現在の台本は置き換わります。")) return;
+    project.displayScript = resultArea.value.trim();
+    project.speechScript = resultArea.value.trim();
+    await saveWorkspace();
+    await saveProject(project);
+    alert("台本へ反映しました。");
+  };
+  [brief,promptArea,resultArea].forEach(area => area.addEventListener("change", saveWorkspace));
+  loadRole(firstRole);
+}
+
 function labelPlatform(value){return({"youtube-shorts":"YouTube Shorts","instagram-reels":"Instagram Reels","tiktok":"TikTok"})[value]||value;}
 function labelGenre(value){return({"great-person":"偉人・教養","education":"知育・教育","fortune":"開運・占い","bgm":"BGM","other":"その他"})[value]||value;}
 function safeName(value){return value.replace(/[\\/:*?"<>|]/g,"_")||"creator-os-project";}
@@ -301,7 +484,8 @@ function safeName(value){return value.replace(/[\\/:*?"<>|]/g,"_")||"creator-os-
 async function render(){
   try{
     const route=readRoute();
-    if(route.page==="project") await renderProject(route.id);
+    if(route.page==="ai") await renderAi(route.id);
+    else if(route.page==="project") await renderProject(route.id);
     else if(route.page==="scenes") await renderScenes(route.id);
     else if(route.page==="bgm") await renderBgm(route.id);
     else if(route.page==="output") await renderOutput(route.id);

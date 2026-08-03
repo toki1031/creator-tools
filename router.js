@@ -2,6 +2,7 @@ export function readRoute() {
   const hash = location.hash.replace(/^#\/?/, "");
   const [page, id, subpage] = hash.split("/");
   if (page === "studio" && id) return { page: "studio", studio: id };
+  if (page === "project" && id && subpage === "ai") return { page: "ai", id: decodeURIComponent(id) };
   if (page === "project" && id && subpage === "scenes") return { page: "scenes", id: decodeURIComponent(id) };
   if (page === "project" && id && subpage === "bgm") return { page: "bgm", id: decodeURIComponent(id) };
   if (page === "project" && id && subpage === "output") return { page: "output", id: decodeURIComponent(id) };
@@ -16,3 +17,5 @@ export function goScenes(id) { location.hash = `#/project/${encodeURIComponent(i
 export function goBgm(id) { location.hash = `#/project/${encodeURIComponent(id)}/bgm`; }
 export function goOutput(id) { location.hash = `#/project/${encodeURIComponent(id)}/output`; }
 export function goPublish(id) { location.hash = `#/project/${encodeURIComponent(id)}/publish`; }
+
+export function goAi(id) { location.hash = `#/project/${encodeURIComponent(id)}/ai`; }
