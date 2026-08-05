@@ -300,6 +300,91 @@ async function renderPublish(id) {
 }
 
 
+
+const BRAND_KEY = "creator-os-brands-v1";
+const DEFAULT_BRANDS = [
+  {
+    id:"great-wisdom", studio:"great-person", name:"偉人の知恵",
+    worldview:"偉人の知恵を現代へ翻訳し、面白さだけでなく人生で使える学びを届ける。",
+    voice:"落ち着いた教養系。難しい言葉を避け、具体的な出来事から現代の行動へつなげる。",
+    imageRules:"縦9:16。1シーン1枚。人物の顔・年齢・服装・時代背景・画風を全シーンで統一する。",
+    ngRules:"出典不明の名言を本人の言葉として断定しない。史実と推測を混同しない。同じ人物・テーマを短期間で重複させない。",
+    postingRules:"YouTube Shortsは冒頭3秒の引き、具体的な逸話、現代への翻訳、締めの順。45〜60秒を基本とする。"
+  },
+  {
+    id:"rain-library", studio:"bgm", name:"Rain Library",
+    worldview:"日常の集中・読書・睡眠を邪魔せず、静かに寄り添う長時間BGM。",
+    voice:"言葉は最小限。穏やかで静かな表現を使い、過剰な癒やし効果を断定しない。",
+    imageRules:"雨上がりの窓辺、青〜緑の寒色、観葉植物、カーテン、絵本など暮らしの気配。雷なし。水滴、微かな葉揺れ、ゆっくりしたカメラ移動。",
+    ngRules:"著作権・商用利用条件が不明な音源を採用しない。医学的効果や周波数効果を断定しない。",
+    postingRules:"用途、雰囲気、動画時間、音源条件、クレジットを整理。1時間・3時間・8時間など長時間動画を想定する。"
+  },
+  {
+    id:"learning-lab", studio:"education", name:"知育ラボ",
+    worldview:"親子が無理なく試せる遊びと学びを、発達段階に合わせて分かりやすく届ける。",
+    voice:"保護者を責めない、やさしく具体的な言葉。できないことより、今できる小さな一歩を示す。",
+    imageRules:"親子の安心感、清潔で見やすい画面、年齢に合う安全な玩具。カルーセル画像は1枚ずつ個別生成する。",
+    ngRules:"発達を断定しない。医療診断の代替にしない。誤飲・窒息・転倒などの安全配慮を省略しない。",
+    postingRules:"対象年齢、ねらい、やり方、安全上の注意、親への声かけを明示する。"
+  },
+  {
+    id:"mochizuki-koyomi", studio:"fortune", name:"望月こよみ",
+    worldview:"暦と暮らしを結び、日常に取り入れやすい小さな開運行動を届ける。世界観で統一し、ブランド名を毎回強く主張しない。",
+    voice:"穏やかで生活に寄り添う文章。強い断定や不安を煽る表現を避け、1分でできる行動へ落とし込む。",
+    imageRules:"正方形を基本。投稿1件につき画像1枚。タイトル最優先、左上の余白を活かす。ロゴ風ラベルを入れない。ブランド名を入れる場合は最下部に小さく。カルーセルは必ず1枚ずつ生成する。",
+    ngRules:"暦・天体・日付を未確認で断定しない。吉凶だけで恐怖を煽らない。根拠の弱いスピリチュアル表現を事実として扱わない。",
+    postingRules:"情報優先順位は、1.暦・天体、2.風水、3.陰陽五行、4.心理、5.スピリチュアル。Xは非プレミアム想定で文字数を抑え、ハッシュタグは2〜3個。根拠と低ハードルの1分アクションを入れる。"
+  },
+  {
+    id:"creator-sns", studio:"sns", name:"Creator SNS",
+    worldview:"媒体ごとの特徴を活かし、制作物の価値を正確かつ魅力的に伝える。",
+    voice:"簡潔で読みやすく、目的と行動導線が明確な文章。",
+    imageRules:"媒体の推奨比率と安全領域を守り、タイトルの視認性を優先する。",
+    ngRules:"釣りタイトル、虚偽、過剰な誇張、無関係なハッシュタグを避ける。",
+    postingRules:"YouTube、Instagram、Xごとの文字数・導線・ハッシュタグ・投稿形式へ最適化する。"
+  }
+];
+
+const CONTENT_TYPES = {
+  "great-person":[
+    ["shorts-life","人生で使えるShorts"],
+    ["challenge","挑戦・失敗・再起"],
+    ["relationships","人間関係・リーダーシップ"],
+    ["philosophy","哲学・幸福"],
+    ["learning","学び直し・習慣"]
+  ],
+  "bgm":[
+    ["rain","雨・窓辺"],
+    ["sleep","睡眠・夜"],
+    ["study","集中・読書"],
+    ["cafe","カフェ・Lo-Fi"],
+    ["nature","森・波・小川"]
+  ],
+  "education":[
+    ["play","親子遊び"],
+    ["learning","幼児学習"],
+    ["voice","親子の声かけ"],
+    ["carousel","Instagramカルーセル"],
+    ["reel","リール・Shorts"]
+  ],
+  "fortune":[
+    ["daily","毎日の開運"],
+    ["fortune","今日・明日の運勢"],
+    ["moon","新月・満月"],
+    ["doyo","土用・季節の節目"],
+    ["sekki","二十四節気"],
+    ["lucky-day","吉日・暦特集"],
+    ["misoka","ミソカモウデ・月末振り返り"]
+  ],
+  "sns":[
+    ["youtube","YouTube投稿"],
+    ["instagram","Instagram投稿"],
+    ["x","X投稿"],
+    ["review","投稿審査"],
+    ["analysis","結果分析"]
+  ]
+};
+
 const AI_ROLES = {
   "great-person": [
     {id:"editor", icon:"👔", name:"編集長AI", purpose:"人物・テーマ・視聴者・動画の狙いを決める"},
@@ -307,6 +392,7 @@ const AI_ROLES = {
     {id:"script", icon:"✍️", name:"脚本AI", purpose:"調査結果をShorts向けの台本へ変換する"},
     {id:"image", icon:"🎨", name:"画像AI", purpose:"各シーンの画像生成プロンプトを作る"},
     {id:"narration", icon:"🎙", name:"ナレーションAI", purpose:"聞きやすい語り口・読み・間へ整える"},
+    {id:"review", icon:"✅", name:"審査AI", purpose:"史実・出典・重複・構成・表現を審査する"},
     {id:"publish", icon:"📈", name:"投稿AI", purpose:"タイトル・概要欄・タグ・サムネ文言を作る"}
   ],
   "bgm": [
@@ -314,6 +400,7 @@ const AI_ROLES = {
     {id:"music", icon:"🎼", name:"音源設計AI", purpose:"作曲依頼または無料音源選定用の条件を作る"},
     {id:"visual", icon:"🌧️", name:"背景映像AI", purpose:"背景画像・微細な動き・ループ演出を設計する"},
     {id:"loop", icon:"🔁", name:"ループ品質AI", purpose:"音と映像が自然につながる確認項目を作る"},
+    {id:"review", icon:"✅", name:"権利・品質AI", purpose:"利用条件、音量、ノイズ、長時間視聴の品質を審査する"},
     {id:"publish", icon:"📈", name:"投稿AI", purpose:"タイトル・概要欄・タグ・サムネ文言を作る"}
   ],
   "education": [
@@ -321,14 +408,15 @@ const AI_ROLES = {
     {id:"safety", icon:"🛡️", name:"安全確認AI", purpose:"遊びや教材の安全上の注意を確認する"},
     {id:"writer", icon:"✍️", name:"解説AI", purpose:"親子に分かりやすい投稿・動画構成を作る"},
     {id:"visual", icon:"🎨", name:"画像AI", purpose:"カルーセル・リール用の画面指示を作る"},
+    {id:"review", icon:"✅", name:"審査AI", purpose:"年齢適合、安全性、表現、仕様を審査する"},
     {id:"publish", icon:"📈", name:"投稿AI", purpose:"キャプション・タイトル・タグを作る"}
   ],
   "fortune": [
     {id:"calendar", icon:"📅", name:"暦調査AI", purpose:"暦・天体・五行など確認項目を整理する"},
     {id:"editor", icon:"👔", name:"編集長AI", purpose:"その日の発信テーマと優先順位を決める"},
     {id:"writer", icon:"✍️", name:"ライターAI", purpose:"生活に取り入れやすい投稿文へ変換する"},
-    {id:"review", icon:"✅", name:"審査AI", purpose:"根拠・断定表現・日付・文字数を確認する"},
-    {id:"visual", icon:"🎨", name:"画像AI", purpose:"投稿画像の生成指示を作る"}
+    {id:"visual", icon:"🎨", name:"画像AI", purpose:"望月こよみの画像生成指示を作る"},
+    {id:"review", icon:"✅", name:"審査AI", purpose:"根拠・断定表現・日付・文字数・画像仕様を確認する"}
   ],
   "sns": [
     {id:"strategy", icon:"🧭", name:"運用AI", purpose:"媒体・目的・投稿形式を決める"},
@@ -339,81 +427,213 @@ const AI_ROLES = {
   ]
 };
 
+const COMMON_RULES = `あなたはCreator OS内の専門AIスタッフです。
+不明点を勝手に埋めず、事実・推測・提案を区別してください。
+ユーザーの既存資産、ブランドルール、媒体仕様を優先してください。
+回答はCreator OSへ貼り戻しやすい見出し付きプレーンテキストで出力してください。
+必要な情報が不足している場合は、成果物の前に「確認事項」を短く示してください。`;
+
+const STUDIO_RULES = {
+  "great-person":`目的は「偉人の知恵を現代へ翻訳する」ことです。
+面白いだけでなく、視聴後に人生で使える行動や見方が残る内容にしてください。
+男性・女性、国・時代、努力・人間関係・幸福・挑戦・哲学・歴史・リーダーシップ・教育・習慣の偏りを避けてください。`,
+  "bgm":`目的は、集中・読書・睡眠・休息などの視聴用途に合う長時間BGM動画を作ることです。
+音源、背景、ループ、長さ、権利条件、投稿情報を一体で設計してください。
+音や映像は主張しすぎず、長時間視聴を妨げないことを優先してください。`,
+  "education":`目的は、親子が安全に実践できる知育・学習コンテンツを作ることです。
+対象年齢、発達段階、安全性、保護者の見守り、準備物、ねらいを明確にしてください。`,
+  "fortune":`目的は、暦・天体・風水・陰陽五行を暮らしへ落とし込むことです。
+日付依存情報は必ず確認対象として扱い、強い吉凶断定や不安を煽る表現を避けてください。`,
+  "sns":`目的は、各媒体の形式に合わせ、内容の価値が正確に伝わる投稿を作ることです。
+媒体ごとの文字数、視認性、導線、ハッシュタグ、投稿形式を守ってください。`
+};
+
+const FORMAT_RULES = {
+  "shorts-life":"45〜60秒のYouTube Shorts。冒頭3秒の引き、具体的な逸話、現代への翻訳、締めの順。",
+  "challenge":"失敗・壁・転機・再起を具体的な出来事で描き、根性論だけにしない。",
+  "relationships":"人間関係やリーダーシップの場面を具体化し、現代の職場や家庭へ翻訳する。",
+  "philosophy":"抽象論だけで終わらず、日常の選択や行動へ落とし込む。",
+  "learning":"学び直し・習慣・教育の具体的な行動を中心にする。",
+  "rain":"雨や窓辺を中心に、雷なし。音と映像のループ境界を自然にする。",
+  "sleep":"急な音量変化や強い高音を避け、睡眠を妨げない設計にする。",
+  "study":"集中を邪魔しない一定の音量と穏やかな反復を重視する。",
+  "cafe":"カフェの生活感とLo-Fi感を持たせつつ、権利条件を明確にする。",
+  "nature":"自然音の不自然な反復や突然の大音量を避ける。",
+  "play":"対象年齢、ねらい、手順、安全上の注意、保護者の声かけを出す。",
+  "learning":"学習目標を一つに絞り、家庭で無理なく試せる形にする。",
+  "voice":"親を責めず、具体的な言い換え例と理由を示す。",
+  "carousel":"画像は1枚ずつ独立して設計し、各枚の役割と文字量を明確にする。",
+  "reel":"短い導入、実演、ポイント、安全注意、締めの順にする。",
+  "daily":"その日の根拠情報と、1分でできる低ハードル行動を一つ示す。",
+  "fortune":"西洋占星術・九星気学・数秘術・四柱推命等を扱う場合、占術ごとの根拠と総合判断を分ける。",
+  "moon":"新月・満月の日時、星座、観測・占星術上の扱いを混同しない。",
+  "doyo":"土用期間、丑の日、季節の養生、食文化を区別し、過度な開運断定を避ける。",
+  "sekki":"二十四節気の意味、季節の変化、暮らしの行動へ落とし込む。",
+  "lucky-day":"吉日が重なる場合も、注意日や行動の規模を含めてバランス良く示す。",
+  "misoka":"月末の振り返りと感謝、翌月準備を中心にし、夜間参拝を安易に勧めない。",
+  "youtube":"タイトル、概要欄、タグ、サムネ文字をYouTube向けに作る。",
+  "instagram":"キャプション、カルーセル構成、リール導入、ハッシュタグをInstagram向けに作る。",
+  "x":"短い本文と必要に応じたスレッド、ハッシュタグ2〜3個をX向けに作る。",
+  "review":"仕様適合、根拠、誤字、断定、文字数、重複を順に審査する。",
+  "analysis":"数値と感想を分け、次回に試す改善を最大3件に絞る。"
+};
+
+const ROLE_RULES = {
+  editor:"全体の偏り、シリーズ重複、対象視聴者、今回の一番伝えたいメッセージ、次工程への指示を出してください。",
+  research:"一次資料・公式情報・信頼できる資料を優先し、史実・引用・推測・確認待ちを分けてください。引用候補は出典確認が必要です。",
+  script:"導入、具体的な出来事、転換、現代への翻訳、締めを明確にし、聞いて理解できる日本語にしてください。",
+  image:"1画像1役割。サイズ、構図、人物一貫性、時代背景、文字内容、禁止事項を明示してください。",
+  narration:"字幕表示用原稿と音声用原稿を分け、漢字の読み候補、間、息継ぎ、強調語を示してください。",
+  review:"最初に依頼仕様への適合を判定し、次に事実・表現・文字数・画像・重複を審査してください。不合格なら修正指示を具体化してください。",
+  publish:"媒体に合わせたタイトル、概要欄・本文、タグ、サムネ文字、必要なクレジットを作ってください。",
+  producer:"用途、視聴場面、世界観、感情曲線、尺、音と映像の役割を決めてください。",
+  music:"ループ可能で主張しすぎない音設計にし、商用利用・収益化・クレジット条件を必ず確認してください。",
+  visual:"長時間視聴を邪魔しない背景、微細な動き、カメラ移動、ループ方法を設計してください。",
+  loop:"音量差、クリック音、無音、映像の飛び、ループ境界を確認するチェックリストを作ってください。",
+  safety:"誤飲、窒息、転倒、アレルギー、保護者の見守りなど対象年齢に応じた安全確認を優先してください。",
+  writer:"ブランドの文体と媒体の文字数に合わせ、具体的で実行しやすい文章を作ってください。",
+  calendar:"対象日、タイムゾーン、旧暦、六曜、十二直、二十八宿、日干支、月相、天体イベント等を確認項目として分けてください。",
+  strategy:"目的、媒体、ターゲット、投稿形式、導線、KPIを整理してください。",
+  analysis:"成果数値、仮説、外部要因、次に試す改善を分けてください。",
+  quality:"権利条件、音質、映像品質、ループ、長時間視聴への影響を審査してください。"
+};
+
+function loadBrands() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(BRAND_KEY) || "null");
+    if (Array.isArray(saved) && saved.length) return saved;
+  } catch {}
+  localStorage.setItem(BRAND_KEY, JSON.stringify(DEFAULT_BRANDS));
+  return structuredClone(DEFAULT_BRANDS);
+}
+function saveBrands(brands) { localStorage.setItem(BRAND_KEY, JSON.stringify(brands)); }
+function defaultBrandForStudio(studio) {
+  return loadBrands().find(brand => brand.studio === studio) || loadBrands()[0];
+}
+function contentTypesForStudio(studio) { return CONTENT_TYPES[studio] || CONTENT_TYPES.sns; }
+function contentTypeLabel(studio, id) {
+  return contentTypesForStudio(studio).find(item => item[0] === id)?.[1] || id;
+}
 function rolesForProject(project) {
   return AI_ROLES[studioForGenre(project.genre)] || AI_ROLES.sns;
 }
 function ensureAiWorkspace(project) {
   project.aiWorkspace = project.aiWorkspace || {};
+  project.promptProfile = project.promptProfile || {};
+  project.promptLibrary = Array.isArray(project.promptLibrary) ? project.promptLibrary : [];
+  const studio = studioForGenre(project.genre);
+  const brand = defaultBrandForStudio(studio);
+  project.promptProfile.brandId = project.promptProfile.brandId || brand.id;
+  project.promptProfile.contentType = project.promptProfile.contentType || contentTypesForStudio(studio)[0][0];
 }
-function buildAiPrompt(project, role, brief) {
-  const context = {
-    title: project.title,
-    genre: labelGenre(project.genre),
-    platform: labelPlatform(project.platform),
-    targetDurationSec: project.targetDurationSec,
-    displayScript: project.displayScript || "",
-    sceneCount: Array.isArray(project.scenes) ? project.scenes.length : 0,
-    bgm: project.bgm?.title || project.bgm?.category || ""
-  };
-  const roleRules = {
-    editor:"重複や偏りを避け、視聴者に人生で使える学びが残る企画にしてください。",
-    research:"事実と推測を分け、確認が必要な情報と出典候補を明示してください。断定できないことは断定しないでください。",
-    script:"冒頭3秒の引き、具体的な出来事、現代への翻訳、締めの順で、聞きやすい日本語にしてください。",
-    image:"画像は1シーンにつき1枚。縦9:16、人物・服装・時代・画風の一貫性を保つ指示にしてください。",
-    narration:"漢字の読み候補、息継ぎ、間、強調語を示し、字幕表示用と音声用を分けてください。",
-    publish:"誇張や虚偽を避け、タイトル、概要欄、タグ、サムネ文字を媒体に合わせて出してください。",
-    producer:"用途、視聴場面、感情曲線、尺、音と映像の役割を明確にしてください。",
-    music:"ループ可能で主張しすぎない音設計にし、商用利用条件を必ず確認する前提にしてください。",
-    visual:"長時間視聴を邪魔しない背景と微細な動きを設計してください。",
-    loop:"ループ境界、音量差、クリック音、映像の飛びを確認するチェックリストにしてください。",
-    safety:"対象年齢、誤飲、転倒、窒息、保護者の見守りなど安全面を優先してください。",
-    calendar:"日付に依存する情報は一次資料で確認する前提とし、不明点を明示してください。",
-    review:"仕様適合、根拠、誤字、断定、文字数、重複を順に審査してください。",
-    strategy:"目的、媒体、ターゲット、導線、投稿形式を整理してください。",
-    writer:"媒体の文字数と読みやすさに合わせて文章を作ってください。",
-    analysis:"数値と感想を分け、次回に試す改善を最大3件に絞ってください。"
-  };
-  return `# 役割
-あなたは「${role.name}」です。
+function selectedBrand(project) {
+  const brands = loadBrands();
+  return brands.find(brand => brand.id === project.promptProfile?.brandId) || defaultBrandForStudio(studioForGenre(project.genre));
+}
+function composePrompt(project, role, brief) {
+  ensureAiWorkspace(project);
+  const studio = studioForGenre(project.genre);
+  const brand = selectedBrand(project);
+  const contentType = project.promptProfile.contentType;
+  const scenes = Array.isArray(project.scenes) ? project.scenes : [];
+  const sourceResults = Object.entries(project.aiWorkspace || {})
+    .filter(([key,value]) => key !== role.id && value?.result)
+    .map(([key,value]) => `## ${key}の保存済み回答\n${value.result}`)
+    .join("\n\n");
+
+  return `# Creator OS 完成プロンプト
+
+## 1. 共通ルール
+${COMMON_RULES}
+
+## 2. Studioルール
+Studio：${STUDIO[studio]?.title || studio}
+${STUDIO_RULES[studio] || ""}
+
+## 3. ブランドルール
+ブランド：${brand.name}
+世界観：${brand.worldview}
+文体・語り口：${brand.voice}
+画像ルール：${brand.imageRules}
+NG表現・禁止事項：${brand.ngRules}
+投稿・運用ルール：${brand.postingRules}
+
+## 4. 作成形式ルール
+作成形式：${contentTypeLabel(studio, contentType)}
+${FORMAT_RULES[contentType] || ""}
+
+## 5. 担当AI
+担当：${role.name}
 担当目的：${role.purpose}
+${ROLE_RULES[role.id] || "担当目的に沿って成果物を作成してください。"}
 
-# プロジェクト情報
-タイトル：${context.title}
-ジャンル：${context.genre}
-投稿先：${context.platform}
-目標尺：${context.targetDurationSec}秒
-現在のシーン数：${context.sceneCount}
-BGM情報：${context.bgm || "未設定"}
+## 6. 媒体・プロジェクト情報
+タイトル：${project.title}
+ジャンル：${labelGenre(project.genre)}
+媒体：${labelPlatform(project.platform)}
+目標尺：${project.targetDurationSec}秒
+シーン数：${scenes.length}
+BGM：${project.bgm?.title || project.bgm?.category || "未設定"}
 
-# 今回の依頼
-${brief || "この担当として、次に必要な成果物を作成してください。"}
+## 7. 今回の依頼
+${brief || "この担当として、次工程に必要な完成成果物を作成してください。"}
 
-# 現在の台本
-${context.displayScript || "未入力"}
+## 8. 現在の表示用台本
+${project.displayScript || "未入力"}
 
-# 重要ルール
-${roleRules[role.id] || "不明点は推測で埋めず、確認事項として示してください。"}
-回答はCreator OSへ貼り戻しやすいように、見出し付きのプレーンテキストで出力してください。`;
+## 9. 他担当から引き継ぐ保存済み成果
+${sourceResults || "なし"}
+
+## 10. 出力条件
+- 最初に「確認事項」がある場合のみ短く示す
+- 次に、そのまま次工程へ渡せる完成成果物を出す
+- 事実・推測・提案を混同しない
+- 不確かな固有名詞・日付・引用は確認対象として明示する
+- Creator OSへ一括コピーしやすい見出し付きプレーンテキストで出力する`;
 }
 
 async function copyText(value) {
   try { await navigator.clipboard.writeText(value); alert("コピーしました。"); }
   catch { prompt("コピーしてください", value); }
 }
+function promptVersions(project, roleId) {
+  return project.promptLibrary.filter(item => item.roleId === roleId).sort((a,b) => new Date(b.createdAt)-new Date(a.createdAt));
+}
+function promptDiffSummary(a="", b="") {
+  if (a === b) return "変更なし";
+  const aLines = a.split("\n"), bLines = b.split("\n");
+  let changed = 0;
+  const max = Math.max(aLines.length,bLines.length);
+  for(let i=0;i<max;i++) if(aLines[i] !== bLines[i]) changed++;
+  return `行数 ${aLines.length} → ${bLines.length}／変更行の目安 ${changed}`;
+}
 
 async function renderAi(id) {
   const project = await getProject(id);
   if (!project) { goHome(); return; }
   ensureAiWorkspace(project);
+  const studio = studioForGenre(project.genre);
   const roles = rolesForProject(project);
   const firstRole = roles[0];
+  const brands = loadBrands().filter(brand => brand.studio === studio);
+  const types = contentTypesForStudio(studio);
+
   root.innerHTML = `
     <main class="shell editor-shell">
-      <header class="editor-head"><button id="back">←</button><div><span>追加料金なし・手動モード</span><h1>🤖 AIスタッフ</h1></div><button id="menu">•••</button></header>
+      <header class="editor-head"><button id="back">←</button><div><span>Prompt Engine v1</span><h1>🧠 AIスタッフ・プロンプト資産</h1></div><button id="menu">•••</button></header>
       <nav class="steps"><button class="active">0 AIスタッフ</button><button id="stepScript">1 台本・音声</button><button id="stepScenes">2 シーン</button><button id="stepBgm">3 BGM</button><button id="stepOutput">4 出力</button></nav>
       <section class="editor-card ai-mode-notice">
-        <div><strong>現在の接続方法：手動コピーモード</strong><p>Creator OSでプロンプトを作り、ChatGPTなどへ貼り付け、回答をここへ戻します。API料金は発生しません。</p></div>
+        <div><strong>現在の接続方法：手動コピーモード</strong><p>Studio・ブランド・作成形式・担当AIのルールを自動合成します。API料金は発生しません。</p></div>
         <span class="status-chip">無料運用</span>
+      </section>
+      <section class="editor-card prompt-profile">
+        <div class="section-head"><div><h2>プロンプトプロファイル</h2><p>選択内容に応じて内部プロンプトが自動で切り替わります。</p></div><button id="editBrand">ブランド設定</button></div>
+        <div class="form-grid">
+          <label>Studio<input value="${escapeHtml(STUDIO[studio]?.title || studio)}" disabled></label>
+          <label>ブランド<select id="brandSelect">${brands.map(brand=>`<option value="${brand.id}">${escapeHtml(brand.name)}</option>`).join("")}</select></label>
+          <label>作成形式<select id="contentType">${types.map(item=>`<option value="${item[0]}">${escapeHtml(item[1])}</option>`).join("")}</select></label>
+          <label>媒体<input value="${escapeHtml(labelPlatform(project.platform))}" disabled></label>
+        </div>
       </section>
       <section class="ai-layout">
         <aside class="ai-role-list">
@@ -422,26 +642,83 @@ async function renderAi(id) {
         <section class="ai-workspace">
           <div class="editor-card">
             <div class="section-head"><div><h2 id="roleTitle">${firstRole.icon} ${firstRole.name}</h2><p id="rolePurpose">${firstRole.purpose}</p></div><span id="saveState">保存済み</span></div>
-            <label>今回この担当へ依頼すること<textarea id="aiBrief" placeholder="例：30〜40代の会社員に向けて、学び直しをテーマに人物と切り口を決めてください。"></textarea></label>
-            <div class="tool-row"><button class="primary" id="generatePrompt">プロンプトを作る</button><button id="copyPrompt">ChatGPT用にコピー</button></div>
+            <label>今回この担当へ依頼すること<textarea id="aiBrief" placeholder="今回だけの目的・対象・条件を入力します。"></textarea></label>
+            <div class="tool-row"><button class="primary" id="generatePrompt">完成プロンプトを合成</button><button id="copyPrompt">ChatGPT用にコピー</button><button id="saveVersion">版として保存</button></div>
           </div>
-          <div class="editor-card"><div class="section-head"><div><h2>生成プロンプト</h2><p>内容を確認してからAIへ貼り付けます。</p></div></div><textarea id="aiPrompt" class="code-area" placeholder="ここにプロンプトが生成されます。"></textarea></div>
-          <div class="editor-card"><div class="section-head"><div><h2>AIからの回答</h2><p>返ってきた回答を貼り付けて保存します。</p></div><button id="useAsScript">台本へ反映</button></div><textarea id="aiResult" placeholder="AIの回答をここへ貼り付けます。"></textarea><div class="tool-row"><button class="primary" id="saveResult">回答を保存</button><button id="copyResult">回答をコピー</button></div></div>
+          <div class="editor-card"><div class="section-head"><div><h2>完成プロンプト</h2><p>共通＋Studio＋ブランド＋作成形式＋担当＋今回情報を合成します。</p></div><span id="promptLength">0文字</span></div><textarea id="aiPrompt" class="code-area" placeholder="ここに完成プロンプトが生成されます。"></textarea></div>
+          <div class="editor-card"><div class="section-head"><div><h2>AIからの回答</h2><p>返ってきた成果物を貼り付け、次の担当へ引き継ぎます。</p></div><button id="useAsScript">台本へ反映</button></div><textarea id="aiResult" placeholder="AIの回答をここへ貼り付けます。"></textarea><div class="tool-row"><button class="primary" id="saveResult">回答を保存</button><button id="copyResult">回答をコピー</button></div></div>
+          <div class="editor-card">
+            <div class="section-head"><div><h2>Prompt Library</h2><p>担当ごとの版を保存し、復元・評価できます。</p></div><span id="versionCount">0版</span></div>
+            <div id="versionList" class="version-list"></div>
+          </div>
         </section>
       </section>
+      <dialog id="brandDialog"><form method="dialog" id="brandForm"><h2>ブランド設定</h2><input type="hidden" name="brandId"><label>ブランド名<input name="name" required></label><label>世界観<textarea name="worldview"></textarea></label><label>文体・語り口<textarea name="voice"></textarea></label><label>画像ルール<textarea name="imageRules"></textarea></label><label>NG表現・禁止事項<textarea name="ngRules"></textarea></label><label>投稿・運用ルール<textarea name="postingRules"></textarea></label><div class="dialog-actions"><button type="button" id="cancelBrand">キャンセル</button><button class="primary" type="submit">保存</button></div></form></dialog>
+      <dialog id="versionDialog"><form method="dialog" id="versionForm"><h2>プロンプト版を保存</h2><label>版名<input name="name" required placeholder="例：v2 冒頭3秒強化"></label><label>変更メモ<textarea name="note" placeholder="今回改善した点"></textarea></label><label>評価<select name="rating"><option value="0">未評価</option><option value="3">★★★</option><option value="4">★★★★</option><option value="5">★★★★★</option></select></label><div class="dialog-actions"><button type="button" id="cancelVersion">キャンセル</button><button class="primary" type="submit">保存</button></div></form></dialog>
     </main>`;
-  root.querySelector("#back").onclick = () => goStudio(studioForGenre(project.genre));
+
+  root.querySelector("#back").onclick = () => goStudio(studio);
   root.querySelector("#stepScript").onclick = () => goProject(project.id);
   root.querySelector("#stepScenes").onclick = () => goScenes(project.id);
   root.querySelector("#stepBgm").onclick = () => goBgm(project.id);
   root.querySelector("#stepOutput").onclick = () => goOutput(project.id);
-  attachProjectMenu(project, root.querySelector("#menu"), () => goStudio(studioForGenre(project.genre)));
+  attachProjectMenu(project, root.querySelector("#menu"), () => goStudio(studio));
+
+  const brandSelect = root.querySelector("#brandSelect");
+  const contentType = root.querySelector("#contentType");
+  brandSelect.value = project.promptProfile.brandId;
+  contentType.value = project.promptProfile.contentType;
 
   let active = firstRole;
   const brief = root.querySelector("#aiBrief");
   const promptArea = root.querySelector("#aiPrompt");
   const resultArea = root.querySelector("#aiResult");
   const saveState = root.querySelector("#saveState");
+  const promptLength = root.querySelector("#promptLength");
+
+  const saveWorkspace = async () => {
+    saveState.textContent = "保存中…";
+    project.promptProfile.brandId = brandSelect.value;
+    project.promptProfile.contentType = contentType.value;
+    project.aiWorkspace[active.id] = {
+      brief:brief.value, prompt:promptArea.value, result:resultArea.value,
+      brandId:brandSelect.value, contentType:contentType.value,
+      updatedAt:new Date().toISOString()
+    };
+    project.updatedAt = new Date().toISOString();
+    await saveProject(project);
+    saveState.textContent = "保存済み";
+  };
+  const updateLength = () => promptLength.textContent = `${promptArea.value.length.toLocaleString("ja-JP")}文字`;
+
+  const renderVersions = () => {
+    const versions = promptVersions(project, active.id);
+    root.querySelector("#versionCount").textContent = `${versions.length}版`;
+    root.querySelector("#versionList").innerHTML = versions.length ? versions.map((item,index)=>`
+      <article class="version-card ${item.favorite?"favorite":""}">
+        <div><div class="version-title"><b>${escapeHtml(item.name)}</b><span>${item.favorite?"★":"☆"}</span></div>
+        <small>${formatDate(item.createdAt)}・使用${item.useCount||0}回・${item.rating?`評価${"★".repeat(item.rating)}`:"未評価"}</small>
+        <p>${escapeHtml(item.note || "変更メモなし")}</p>
+        <p class="diff">${escapeHtml(promptDiffSummary(index<versions.length-1?versions[index+1].prompt:"",item.prompt))}</p></div>
+        <div class="version-actions"><button data-restore="${item.id}">復元</button><button data-favorite="${item.id}">${item.favorite?"お気に入り解除":"お気に入り"}</button><button class="danger" data-version-delete="${item.id}">削除</button></div>
+      </article>`).join("") : `<div class="dictionary-empty">この担当の保存版はまだありません。</div>`;
+    root.querySelectorAll("[data-restore]").forEach(button=>button.onclick=async()=>{
+      const item=project.promptLibrary.find(x=>x.id===button.dataset.restore);
+      if(!item)return;
+      promptArea.value=item.prompt; brief.value=item.brief||brief.value; item.useCount=(item.useCount||0)+1;
+      await saveProject(project); updateLength(); renderVersions();
+    });
+    root.querySelectorAll("[data-favorite]").forEach(button=>button.onclick=async()=>{
+      const item=project.promptLibrary.find(x=>x.id===button.dataset.favorite); if(!item)return;
+      item.favorite=!item.favorite; await saveProject(project); renderVersions();
+    });
+    root.querySelectorAll("[data-version-delete]").forEach(button=>button.onclick=async()=>{
+      if(!confirm("このプロンプト版を削除しますか？"))return;
+      project.promptLibrary=project.promptLibrary.filter(x=>x.id!==button.dataset.versionDelete);
+      await saveProject(project); renderVersions();
+    });
+  };
+
   const loadRole = role => {
     active = role;
     root.querySelector("#roleTitle").textContent = `${role.icon} ${role.name}`;
@@ -451,17 +728,23 @@ async function renderAi(id) {
     promptArea.value = saved.prompt || "";
     resultArea.value = saved.result || "";
     root.querySelectorAll(".ai-role").forEach(button => button.classList.toggle("active", button.dataset.role === role.id));
+    updateLength(); renderVersions();
   };
   root.querySelectorAll(".ai-role").forEach(button => button.onclick = () => loadRole(roles.find(role => role.id === button.dataset.role)));
-  const saveWorkspace = async () => {
-    saveState.textContent = "保存中…";
-    project.aiWorkspace[active.id] = { brief:brief.value, prompt:promptArea.value, result:resultArea.value, updatedAt:new Date().toISOString() };
-    project.updatedAt = new Date().toISOString();
-    await saveProject(project);
-    saveState.textContent = "保存済み";
+
+  brandSelect.onchange = async()=>{project.promptProfile.brandId=brandSelect.value;await saveWorkspace();};
+  contentType.onchange = async()=>{project.promptProfile.contentType=contentType.value;await saveWorkspace();};
+
+  root.querySelector("#generatePrompt").onclick = async () => {
+    promptArea.value = composePrompt(project, active, brief.value.trim());
+    updateLength(); await saveWorkspace();
   };
-  root.querySelector("#generatePrompt").onclick = async () => { promptArea.value = buildAiPrompt(project, active, brief.value.trim()); await saveWorkspace(); };
-  root.querySelector("#copyPrompt").onclick = async () => { if(!promptArea.value.trim()) promptArea.value=buildAiPrompt(project,active,brief.value.trim()); await saveWorkspace(); await copyText(promptArea.value); };
+  root.querySelector("#copyPrompt").onclick = async () => {
+    if(!promptArea.value.trim()) promptArea.value=composePrompt(project,active,brief.value.trim());
+    const latest = promptVersions(project,active.id)[0];
+    if(latest && latest.prompt===promptArea.value){latest.useCount=(latest.useCount||0)+1;}
+    updateLength(); await saveWorkspace(); await saveProject(project); renderVersions(); await copyText(promptArea.value);
+  };
   root.querySelector("#saveResult").onclick = saveWorkspace;
   root.querySelector("#copyResult").onclick = () => copyText(resultArea.value);
   root.querySelector("#useAsScript").onclick = async () => {
@@ -469,11 +752,50 @@ async function renderAi(id) {
     if (!confirm("AIの回答を表示用台本へ反映しますか？現在の台本は置き換わります。")) return;
     project.displayScript = resultArea.value.trim();
     project.speechScript = resultArea.value.trim();
-    await saveWorkspace();
-    await saveProject(project);
-    alert("台本へ反映しました。");
+    await saveWorkspace(); await saveProject(project); alert("台本へ反映しました。");
   };
   [brief,promptArea,resultArea].forEach(area => area.addEventListener("change", saveWorkspace));
+  promptArea.addEventListener("input",updateLength);
+
+  const brandDialog=root.querySelector("#brandDialog"),brandForm=root.querySelector("#brandForm");
+  root.querySelector("#editBrand").onclick=()=>{
+    const brand=selectedBrand(project);
+    brandForm.elements.brandId.value=brand.id;brandForm.elements.name.value=brand.name;
+    brandForm.elements.worldview.value=brand.worldview;brandForm.elements.voice.value=brand.voice;
+    brandForm.elements.imageRules.value=brand.imageRules;brandForm.elements.ngRules.value=brand.ngRules;
+    brandForm.elements.postingRules.value=brand.postingRules;brandDialog.showModal();
+  };
+  root.querySelector("#cancelBrand").onclick=()=>brandDialog.close();
+  brandForm.onsubmit=async event=>{
+    event.preventDefault();
+    const data=new FormData(brandForm),all=loadBrands(),idx=all.findIndex(x=>x.id===String(data.get("brandId")));
+    if(idx<0)return;
+    Object.assign(all[idx],{
+      name:String(data.get("name")).trim(),worldview:String(data.get("worldview")).trim(),
+      voice:String(data.get("voice")).trim(),imageRules:String(data.get("imageRules")).trim(),
+      ngRules:String(data.get("ngRules")).trim(),postingRules:String(data.get("postingRules")).trim()
+    });
+    saveBrands(all);brandDialog.close();alert("ブランドルールを保存しました。再度プロンプトを合成すると反映されます。");
+  };
+
+  const versionDialog=root.querySelector("#versionDialog"),versionForm=root.querySelector("#versionForm");
+  root.querySelector("#saveVersion").onclick=()=>{
+    if(!promptArea.value.trim())return alert("先に完成プロンプトを作成してください。");
+    versionForm.reset();versionDialog.showModal();
+  };
+  root.querySelector("#cancelVersion").onclick=()=>versionDialog.close();
+  versionForm.onsubmit=async event=>{
+    event.preventDefault();const data=new FormData(versionForm);
+    project.promptLibrary.push({
+      id:crypto.randomUUID?.()||`prompt-${Date.now()}`,roleId:active.id,
+      name:String(data.get("name")).trim(),note:String(data.get("note")).trim(),
+      rating:Number(data.get("rating"))||0,favorite:false,useCount:0,
+      prompt:promptArea.value,brief:brief.value,brandId:brandSelect.value,
+      contentType:contentType.value,createdAt:new Date().toISOString()
+    });
+    await saveProject(project);versionDialog.close();renderVersions();
+  };
+
   loadRole(firstRole);
 }
 
