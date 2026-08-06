@@ -1,7 +1,7 @@
 import { readRoute, goHome, goStudio, goProject, goScenes, goBgm, goOutput, goPublish, goAi } from "./router.js";
 import { createProject } from "./projectFactory.js";
 import { deleteProject, getProject, listProjects, saveProject } from "./db.js";
-import { downloadJson } from "./download.js";
+import { downloadJson, downloadText } from "./download.js";
 
 const rootElement = document.querySelector("#app");
 if (!rootElement) throw new Error("#app がありません。");
@@ -113,7 +113,7 @@ async function renderProject(id) {
   root.innerHTML = `
     <main class="shell editor-shell">
       <header class="editor-head"><button id="back">←</button><div><span>${labelPlatform(project.platform)}</span><h1>${escapeHtml(project.title)}</h1></div><button id="menu">•••</button></header>
-      <nav class="steps"><button id="stepAi">0 AIスタッフ</button><button class="active">1 台本・音声</button><button id="stepScenes">2 シーン</button><button id="stepBgm">3 BGM</button><button id="stepOutput">4 出力</button></nav>
+      <nav class="steps"><button id="stepAi">0 AIスタッフ</button><button class="active">1 台本・音声</button><button id="stepScenes">2 シーン</button><button id="stepBgm">3 BGM・字幕</button><button id="stepOutput">4 出力</button></nav>
       <section class="editor-card"><div class="section-head"><div><h2>表示用の台本</h2><p>字幕や画面に表示する文章です。</p></div><span id="displayCount">${project.displayScript.length}文字</span></div><textarea id="displayScript" placeholder="台本を貼り付けてください。">${escapeHtml(project.displayScript)}</textarea></section>
       <section class="editor-card"><div class="section-head"><div><h2>音声用の台本</h2><p>読み方辞書と語り口調整を反映する専用原稿です。</p></div><button id="copyDisplay">表示用からコピー</button></div><textarea id="speechScript" placeholder="音声用原稿">${escapeHtml(project.speechScript)}</textarea><div class="tool-row"><select id="narrationStyle"><option value="standard">標準</option><option value="shorts">Shorts・テンポ重視</option><option value="documentary">ドキュメンタリー</option><option value="gentle">やさしい語り</option></select><button id="naturalize">自然な語り口に整える</button><button id="applyDictionary">辞書を反映</button></div></section>
       <section class="editor-card"><div class="section-head"><div><h2>読み方辞書</h2><p>字幕は漢字のまま、音声原稿だけ読みを置き換えます。</p></div><button id="addDictionary">＋ 追加</button></div><div id="dictionaryList" class="dictionary-list"></div></section>
@@ -191,7 +191,7 @@ async function renderScenes(id) {
   root.innerHTML=`
     <main class="shell editor-shell">
       <header class="editor-head"><button id="back">←</button><div><span>${labelPlatform(project.platform)}</span><h1>${escapeHtml(project.title)}</h1></div><button id="menu">•••</button></header>
-      <nav class="steps"><button id="stepAi">0 AIスタッフ</button><button id="stepScript">1 台本・音声</button><button class="active">2 シーン</button><button id="stepBgm">3 BGM</button><button id="stepOutput">4 出力</button></nav>
+      <nav class="steps"><button id="stepAi">0 AIスタッフ</button><button id="stepScript">1 台本・音声</button><button class="active">2 シーン</button><button id="stepBgm">3 BGM・字幕</button><button id="stepOutput">4 出力</button></nav>
       <section class="editor-card"><div class="section-head"><div><h2>シーン編集</h2><p>台本を場面に分け、画像・表示秒数・演出を設定します。</p></div><span id="sceneCount">${project.scenes.length}シーン</span></div><div class="tool-row"><button class="primary" id="autoSplit">台本から自動分割</button><button id="addScene">＋ 空のシーン</button></div></section>
       <section id="sceneList" class="scene-list"></section>
       <section class="editor-card compact"><div><b>合計時間</b><p id="totalDuration">0秒</p></div><p id="saveState">保存済み</p></section>
@@ -236,8 +236,68 @@ async function renderScenes(id) {
 
 function ensureProjectSettings(project) {
   project.bgm = project.bgm || { source:"none", title:"", category:"calm", volume:0.12, ducking:true, fadeInSec:1, fadeOutSec:2, loop:true, license:"", credit:"", audioData:"", fileName:"" };
+  project.subtitleStyle = {
+    enabled:true, preset:"standard", fontSize:54, position:"bottom", maxCharsPerLine:16, maxLines:2,
+    textColor:"#ffffff", outlineColor:"#000000", outlineWidth:4,
+    backgroundEnabled:false, backgroundColor:"#000000", backgroundOpacity:0.45,
+    align:"center", ...(project.subtitleStyle || {})
+  };
   project.output = project.output || { width:1080, height:1920, fps:30, format:"mp4", quality:"standard", subtitles:true, subtitlePosition:"bottom", bgmEnabled:true };
+  project.output.subtitles = project.output.subtitles ?? project.subtitleStyle.enabled;
+  project.output.subtitlePosition = project.output.subtitlePosition || project.subtitleStyle.position;
   project.publish = project.publish || { title:project.title, description:"", tags:"", thumbnailText:"", visibility:"private" };
+  const scenes = Array.isArray(project.scenes) ? project.scenes : [];
+  scenes.forEach(scene => {
+    const duration = Math.max(1, Number(scene.durationSec) || 5);
+    scene.subtitleText = scene.subtitleText ?? scene.text ?? "";
+    scene.subtitleEnabled = scene.subtitleEnabled ?? true;
+    scene.subtitleStartSec = Math.max(0, Math.min(duration, Number(scene.subtitleStartSec) || 0));
+    scene.subtitleEndSec = Math.max(scene.subtitleStartSec, Math.min(duration, Number(scene.subtitleEndSec) || duration));
+  });
+}
+
+function countChars(value="") { return Array.from(String(value).replace(/\\s/g, "")).length; }
+function formatSubtitleLines(value, maxChars=16, maxLines=2) {
+  const normalized = String(value || "").trim();
+  if (!normalized) return { lines:[], overflow:false, chars:0 };
+  const explicit = normalized.split(/\\n+/).map(line => line.trim()).filter(Boolean);
+  const lines = [];
+  for (const block of explicit) {
+    const chars = Array.from(block);
+    while (chars.length) lines.push(chars.splice(0, Math.max(1,maxChars)).join(""));
+  }
+  return { lines:lines.slice(0, Math.max(1,maxLines)), overflow:lines.length > maxLines, chars:countChars(normalized) };
+}
+function hexToRgba(hex, alpha) {
+  const clean = String(hex || "#000000").replace("#", "");
+  const value = clean.length === 3 ? clean.split("").map(c=>c+c).join("") : clean.padEnd(6,"0").slice(0,6);
+  const number = Number.parseInt(value,16);
+  return `rgba(${(number>>16)&255},${(number>>8)&255},${number&255},${Math.max(0,Math.min(1,Number(alpha)||0))})`;
+}
+function buildSubtitleTimeline(project) {
+  ensureProjectSettings(project);
+  let cursor = 0;
+  return (project.scenes || []).map((scene,index) => {
+    const duration = Math.max(1, Number(scene.durationSec)||1);
+    const item = {
+      id:scene.id, sceneIndex:index, sceneNumber:index+1,
+      enabled:project.subtitleStyle.enabled && scene.subtitleEnabled !== false,
+      text:scene.subtitleText || "",
+      startSec:cursor + Math.max(0, Number(scene.subtitleStartSec)||0),
+      endSec:cursor + Math.min(duration, Math.max(Number(scene.subtitleStartSec)||0, Number(scene.subtitleEndSec)||duration)),
+      style:{...project.subtitleStyle}
+    };
+    cursor += duration;
+    return item;
+  }).filter(item => item.enabled && item.text.trim() && item.endSec > item.startSec);
+}
+function srtTime(seconds) {
+  const ms = Math.max(0, Math.round(Number(seconds)*1000));
+  const h = Math.floor(ms/3600000), m=Math.floor(ms%3600000/60000), s=Math.floor(ms%60000/1000), x=ms%1000;
+  return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")},${String(x).padStart(3,"0")}`;
+}
+function buildSrt(project) {
+  return buildSubtitleTimeline(project).map((item,index)=>`${index+1}\\n${srtTime(item.startSec)} --> ${srtTime(item.endSec)}\\n${item.text.trim()}\\n`).join("\\n");
 }
 
 function attachProjectMenu(project, button, afterDelete) {
@@ -255,10 +315,12 @@ function attachProjectMenu(project, button, afterDelete) {
 }
 
 async function renderBgm(id) {
-  const project=await getProject(id); if(!project){goHome();return;} ensureProjectSettings(project); const b=project.bgm;
+  const project=await getProject(id); if(!project){goHome();return;}
+  ensureProjectSettings(project);
+  const b=project.bgm, st=project.subtitleStyle, scenes=project.scenes||[];
   root.innerHTML=`<main class="shell editor-shell">
     <header class="editor-head"><button id="back">←</button><div><span>${labelPlatform(project.platform)}</span><h1>${escapeHtml(project.title)}</h1></div><button id="menu">•••</button></header>
-    <nav class="steps"><button id="stepAi">0 AIスタッフ</button><button id="stepScript">1 台本・音声</button><button id="stepScenes">2 シーン</button><button class="active">3 BGM</button><button id="stepOutput">4 出力</button></nav>
+    <nav class="steps"><button id="stepAi">0 AIスタッフ</button><button id="stepScript">1 台本・音声</button><button id="stepScenes">2 シーン</button><button class="active">3 BGM・字幕</button><button id="stepOutput">4 出力</button></nav>
     <section class="editor-card"><div class="section-head"><div><h2>BGM・音源</h2><p>音源の種類、音量、ループ、利用条件を保存します。</p></div><span id="saveState">保存済み</span></div>
       <div class="form-grid"><label>音源の種類<select id="source"><option value="none">BGMなし</option><option value="upload">自分の音源をアップロード</option><option value="free">無料BGM（情報を登録）</option><option value="ai">AI生成BGM（後で追加）</option></select></label><label>雰囲気<select id="category"><option value="calm">教養・落ち着き</option><option value="history">歴史・重厚</option><option value="challenge">挑戦・前進</option><option value="emotion">感動・余韻</option><option value="rain">雨・環境音</option><option value="sleep">睡眠・リラックス</option></select></label></div>
       <label>BGM名<input id="bgmTitle" value="${escapeHtml(b.title||"")}" placeholder="例：静かなピアノと雨音"></label>
@@ -267,28 +329,104 @@ async function renderBgm(id) {
     </section>
     <section class="editor-card"><h2>ミックス設定</h2><div class="form-grid"><label>音量<div class="range-line"><input id="volume" type="range" min="0" max="0.5" step="0.01" value="${b.volume}"><span id="volumeValue">${Math.round(b.volume*100)}%</span></div></label><label>フェードイン<input id="fadeIn" type="number" min="0" max="30" step="0.5" value="${b.fadeInSec}">秒</label><label>フェードアウト<input id="fadeOut" type="number" min="0" max="30" step="0.5" value="${b.fadeOutSec}">秒</label><label class="check"><input id="ducking" type="checkbox" ${b.ducking?"checked":""}>ナレーション中は自動で音量を下げる</label><label class="check"><input id="loop" type="checkbox" ${b.loop?"checked":""}>動画の長さに合わせてループ</label></div></section>
     <section class="editor-card"><h2>利用条件</h2><label>ライセンス・利用条件<input id="license" value="${escapeHtml(b.license||"")}" placeholder="例：商用利用可・クレジット不要"></label><label>クレジット表記<input id="credit" value="${escapeHtml(b.credit||"")}" placeholder="必要な場合のみ入力"></label><p class="notice">無料BGMを使う場合は、配布元の最新規約を必ず確認してください。</p></section>
+
+    <section class="editor-card subtitle-global"><div class="section-head"><div><h2>字幕スタイル</h2><p>全シーン共通の見た目と文字量を設定します。</p></div><label class="switch-line"><input id="subtitleEnabled" type="checkbox" ${st.enabled?"checked":""}>字幕を表示</label></div>
+      <div class="form-grid subtitle-settings">
+        <label>プリセット<select id="subtitlePreset"><option value="standard">標準</option><option value="large">大きく読みやすい</option><option value="minimal">シンプル</option><option value="boxed">背景ボックス</option></select></label>
+        <label>表示位置<select id="subtitlePosition"><option value="top">上</option><option value="center">中央</option><option value="bottom">下</option></select></label>
+        <label>文字サイズ<div class="range-line"><input id="fontSize" type="range" min="32" max="84" step="1" value="${st.fontSize}"><span id="fontSizeValue">${st.fontSize}</span></div></label>
+        <label>1行の文字数<input id="maxChars" type="number" min="6" max="30" value="${st.maxCharsPerLine}"></label>
+        <label>最大行数<select id="maxLines"><option value="1">1行</option><option value="2">2行</option></select></label>
+        <label>文字色<input id="textColor" type="color" value="${st.textColor}"></label>
+        <label>縁取り色<input id="outlineColor" type="color" value="${st.outlineColor}"></label>
+        <label>縁取り幅<div class="range-line"><input id="outlineWidth" type="range" min="0" max="8" step="1" value="${st.outlineWidth}"><span id="outlineWidthValue">${st.outlineWidth}</span></div></label>
+        <label class="check"><input id="backgroundEnabled" type="checkbox" ${st.backgroundEnabled?"checked":""}>字幕背景を表示</label>
+        <label>背景色<input id="backgroundColor" type="color" value="${st.backgroundColor}"></label>
+        <label>背景の濃さ<div class="range-line"><input id="backgroundOpacity" type="range" min="0" max="0.9" step="0.05" value="${st.backgroundOpacity}"><span id="backgroundOpacityValue">${Math.round(st.backgroundOpacity*100)}%</span></div></label>
+      </div>
+      <div class="tool-row"><button class="primary" id="generateSubtitles">シーン文章から自動生成</button><button id="exportSrt">SRTを書き出す</button><button id="clearSubtitles" class="danger">字幕を全消去</button></div>
+    </section>
+
+    <section class="editor-card subtitle-preview-card"><div class="section-head"><div><h2>字幕プレビュー</h2><p>実際の縦動画に近い比率で確認します。</p></div><select id="previewScene">${scenes.map((s,i)=>`<option value="${i}">シーン ${i+1}</option>`).join("")||'<option value="0">シーンなし</option>'}</select></div><div id="subtitlePreview" class="subtitle-phone"></div></section>
+
+    <section class="editor-card"><div class="section-head"><div><h2>シーン別字幕</h2><p>文章と表示開始・終了を調整します。長すぎる字幕には警告が出ます。</p></div><span id="subtitleCount">0/${scenes.length}</span></div><div id="subtitleList" class="subtitle-list"></div></section>
+
     <section class="actions"><button id="backScenes">← シーンへ</button><button id="exportJson">JSONを書き出す</button><button class="primary" id="nextOutput">次へ：出力設定</button></section>
   </main>`;
   root.querySelector('#source').value=b.source; root.querySelector('#category').value=b.category;
+  root.querySelector('#subtitlePreset').value=st.preset||'standard'; root.querySelector('#subtitlePosition').value=st.position; root.querySelector('#maxLines').value=String(st.maxLines);
   root.querySelector('#back').onclick=()=>goStudio(studioForGenre(project.genre)); root.querySelector('#stepScript').onclick=()=>goProject(id); root.querySelector('#stepScenes').onclick=()=>goScenes(id); root.querySelector('#stepOutput').onclick=()=>goOutput(id); root.querySelector('#backScenes').onclick=()=>goScenes(id); root.querySelector('#nextOutput').onclick=()=>goOutput(id); attachProjectMenu(project,root.querySelector('#menu'),()=>goStudio(studioForGenre(project.genre)));
-  const saveState=root.querySelector('#saveState'); let timer; const save=()=>{saveState.textContent='保存中…';clearTimeout(timer);timer=setTimeout(async()=>{Object.assign(b,{source:root.querySelector('#source').value,category:root.querySelector('#category').value,title:root.querySelector('#bgmTitle').value,volume:Number(root.querySelector('#volume').value),fadeInSec:Number(root.querySelector('#fadeIn').value),fadeOutSec:Number(root.querySelector('#fadeOut').value),ducking:root.querySelector('#ducking').checked,loop:root.querySelector('#loop').checked,license:root.querySelector('#license').value,credit:root.querySelector('#credit').value});project.updatedAt=new Date().toISOString();await saveProject(project);saveState.textContent='保存済み';},400)};
-  ['source','category','bgmTitle','volume','fadeIn','fadeOut','ducking','loop','license','credit'].forEach(k=>root.querySelector('#'+k).oninput=()=>{if(k==='volume')root.querySelector('#volumeValue').textContent=`${Math.round(Number(root.querySelector('#volume').value)*100)}%`;save();});
+
+  const saveState=root.querySelector('#saveState'); let timer;
+  const readGlobalSettings=()=>Object.assign(st,{
+    enabled:root.querySelector('#subtitleEnabled').checked,preset:root.querySelector('#subtitlePreset').value,
+    position:root.querySelector('#subtitlePosition').value,fontSize:Number(root.querySelector('#fontSize').value),
+    maxCharsPerLine:Math.max(6,Number(root.querySelector('#maxChars').value)||16),maxLines:Number(root.querySelector('#maxLines').value)||2,
+    textColor:root.querySelector('#textColor').value,outlineColor:root.querySelector('#outlineColor').value,
+    outlineWidth:Number(root.querySelector('#outlineWidth').value),backgroundEnabled:root.querySelector('#backgroundEnabled').checked,
+    backgroundColor:root.querySelector('#backgroundColor').value,backgroundOpacity:Number(root.querySelector('#backgroundOpacity').value)
+  });
+  const save=()=>{saveState.textContent='保存中…';clearTimeout(timer);timer=setTimeout(async()=>{
+    Object.assign(b,{source:root.querySelector('#source').value,category:root.querySelector('#category').value,title:root.querySelector('#bgmTitle').value,volume:Number(root.querySelector('#volume').value),fadeInSec:Number(root.querySelector('#fadeIn').value),fadeOutSec:Number(root.querySelector('#fadeOut').value),ducking:root.querySelector('#ducking').checked,loop:root.querySelector('#loop').checked,license:root.querySelector('#license').value,credit:root.querySelector('#credit').value});
+    readGlobalSettings(); project.output.subtitles=st.enabled; project.output.subtitlePosition=st.position; project.updatedAt=new Date().toISOString();await saveProject(project);saveState.textContent='保存済み';
+  },350)};
+
+  const updateLabels=()=>{root.querySelector('#volumeValue').textContent=`${Math.round(Number(root.querySelector('#volume').value)*100)}%`;root.querySelector('#fontSizeValue').textContent=root.querySelector('#fontSize').value;root.querySelector('#outlineWidthValue').textContent=root.querySelector('#outlineWidth').value;root.querySelector('#backgroundOpacityValue').textContent=`${Math.round(Number(root.querySelector('#backgroundOpacity').value)*100)}%`;};
+  ['source','category','bgmTitle','volume','fadeIn','fadeOut','ducking','loop','license','credit'].forEach(k=>root.querySelector('#'+k).oninput=()=>{updateLabels();save();});
+  ['subtitleEnabled','subtitlePosition','fontSize','maxChars','maxLines','textColor','outlineColor','outlineWidth','backgroundEnabled','backgroundColor','backgroundOpacity'].forEach(k=>root.querySelector('#'+k).oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();});
+
+  const presets={
+    standard:{fontSize:54,position:'bottom',maxCharsPerLine:16,maxLines:2,outlineWidth:4,backgroundEnabled:false,backgroundOpacity:.45},
+    large:{fontSize:68,position:'bottom',maxCharsPerLine:13,maxLines:2,outlineWidth:5,backgroundEnabled:false,backgroundOpacity:.45},
+    minimal:{fontSize:48,position:'center',maxCharsPerLine:18,maxLines:2,outlineWidth:2,backgroundEnabled:false,backgroundOpacity:.35},
+    boxed:{fontSize:52,position:'bottom',maxCharsPerLine:16,maxLines:2,outlineWidth:0,backgroundEnabled:true,backgroundOpacity:.58}
+  };
+  root.querySelector('#subtitlePreset').onchange=()=>{const p=presets[root.querySelector('#subtitlePreset').value];Object.assign(st,p,{preset:root.querySelector('#subtitlePreset').value});root.querySelector('#fontSize').value=st.fontSize;root.querySelector('#subtitlePosition').value=st.position;root.querySelector('#maxChars').value=st.maxCharsPerLine;root.querySelector('#maxLines').value=String(st.maxLines);root.querySelector('#outlineWidth').value=st.outlineWidth;root.querySelector('#backgroundEnabled').checked=st.backgroundEnabled;root.querySelector('#backgroundOpacity').value=st.backgroundOpacity;updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();};
+
   root.querySelector('#audioFile').onchange=async e=>{const file=e.target.files?.[0];if(!file)return;if(file.size>12_000_000&&!confirm('音源が大きいため端末保存容量を圧迫します。続けますか？'))return;b.audioData=await fileToDataUrl(file);b.fileName=file.name;b.source='upload';root.querySelector('#source').value='upload';root.querySelector('#fileName').textContent=file.name;root.querySelector('#audioPreview').src=b.audioData;save();};
+
+  function renderSubtitlePreview(){
+    readGlobalSettings(); const index=Math.min(scenes.length-1,Math.max(0,Number(root.querySelector('#previewScene').value)||0)); const scene=scenes[index]; const box=root.querySelector('#subtitlePreview');
+    if(!scene){box.innerHTML='<div class="subtitle-empty-preview">シーンを作成すると字幕を確認できます。</div>';return;}
+    const result=formatSubtitleLines(scene.subtitleText||'',st.maxCharsPerLine,st.maxLines); const visible=st.enabled&&scene.subtitleEnabled!==false&&result.lines.length;
+    const background=st.backgroundEnabled?hexToRgba(st.backgroundColor,st.backgroundOpacity):'transparent';
+    const stroke=Math.max(0,st.outlineWidth*.28);
+    box.innerHTML=`${scene.imageData?`<img src="${scene.imageData}" alt="">`:`<div class="subtitle-preview-fallback">シーン ${index+1}</div>`}<div class="subtitle-layer pos-${st.position}">${visible?`<div class="subtitle-render ${result.overflow?'overflow':''}" style="font-size:${Math.max(14,st.fontSize*.32)}px;color:${st.textColor};-webkit-text-stroke:${stroke}px ${st.outlineColor};background:${background}">${result.lines.map(escapeHtml).join('<br>')}</div>`:''}</div>`;
+  }
+  function updateSubtitleCount(){const count=scenes.filter(s=>s.subtitleEnabled!==false&&(s.subtitleText||'').trim()).length;root.querySelector('#subtitleCount').textContent=`${count}/${scenes.length}`;}
+  function renderSubtitleEditor(){
+    readGlobalSettings(); const list=root.querySelector('#subtitleList'); updateSubtitleCount();
+    list.innerHTML=scenes.length?scenes.map((scene,i)=>{const duration=Math.max(1,Number(scene.durationSec)||1);scene.subtitleStartSec=Math.min(duration,Math.max(0,Number(scene.subtitleStartSec)||0));scene.subtitleEndSec=Math.min(duration,Math.max(scene.subtitleStartSec,Number(scene.subtitleEndSec)||duration));const formatted=formatSubtitleLines(scene.subtitleText||'',st.maxCharsPerLine,st.maxLines);const limit=st.maxCharsPerLine*st.maxLines;return `<article class="subtitle-item" data-index="${i}"><div class="subtitle-item-head"><div><b>シーン ${i+1}</b><small>${duration}秒</small></div><label class="switch-line"><input data-sub-enabled="${i}" type="checkbox" ${scene.subtitleEnabled!==false?'checked':''}>表示</label></div><textarea data-sub-text="${i}" placeholder="字幕文章">${escapeHtml(scene.subtitleText||'')}</textarea><div class="subtitle-meta"><span data-sub-count="${i}" class="${formatted.overflow?'warning':''}">${formatted.chars}文字／目安${limit}文字${formatted.overflow?'・長すぎます':''}</span></div><div class="subtitle-time-grid"><label>開始（シーン内）<input data-sub-start="${i}" type="number" min="0" max="${duration}" step="0.1" value="${scene.subtitleStartSec}">秒</label><label>終了（シーン内）<input data-sub-end="${i}" type="number" min="0" max="${duration}" step="0.1" value="${scene.subtitleEndSec}">秒</label><button data-preview="${i}">プレビュー</button></div></article>`}).join(''):'<div class="dictionary-empty">シーン編集でシーンを作成してください。</div>';
+    list.querySelectorAll('[data-sub-text]').forEach(el=>el.oninput=()=>{const i=Number(el.dataset.subText);scenes[i].subtitleText=el.value;const f=formatSubtitleLines(el.value,st.maxCharsPerLine,st.maxLines);const count=list.querySelector(`[data-sub-count="${i}"]`);count.textContent=`${f.chars}文字／目安${st.maxCharsPerLine*st.maxLines}文字${f.overflow?'・長すぎます':''}`;count.classList.toggle('warning',f.overflow);updateSubtitleCount();if(Number(root.querySelector('#previewScene').value)===i)renderSubtitlePreview();save();});
+    list.querySelectorAll('[data-sub-enabled]').forEach(el=>el.onchange=()=>{scenes[Number(el.dataset.subEnabled)].subtitleEnabled=el.checked;updateSubtitleCount();renderSubtitlePreview();save();});
+    list.querySelectorAll('[data-sub-start]').forEach(el=>el.oninput=()=>{const i=Number(el.dataset.subStart),duration=Math.max(1,Number(scenes[i].durationSec)||1);scenes[i].subtitleStartSec=Math.min(duration,Math.max(0,Number(el.value)||0));if(scenes[i].subtitleEndSec<scenes[i].subtitleStartSec)scenes[i].subtitleEndSec=scenes[i].subtitleStartSec;save();});
+    list.querySelectorAll('[data-sub-end]').forEach(el=>el.oninput=()=>{const i=Number(el.dataset.subEnd),duration=Math.max(1,Number(scenes[i].durationSec)||1);scenes[i].subtitleEndSec=Math.min(duration,Math.max(scenes[i].subtitleStartSec,Number(el.value)||duration));save();});
+    list.querySelectorAll('[data-preview]').forEach(el=>el.onclick=()=>{root.querySelector('#previewScene').value=el.dataset.preview;renderSubtitlePreview();root.querySelector('.subtitle-preview-card').scrollIntoView({behavior:'smooth',block:'center'});});
+  }
+  root.querySelector('#previewScene').onchange=renderSubtitlePreview;
+  root.querySelector('#generateSubtitles').onclick=()=>{if(scenes.some(s=>(s.subtitleText||'').trim())&&!confirm('現在の字幕をシーン文章から作り直しますか？'))return;scenes.forEach(s=>{s.subtitleText=s.text||'';s.subtitleEnabled=true;s.subtitleStartSec=0;s.subtitleEndSec=Math.max(1,Number(s.durationSec)||1);});renderSubtitleEditor();renderSubtitlePreview();save();};
+  root.querySelector('#clearSubtitles').onclick=()=>{if(!confirm('すべてのシーンの字幕文章を消去しますか？'))return;scenes.forEach(s=>s.subtitleText='');renderSubtitleEditor();renderSubtitlePreview();save();};
+  root.querySelector('#exportSrt').onclick=()=>{const srt=buildSrt(project);if(!srt.trim())return alert('書き出せる字幕がありません。');downloadText(`${safeName(project.title)}.srt`,srt,'application/x-subrip;charset=utf-8');};
   root.querySelector('#exportJson').onclick=()=>downloadJson(`${safeName(project.title)}.json`,project);
+  updateLabels(); renderSubtitleEditor(); renderSubtitlePreview();
 }
 
 async function renderOutput(id) {
-  const project=await getProject(id); if(!project){goHome();return;} ensureProjectSettings(project); const o=project.output; const scenes=project.scenes||[]; const hasImages=scenes.filter(s=>s.imageData).length; const total=scenes.reduce((n,s)=>n+(Number(s.durationSec)||0),0);
+  const project=await getProject(id); if(!project){goHome();return;} ensureProjectSettings(project);
+  const o=project.output, st=project.subtitleStyle, scenes=project.scenes||[];
+  const hasImages=scenes.filter(s=>s.imageData).length, total=scenes.reduce((n,s)=>n+(Number(s.durationSec)||0),0);
+  const timeline=buildSubtitleTimeline(project), subtitleReady=timeline.length, subtitleWarnings=scenes.filter(s=>{const f=formatSubtitleLines(s.subtitleText||'',st.maxCharsPerLine,st.maxLines);return s.subtitleEnabled!==false&&f.overflow;}).length;
   root.innerHTML=`<main class="shell editor-shell"><header class="editor-head"><button id="back">←</button><div><span>${labelPlatform(project.platform)}</span><h1>${escapeHtml(project.title)}</h1></div><button id="menu">•••</button></header>
-  <nav class="steps"><button id="stepAi">0 AIスタッフ</button><button id="stepScript">1 台本・音声</button><button id="stepScenes">2 シーン</button><button id="stepBgm">3 BGM</button><button class="active">4 出力</button></nav>
+  <nav class="steps"><button id="stepAi">0 AIスタッフ</button><button id="stepScript">1 台本・音声</button><button id="stepScenes">2 シーン</button><button id="stepBgm">3 BGM・字幕</button><button class="active">4 出力</button></nav>
   <section class="editor-card"><div class="section-head"><div><h2>動画出力設定</h2><p>完成動画の形式を設定します。</p></div><span id="saveState">保存済み</span></div><div class="form-grid"><label>解像度<select id="resolution"><option value="1080x1920">1080×1920（推奨）</option><option value="720x1280">720×1280（軽量）</option></select></label><label>フレームレート<select id="fps"><option value="30">30fps</option><option value="60">60fps</option></select></label><label>品質<select id="quality"><option value="standard">標準</option><option value="high">高品質</option></select></label><label class="check"><input id="subtitles" type="checkbox" ${o.subtitles?'checked':''}>字幕を表示</label><label>字幕位置<select id="subtitlePosition"><option value="top">上</option><option value="center">中央</option><option value="bottom">下</option></select></label><label class="check"><input id="bgmEnabled" type="checkbox" ${o.bgmEnabled?'checked':''}>BGMを使用</label></div></section>
-  <section class="editor-card"><h2>素材チェック</h2><div class="check-list"><p class="${project.displayScript?'ok':'warn'}">${project.displayScript?'✓':'!'} 台本：${project.displayScript.length}文字</p><p class="${scenes.length?'ok':'warn'}">${scenes.length?'✓':'!'} シーン：${scenes.length}件</p><p class="${hasImages===scenes.length&&scenes.length?'ok':'warn'}">${hasImages===scenes.length&&scenes.length?'✓':'!'} 画像：${hasImages}/${scenes.length}件</p><p class="${project.bgm?.source&&project.bgm.source!=='none'?'ok':'muted'}">${project.bgm?.source&&project.bgm.source!=='none'?'✓':'−'} BGM：${escapeHtml(project.bgm?.title||'なし')}</p><p>予定尺：${total}秒</p></div></section>
-  <section class="editor-card"><h2>書き出し</h2><p class="notice">現段階では設定・素材確認まで利用できます。実際のMP4生成エンジンは次のSprintで実装します。</p><div class="tool-row"><button id="exportPlan">制作プランJSONを書き出す</button><button class="primary" id="publish">投稿準備へ</button></div></section>
-  <section class="actions"><button id="backBgm">← BGMへ</button><button id="exportJson">プロジェクトJSON</button><button class="primary" id="publish2">次へ：投稿準備</button></section></main>`;
-  root.querySelector('#resolution').value=`${o.width}x${o.height}`;root.querySelector('#fps').value=String(o.fps);root.querySelector('#quality').value=o.quality;root.querySelector('#subtitlePosition').value=o.subtitlePosition;
+  <section class="editor-card"><h2>素材チェック</h2><div class="check-list"><p class="${project.displayScript?'ok':'warn'}">${project.displayScript?'✓':'!'} 台本：${project.displayScript.length}文字</p><p class="${scenes.length?'ok':'warn'}">${scenes.length?'✓':'!'} シーン：${scenes.length}件</p><p class="${hasImages===scenes.length&&scenes.length?'ok':'warn'}">${hasImages===scenes.length&&scenes.length?'✓':'!'} 画像：${hasImages}/${scenes.length}件</p><p class="${subtitleReady?'ok':'warn'}">${subtitleReady?'✓':'!'} 字幕：${subtitleReady}/${scenes.length}件${subtitleWarnings?`（長文警告${subtitleWarnings}件）`:''}</p><p class="${project.bgm?.source&&project.bgm.source!=='none'?'ok':'muted'}">${project.bgm?.source&&project.bgm.source!=='none'?'✓':'−'} BGM：${escapeHtml(project.bgm?.title||'なし')}</p><p>予定尺：${total}秒</p></div></section>
+  <section class="editor-card"><h2>MP4生成用データ</h2><p class="notice">字幕タイムライン、スタイル、シーン、BGM、出力設定を制作プランへまとめます。実際のMP4生成エンジンは次のSprintで実装します。</p><div class="tool-row"><button id="exportSrt">字幕SRT</button><button id="exportPlan">制作プランJSON</button><button class="primary" id="publish">投稿準備へ</button></div></section>
+  <section class="actions"><button id="backBgm">← BGM・字幕へ</button><button id="exportJson">プロジェクトJSON</button><button class="primary" id="publish2">次へ：投稿準備</button></section></main>`;
+  root.querySelector('#resolution').value=`${o.width}x${o.height}`;root.querySelector('#fps').value=String(o.fps);root.querySelector('#quality').value=o.quality;root.querySelector('#subtitlePosition').value=o.subtitlePosition||st.position;
   root.querySelector('#back').onclick=()=>goStudio(studioForGenre(project.genre));root.querySelector('#stepScript').onclick=()=>goProject(id);root.querySelector('#stepScenes').onclick=()=>goScenes(id);root.querySelector('#stepBgm').onclick=()=>goBgm(id);root.querySelector('#backBgm').onclick=()=>goBgm(id);root.querySelector('#publish').onclick=root.querySelector('#publish2').onclick=()=>goPublish(id);attachProjectMenu(project,root.querySelector('#menu'),()=>goStudio(studioForGenre(project.genre)));
-  let timer;const save=()=>{root.querySelector('#saveState').textContent='保存中…';clearTimeout(timer);timer=setTimeout(async()=>{const [w,h]=root.querySelector('#resolution').value.split('x').map(Number);Object.assign(o,{width:w,height:h,fps:Number(root.querySelector('#fps').value),quality:root.querySelector('#quality').value,subtitles:root.querySelector('#subtitles').checked,subtitlePosition:root.querySelector('#subtitlePosition').value,bgmEnabled:root.querySelector('#bgmEnabled').checked});project.updatedAt=new Date().toISOString();await saveProject(project);root.querySelector('#saveState').textContent='保存済み';},400)};['resolution','fps','quality','subtitles','subtitlePosition','bgmEnabled'].forEach(k=>root.querySelector('#'+k).onchange=save);
-  root.querySelector('#exportPlan').onclick=()=>downloadJson(`${safeName(project.title)}-production-plan.json`,{title:project.title,output:o,scenes, bgm:project.bgm, scripts:{display:project.displayScript,speech:project.speechScript}});root.querySelector('#exportJson').onclick=()=>downloadJson(`${safeName(project.title)}.json`,project);
+  let timer;const save=()=>{root.querySelector('#saveState').textContent='保存中…';clearTimeout(timer);timer=setTimeout(async()=>{const [w,h]=root.querySelector('#resolution').value.split('x').map(Number);Object.assign(o,{width:w,height:h,fps:Number(root.querySelector('#fps').value),quality:root.querySelector('#quality').value,subtitles:root.querySelector('#subtitles').checked,subtitlePosition:root.querySelector('#subtitlePosition').value,bgmEnabled:root.querySelector('#bgmEnabled').checked});st.enabled=o.subtitles;st.position=o.subtitlePosition;project.updatedAt=new Date().toISOString();await saveProject(project);root.querySelector('#saveState').textContent='保存済み';},400)};['resolution','fps','quality','subtitles','subtitlePosition','bgmEnabled'].forEach(k=>root.querySelector('#'+k).onchange=save);
+  root.querySelector('#exportSrt').onclick=()=>{const srt=buildSrt(project);if(!srt.trim())return alert('書き出せる字幕がありません。');downloadText(`${safeName(project.title)}.srt`,srt,'application/x-subrip;charset=utf-8');};
+  root.querySelector('#exportPlan').onclick=()=>downloadJson(`${safeName(project.title)}-production-plan.json`,{schemaVersion:2,title:project.title,output:o,scenes,bgm:project.bgm,subtitleStyle:st,subtitles:buildSubtitleTimeline(project),scripts:{display:project.displayScript,speech:project.speechScript}});root.querySelector('#exportJson').onclick=()=>downloadJson(`${safeName(project.title)}.json`,project);
 }
 
 async function renderPublish(id) {
@@ -621,7 +759,7 @@ async function renderAi(id) {
   root.innerHTML = `
     <main class="shell editor-shell">
       <header class="editor-head"><button id="back">←</button><div><span>Prompt Engine v1</span><h1>🧠 AIスタッフ・プロンプト資産</h1></div><button id="menu">•••</button></header>
-      <nav class="steps"><button class="active">0 AIスタッフ</button><button id="stepScript">1 台本・音声</button><button id="stepScenes">2 シーン</button><button id="stepBgm">3 BGM</button><button id="stepOutput">4 出力</button></nav>
+      <nav class="steps"><button class="active">0 AIスタッフ</button><button id="stepScript">1 台本・音声</button><button id="stepScenes">2 シーン</button><button id="stepBgm">3 BGM・字幕</button><button id="stepOutput">4 出力</button></nav>
       <section class="editor-card ai-mode-notice">
         <div><strong>現在の接続方法：手動コピーモード</strong><p>Studio・ブランド・作成形式・担当AIのルールを自動合成します。API料金は発生しません。</p></div>
         <span class="status-chip">無料運用</span>

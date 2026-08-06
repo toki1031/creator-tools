@@ -12,7 +12,7 @@
  * @property {string} speechScript
  * @property {Array} scenes
  * @property {{voiceURI:string,rate:number,pitch:number,volume:number}} narration
- * @property {{fontSize:number,position:'top'|'center'|'bottom',maxCharsPerLine:number}} subtitleStyle
+ * @property {{enabled:boolean,fontSize:number,position:'top'|'center'|'bottom',maxCharsPerLine:number,maxLines:number,textColor:string,outlineColor:string,outlineWidth:number,backgroundEnabled:boolean,backgroundColor:string,backgroundOpacity:number}} subtitleStyle
  * @property {string} createdAt
  * @property {string} updatedAt
  * @property {number} schemaVersion
