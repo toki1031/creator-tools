@@ -2,6 +2,7 @@ import { readRoute, goHome, goStudio, goProject, goScenes, goBgm, goOutput, goPu
 import { createProject } from "./projectFactory.js";
 import { deleteProject, getProject, listProjects, saveProject } from "./db.js";
 import { downloadJson, downloadText } from "./download.js";
+import { getVideoCapabilities, getProjectDuration, validateVideoProject, prepareVideoProject, runVisualPreview, exportProjectVideo, drawProjectFrame } from "./videoRenderer.js";
 
 const rootElement = document.querySelector("#app");
 if (!rootElement) throw new Error("#app がありません。");
@@ -414,19 +415,76 @@ async function renderBgm(id) {
 async function renderOutput(id) {
   const project=await getProject(id); if(!project){goHome();return;} ensureProjectSettings(project);
   const o=project.output, st=project.subtitleStyle, scenes=project.scenes||[];
-  const hasImages=scenes.filter(s=>s.imageData).length, total=scenes.reduce((n,s)=>n+(Number(s.durationSec)||0),0);
+  const hasImages=scenes.filter(s=>s.imageData).length, total=getProjectDuration(project);
   const timeline=buildSubtitleTimeline(project), subtitleReady=timeline.length, subtitleWarnings=scenes.filter(s=>{const f=formatSubtitleLines(s.subtitleText||'',st.maxCharsPerLine,st.maxLines);return s.subtitleEnabled!==false&&f.overflow;}).length;
+  const capabilities=getVideoCapabilities();
+  const validation=validateVideoProject(project);
+  const formatLabel=capabilities.mp4?'MP4対応':capabilities.webm?'WebM対応（MP4非対応）':'動画生成非対応';
+  const longProject=total>180;
   root.innerHTML=`<main class="shell editor-shell"><header class="editor-head"><button id="back">←</button><div><span>${labelPlatform(project.platform)}</span><h1>${escapeHtml(project.title)}</h1></div><button id="menu">•••</button></header>
   <nav class="steps"><button id="stepAi">0 AIスタッフ</button><button id="stepScript">1 台本・音声</button><button id="stepScenes">2 シーン</button><button id="stepBgm">3 BGM・字幕</button><button class="active">4 出力</button></nav>
-  <section class="editor-card"><div class="section-head"><div><h2>動画出力設定</h2><p>完成動画の形式を設定します。</p></div><span id="saveState">保存済み</span></div><div class="form-grid"><label>解像度<select id="resolution"><option value="1080x1920">1080×1920（推奨）</option><option value="720x1280">720×1280（軽量）</option></select></label><label>フレームレート<select id="fps"><option value="30">30fps</option><option value="60">60fps</option></select></label><label>品質<select id="quality"><option value="standard">標準</option><option value="high">高品質</option></select></label><label class="check"><input id="subtitles" type="checkbox" ${o.subtitles?'checked':''}>字幕を表示</label><label>字幕位置<select id="subtitlePosition"><option value="top">上</option><option value="center">中央</option><option value="bottom">下</option></select></label><label class="check"><input id="bgmEnabled" type="checkbox" ${o.bgmEnabled?'checked':''}>BGMを使用</label></div></section>
-  <section class="editor-card"><h2>素材チェック</h2><div class="check-list"><p class="${project.displayScript?'ok':'warn'}">${project.displayScript?'✓':'!'} 台本：${project.displayScript.length}文字</p><p class="${scenes.length?'ok':'warn'}">${scenes.length?'✓':'!'} シーン：${scenes.length}件</p><p class="${hasImages===scenes.length&&scenes.length?'ok':'warn'}">${hasImages===scenes.length&&scenes.length?'✓':'!'} 画像：${hasImages}/${scenes.length}件</p><p class="${subtitleReady?'ok':'warn'}">${subtitleReady?'✓':'!'} 字幕：${subtitleReady}/${scenes.length}件${subtitleWarnings?`（長文警告${subtitleWarnings}件）`:''}</p><p class="${project.bgm?.source&&project.bgm.source!=='none'?'ok':'muted'}">${project.bgm?.source&&project.bgm.source!=='none'?'✓':'−'} BGM：${escapeHtml(project.bgm?.title||'なし')}</p><p>予定尺：${total}秒</p></div></section>
-  <section class="editor-card"><h2>MP4生成用データ</h2><p class="notice">字幕タイムライン、スタイル、シーン、BGM、出力設定を制作プランへまとめます。実際のMP4生成エンジンは次のSprintで実装します。</p><div class="tool-row"><button id="exportSrt">字幕SRT</button><button id="exportPlan">制作プランJSON</button><button class="primary" id="publish">投稿準備へ</button></div></section>
+  <section class="editor-card"><div class="section-head"><div><h2>動画出力設定</h2><p>完成動画の形式を設定します。</p></div><span id="saveState">保存済み</span></div><div class="form-grid"><label>解像度<select id="resolution"><option value="1080x1920">1080×1920（高画質）</option><option value="720x1280">720×1280（iPhone推奨・軽量）</option></select></label><label>フレームレート<select id="fps"><option value="30">30fps（推奨）</option><option value="60">60fps（高負荷）</option></select></label><label>品質<select id="quality"><option value="standard">標準</option><option value="high">高品質</option></select></label><label class="check"><input id="subtitles" type="checkbox" ${o.subtitles?'checked':''}>字幕を表示</label><label>字幕位置<select id="subtitlePosition"><option value="top">上</option><option value="center">中央</option><option value="bottom">下</option></select></label><label class="check"><input id="bgmEnabled" type="checkbox" ${o.bgmEnabled?'checked':''}>BGMを使用</label></div></section>
+  <section class="editor-card"><div class="section-head"><div><h2>素材チェック</h2><p>動画生成前に不足素材を確認します。</p></div><span class="status-chip ${capabilities.supported?'':'status-warn'}">${formatLabel}</span></div><div class="check-list"><p class="${project.displayScript?'ok':'warn'}">${project.displayScript?'✓':'!'} 台本：${project.displayScript.length}文字</p><p class="${scenes.length?'ok':'warn'}">${scenes.length?'✓':'!'} シーン：${scenes.length}件</p><p class="${hasImages===scenes.length&&scenes.length?'ok':'warn'}">${hasImages===scenes.length&&scenes.length?'✓':'!'} 画像：${hasImages}/${scenes.length}件</p><p class="${subtitleReady?'ok':'warn'}">${subtitleReady?'✓':'!'} 字幕：${subtitleReady}/${scenes.length}件${subtitleWarnings?`（長文警告${subtitleWarnings}件）`:''}</p><p class="${project.bgm?.audioData&&o.bgmEnabled?'ok':'muted'}">${project.bgm?.audioData&&o.bgmEnabled?'✓':'−'} BGM音源：${escapeHtml(project.bgm?.fileName||project.bgm?.title||'なし')}</p><p class="muted">− ナレーション：ブラウザ読み上げ音声の録音は次段階</p><p>予定尺：${total.toFixed(1)}秒</p></div>${validation.warnings.length?`<div class="render-warnings">${validation.warnings.map(item=>`<p>⚠ ${escapeHtml(item)}</p>`).join('')}</div>`:''}</section>
+
+  <section class="editor-card video-render-card">
+    <div class="section-head"><div><h2>動画プレビュー・生成</h2><p>画像、動き、字幕、BGMをブラウザ内で合成します。</p></div><span id="renderStatus">素材準備中…</span></div>
+    <div class="video-canvas-wrap"><canvas id="renderCanvas" width="${o.width}" height="${o.height}"></canvas></div>
+    <div class="render-options"><label>生成範囲<select id="renderRange"><option value="10">先頭10秒（動作テスト）</option><option value="full" ${longProject?'disabled':''}>全編（${Math.ceil(total)}秒）</option></select></label><p>${longProject?'全編が3分を超えるため、初版では10秒テストのみです。長時間BGMは今後のサーバー／高速エンジンで対応します。':'全編生成は実時間と同程度かかります。画面を閉じずにお待ちください。'}</p></div>
+    <div class="render-progress"><progress id="renderProgress" max="1" value="0"></progress><span id="renderProgressText">0%</span></div>
+    <div class="tool-row"><button id="previewVideo">▶ 10秒プレビュー</button><button id="stopPreview" disabled>■ プレビュー停止</button><button class="primary" id="generateVideo" ${capabilities.supported?'':'disabled'}>🎬 動画を生成</button><button class="danger" id="cancelRender" disabled>生成を中止</button></div>
+    <p class="notice">初版は画像＋字幕＋BGMの動画生成です。生成中はSafariを前面に表示し、画面をロックしないでください。対応形式は端末が自動判定します。</p>
+    <div id="renderResult" class="render-result" hidden><h3>生成完了</h3><video id="resultVideo" controls playsinline></video><div class="tool-row"><a id="downloadVideo" class="button-link primary" download>動画を保存</a><button id="shareVideo">共有</button></div><p id="resultInfo"></p></div>
+  </section>
+
+  <section class="editor-card"><h2>制作データの書き出し</h2><div class="tool-row"><button id="exportSrt">字幕SRT</button><button id="exportPlan">制作プランJSON</button><button class="primary" id="publish">投稿準備へ</button></div></section>
   <section class="actions"><button id="backBgm">← BGM・字幕へ</button><button id="exportJson">プロジェクトJSON</button><button class="primary" id="publish2">次へ：投稿準備</button></section></main>`;
+
   root.querySelector('#resolution').value=`${o.width}x${o.height}`;root.querySelector('#fps').value=String(o.fps);root.querySelector('#quality').value=o.quality;root.querySelector('#subtitlePosition').value=o.subtitlePosition||st.position;
-  root.querySelector('#back').onclick=()=>goStudio(studioForGenre(project.genre));root.querySelector('#stepScript').onclick=()=>goProject(id);root.querySelector('#stepScenes').onclick=()=>goScenes(id);root.querySelector('#stepBgm').onclick=()=>goBgm(id);root.querySelector('#backBgm').onclick=()=>goBgm(id);root.querySelector('#publish').onclick=root.querySelector('#publish2').onclick=()=>goPublish(id);attachProjectMenu(project,root.querySelector('#menu'),()=>goStudio(studioForGenre(project.genre)));
-  let timer;const save=()=>{root.querySelector('#saveState').textContent='保存中…';clearTimeout(timer);timer=setTimeout(async()=>{const [w,h]=root.querySelector('#resolution').value.split('x').map(Number);Object.assign(o,{width:w,height:h,fps:Number(root.querySelector('#fps').value),quality:root.querySelector('#quality').value,subtitles:root.querySelector('#subtitles').checked,subtitlePosition:root.querySelector('#subtitlePosition').value,bgmEnabled:root.querySelector('#bgmEnabled').checked});st.enabled=o.subtitles;st.position=o.subtitlePosition;project.updatedAt=new Date().toISOString();await saveProject(project);root.querySelector('#saveState').textContent='保存済み';},400)};['resolution','fps','quality','subtitles','subtitlePosition','bgmEnabled'].forEach(k=>root.querySelector('#'+k).onchange=save);
+  root.querySelector('#back').onclick=()=>goStudio(studioForGenre(project.genre));root.querySelector('#stepAi').onclick=()=>goAi(id);root.querySelector('#stepScript').onclick=()=>goProject(id);root.querySelector('#stepScenes').onclick=()=>goScenes(id);root.querySelector('#stepBgm').onclick=()=>goBgm(id);root.querySelector('#backBgm').onclick=()=>goBgm(id);root.querySelector('#publish').onclick=root.querySelector('#publish2').onclick=()=>goPublish(id);attachProjectMenu(project,root.querySelector('#menu'),()=>goStudio(studioForGenre(project.genre)));
+
+  const canvas=root.querySelector('#renderCanvas');
+  const renderStatus=root.querySelector('#renderStatus');
+  const progress=root.querySelector('#renderProgress');
+  const progressText=root.querySelector('#renderProgressText');
+  const updateProgress=(elapsed,duration)=>{const value=duration?Math.min(1,elapsed/duration):0;progress.value=value;progressText.textContent=`${Math.round(value*100)}%（${elapsed.toFixed(1)}/${duration.toFixed(1)}秒）`;};
+  let settingsTimer;
+  const persistSettings=async()=>{const [w,h]=root.querySelector('#resolution').value.split('x').map(Number);Object.assign(o,{width:w,height:h,fps:Number(root.querySelector('#fps').value),quality:root.querySelector('#quality').value,subtitles:root.querySelector('#subtitles').checked,subtitlePosition:root.querySelector('#subtitlePosition').value,bgmEnabled:root.querySelector('#bgmEnabled').checked});st.enabled=o.subtitles;st.position=o.subtitlePosition;project.updatedAt=new Date().toISOString();await saveProject(project);canvas.width=w;canvas.height=h;};
+  const scheduleSave=()=>{root.querySelector('#saveState').textContent='保存中…';clearTimeout(settingsTimer);settingsTimer=setTimeout(async()=>{await persistSettings();root.querySelector('#saveState').textContent='保存済み';if(prepared)drawProjectFrame(project,prepared,canvas,0);},350)};['resolution','fps','quality','subtitles','subtitlePosition','bgmEnabled'].forEach(k=>root.querySelector('#'+k).onchange=scheduleSave);
+
+  let prepared=null;
+  let preparedPromise=prepareVideoProject(project,{onStatus:text=>renderStatus.textContent=text}).then(value=>{prepared=value;drawProjectFrame(project,prepared,canvas,0);return value;}).catch(error=>{renderStatus.textContent='素材準備エラー';throw error;});
+  let previewController=null,renderController=null,resultUrl='';let resultFile=null;
+  root.querySelector('#previewVideo').onclick=async()=>{
+    if(previewController)return;previewController=new AbortController();root.querySelector('#stopPreview').disabled=false;root.querySelector('#previewVideo').disabled=true;renderStatus.textContent='映像プレビュー中（音なし）…';progress.value=0;
+    try{await persistSettings();const assets=await preparedPromise;await runVisualPreview(project,assets,canvas,{durationLimit:10,signal:previewController.signal,onProgress:updateProgress});renderStatus.textContent='プレビュー完了';}
+    catch(error){if(error.name!=='AbortError'){console.error(error);alert(`プレビューに失敗しました：${error.message}`);}renderStatus.textContent=error.name==='AbortError'?'プレビューを停止しました':'プレビューエラー';}
+    finally{previewController=null;root.querySelector('#stopPreview').disabled=true;root.querySelector('#previewVideo').disabled=false;}
+  };
+  root.querySelector('#stopPreview').onclick=()=>previewController?.abort();
+
+  root.querySelector('#generateVideo').onclick=async()=>{
+    if(renderController)return;
+    const check=validateVideoProject(project);if(check.errors.length)return alert(check.errors.join('\n'));
+    const range=root.querySelector('#renderRange').value;const limit=range==='full'?undefined:10;const duration=limit?Math.min(total,limit):total;
+    if(!limit&&duration>180)return alert('初版の全編生成は3分以内に制限しています。先頭10秒で動作確認してください。');
+    if(!confirm(`約${Math.ceil(duration)}秒の動画を生成します。生成中は画面を閉じずにお待ちください。`))return;
+    renderController=new AbortController();root.querySelector('#cancelRender').disabled=false;root.querySelector('#generateVideo').disabled=true;root.querySelector('#previewVideo').disabled=true;progress.value=0;
+    let unlockedAudioContext=null;
+    try{
+      if(project.output?.bgmEnabled&&project.bgm?.audioData){const AudioContextClass=globalThis.AudioContext||globalThis.webkitAudioContext;if(AudioContextClass){unlockedAudioContext=new AudioContextClass();void unlockedAudioContext.resume();}}
+      await persistSettings();let assets=await preparedPromise;if(project.output?.bgmEnabled&&project.bgm?.audioData&&!assets.audioBuffer&&!assets.audioArrayBuffer){assets=await prepareVideoProject(project,{onStatus:text=>renderStatus.textContent=text});}
+      const result=await exportProjectVideo(project,assets,canvas,{durationLimit:limit,signal:renderController.signal,onProgress:updateProgress,onStatus:text=>renderStatus.textContent=text,audioContext:unlockedAudioContext});
+      if(resultUrl)URL.revokeObjectURL(resultUrl);resultUrl=URL.createObjectURL(result.blob);resultFile=new File([result.blob],`${safeName(project.title)}.${result.extension}`,{type:result.mimeType});
+      const resultBox=root.querySelector('#renderResult');resultBox.hidden=false;root.querySelector('#resultVideo').src=resultUrl;const link=root.querySelector('#downloadVideo');link.href=resultUrl;link.download=resultFile.name;root.querySelector('#resultInfo').textContent=`${result.extension.toUpperCase()}・${result.mimeType}・${(result.blob.size/1024/1024).toFixed(1)}MB・${result.durationSec.toFixed(1)}秒`;renderStatus.textContent='動画生成が完了しました。';
+      resultBox.scrollIntoView({behavior:'smooth',block:'center'});
+    }catch(error){if(error.name!=='AbortError'){console.error(error);alert(`動画生成に失敗しました：${error.message}`);}renderStatus.textContent=error.name==='AbortError'?'動画生成を中止しました':'動画生成エラー';}
+    finally{renderController=null;root.querySelector('#cancelRender').disabled=true;root.querySelector('#generateVideo').disabled=!capabilities.supported;root.querySelector('#previewVideo').disabled=false;}
+  };
+  root.querySelector('#cancelRender').onclick=()=>renderController?.abort();
+  root.querySelector('#shareVideo').onclick=async()=>{if(!resultFile)return;try{if(navigator.canShare?.({files:[resultFile]}))await navigator.share({title:project.title,files:[resultFile]});else alert('この端末ではファイル共有を利用できません。「動画を保存」をお使いください。');}catch(error){if(error.name!=='AbortError')alert(`共有できませんでした：${error.message}`);}};
+
   root.querySelector('#exportSrt').onclick=()=>{const srt=buildSrt(project);if(!srt.trim())return alert('書き出せる字幕がありません。');downloadText(`${safeName(project.title)}.srt`,srt,'application/x-subrip;charset=utf-8');};
-  root.querySelector('#exportPlan').onclick=()=>downloadJson(`${safeName(project.title)}-production-plan.json`,{schemaVersion:2,title:project.title,output:o,scenes,bgm:project.bgm,subtitleStyle:st,subtitles:buildSubtitleTimeline(project),scripts:{display:project.displayScript,speech:project.speechScript}});root.querySelector('#exportJson').onclick=()=>downloadJson(`${safeName(project.title)}.json`,project);
+  root.querySelector('#exportPlan').onclick=()=>downloadJson(`${safeName(project.title)}-production-plan.json`,{schemaVersion:3,title:project.title,output:o,scenes,bgm:project.bgm,subtitleStyle:st,subtitles:buildSubtitleTimeline(project),scripts:{display:project.displayScript,speech:project.speechScript}});root.querySelector('#exportJson').onclick=()=>downloadJson(`${safeName(project.title)}.json`,project);
 }
 
 async function renderPublish(id) {

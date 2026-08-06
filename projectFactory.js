@@ -16,6 +16,6 @@ export function createProject(title, genre, platform) {
     subtitleStyle: { enabled:true, preset:"standard", fontSize:54, position:"bottom", maxCharsPerLine:16, maxLines:2, textColor:"#ffffff", outlineColor:"#000000", outlineWidth:4, backgroundEnabled:false, backgroundColor:"#000000", backgroundOpacity:0.45, align:"center" },
     createdAt: now,
     updatedAt: now,
-    schemaVersion: 2
+    schemaVersion: 3
   };
 }
