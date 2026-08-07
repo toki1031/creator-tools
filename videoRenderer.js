@@ -379,6 +379,8 @@ export async function exportProjectVideo(project, prepared, canvas, {
   const audio = audioResult.audio;
   if (audioResult.warning) onStatus(audioResult.warning);
   const canvasStream = canvas.captureStream(fps);
+  const captureVideoTrack = canvasStream.getVideoTracks()[0] || null;
+  const captureTrackSettings = captureVideoTrack?.getSettings ? captureVideoTrack.getSettings() : {};
   const stream = new MediaStream([...canvasStream.getVideoTracks(), ...(audio?.tracks || [])]);
   const mimeType = chooseMime(Boolean(audio?.tracks?.length));
   let recorder;
@@ -423,7 +425,18 @@ export async function exportProjectVideo(project, prepared, canvas, {
       if (!chunks.length) return reject(new Error('動画データを生成できませんでした。画面を開いたまま再試行してください。'));
       const blob = new Blob(chunks, { type: actualMime });
       const extension = actualMime.includes('mp4') ? 'mp4' : 'webm';
-      resolve({ blob, mimeType: actualMime, extension, durationSec: total });
+      resolve({
+        blob, mimeType: actualMime, extension, durationSec: total,
+        diagnostics: {
+          requestedWidth: Number(project.output?.width) || 720,
+          requestedHeight: Number(project.output?.height) || 1280,
+          canvasWidth: canvas.width,
+          canvasHeight: canvas.height,
+          captureWidth: Number(captureTrackSettings?.width) || null,
+          captureHeight: Number(captureTrackSettings?.height) || null,
+          captureFrameRate: Number(captureTrackSettings?.frameRate) || null
+        }
+      });
     };
 
     try {
