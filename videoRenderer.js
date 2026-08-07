@@ -28,6 +28,16 @@ export function getProjectDuration(project) {
   return (project.scenes || []).reduce((total, scene) => total + Math.max(0, Number(scene.durationSec) || 0), 0);
 }
 
+function bgmDataMime(project) {
+  return String(project?.bgm?.audioData || '').match(/^data:([^;,]+)/)?.[1]?.toLowerCase() || '';
+}
+
+function bgmLooksLikeVideo(project) {
+  const mime = bgmDataMime(project);
+  const name = String(project?.bgm?.fileName || '').toLowerCase();
+  return mime.startsWith('video/') || /\.(mov|mp4|m4v|avi|webm)$/.test(name);
+}
+
 export function validateVideoProject(project) {
   const scenes = Array.isArray(project.scenes) ? project.scenes : [];
   const errors = [];
@@ -37,8 +47,10 @@ export function validateVideoProject(project) {
   if (imageCount < scenes.length) warnings.push(`画像未登録のシーンが${scenes.length - imageCount}件あります。背景色で代用します。`);
   if (getProjectDuration(project) <= 0) errors.push('動画の長さが0秒です。');
   if (project.output?.bgmEnabled && project.bgm?.source !== 'none' && !project.bgm?.audioData) warnings.push('BGM設定はありますが、音源ファイルが登録されていません。');
+  const bgmInvalid = Boolean(project.output?.bgmEnabled && project.bgm?.audioData && bgmLooksLikeVideo(project));
+  if (bgmInvalid) errors.push('現在のBGMはMOV / MP4などの動画ファイルです。BGM・字幕画面でMP3・M4A・AAC・WAVなどの音声ファイルを再登録してください。');
   if (project.output?.subtitles && !scenes.some(scene => scene.subtitleEnabled !== false && String(scene.subtitleText || '').trim())) warnings.push('表示できる字幕がありません。');
-  return { errors, warnings, imageCount, sceneCount: scenes.length, durationSec: getProjectDuration(project) };
+  return { errors, warnings, imageCount, sceneCount: scenes.length, durationSec: getProjectDuration(project), bgmInvalid };
 }
 
 async function loadImageSafely(source, timeoutMs = 12000) {
@@ -77,23 +89,29 @@ export async function prepareVideoProject(project, { onStatus = () => {} } = {})
   }));
 
   let audioArrayBuffer = null;
-  let audioMimeType = '';
+  let audioMimeType = bgmDataMime(project);
   let audioFetchError = '';
+  let audioInvalid = false;
   if (project.output?.bgmEnabled && project.bgm?.audioData) {
     onStatus('BGMファイルを確認しています…');
-    try {
-      const response = await fetch(project.bgm.audioData);
-      if (!response.ok) throw new Error(`BGM取得エラー (${response.status})`);
-      audioArrayBuffer = await response.arrayBuffer();
-      audioMimeType = response.headers.get('content-type') || String(project.bgm.audioData).match(/^data:([^;,]+)/)?.[1] || '';
-    } catch (error) {
-      audioFetchError = error instanceof Error ? error.message : String(error);
-      console.warn('Audio load failed', error);
+    if (bgmLooksLikeVideo(project)) {
+      audioInvalid = true;
+      onStatus('BGMが動画ファイルです。音声ファイルを再登録してください。');
+    } else {
+      try {
+        const response = await fetch(project.bgm.audioData);
+        if (!response.ok) throw new Error(`BGM取得エラー (${response.status})`);
+        audioArrayBuffer = await response.arrayBuffer();
+        audioMimeType = response.headers.get('content-type') || audioMimeType || '';
+      } catch (error) {
+        audioFetchError = error instanceof Error ? error.message : String(error);
+        console.warn('Audio load failed', error);
+      }
     }
   }
   const loadedImageCount = images.filter(Boolean).length;
-  onStatus(`素材準備完了：画像 ${loadedImageCount}/${scenes.length}${audioFetchError ? '／BGM読込失敗' : ''}`);
-  return { images, imageFailures, loadedImageCount, audioArrayBuffer, audioMimeType, audioFetchError };
+  onStatus(`素材準備完了：画像 ${loadedImageCount}/${scenes.length}${audioInvalid ? '／BGM形式エラー' : audioFetchError ? '／BGM読込失敗' : ''}`);
+  return { images, imageFailures, loadedImageCount, audioArrayBuffer, audioMimeType, audioFetchError, audioInvalid };
 }
 
 function clamp(value, min, max) { return Math.min(max, Math.max(min, value)); }
@@ -293,6 +311,9 @@ function bitrateFor(project) {
 }
 
 async function createAudio(project, prepared, providedContext = null) {
+  if (project.output?.bgmEnabled && (prepared.audioInvalid || bgmLooksLikeVideo(project))) {
+    throw new Error('BGMに動画ファイルが登録されています。MP3・M4A・AAC・WAVなどの音声ファイルへ差し替えてください。');
+  }
   if (!project.output?.bgmEnabled || !prepared.audioArrayBuffer) return { audio: null, warning: '' };
   const AudioContextClass = globalThis.AudioContext || globalThis.webkitAudioContext;
   if (!AudioContextClass) return { audio: null, warning: 'この端末ではBGM合成に必要なWeb Audioを利用できません。' };
