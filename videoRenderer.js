@@ -1,15 +1,15 @@
 const MIME_CANDIDATES_AUDIO = [
+  'video/mp4',
   'video/mp4;codecs="avc1.42E01E,mp4a.40.2"',
   'video/mp4;codecs="avc1.4D401E,mp4a.40.2"',
-  'video/mp4',
   'video/webm;codecs=vp9,opus',
   'video/webm;codecs=vp8,opus',
   'video/webm'
 ];
 const MIME_CANDIDATES_VIDEO = [
+  'video/mp4',
   'video/mp4;codecs="avc1.42E01E"',
   'video/mp4;codecs="avc1.4D401E"',
-  'video/mp4',
   'video/webm;codecs=vp9',
   'video/webm;codecs=vp8',
   'video/webm'
@@ -41,43 +41,59 @@ export function validateVideoProject(project) {
   return { errors, warnings, imageCount, sceneCount: scenes.length, durationSec: getProjectDuration(project) };
 }
 
+async function loadImageSafely(source, timeoutMs = 12000) {
+  return await new Promise((resolve, reject) => {
+    const image = new Image();
+    let settled = false;
+    const finish = (value, error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      image.onload = null;
+      image.onerror = null;
+      error ? reject(error) : resolve(value);
+    };
+    const timer = setTimeout(() => finish(null, new Error('画像読み込みがタイムアウトしました。')), timeoutMs);
+    image.onload = () => finish(image);
+    image.onerror = () => finish(null, new Error('画像を読み込めませんでした。JPEGまたはPNGで再登録してください。'));
+    image.src = source;
+    if (image.complete && image.naturalWidth > 0) finish(image);
+  });
+}
+
 export async function prepareVideoProject(project, { onStatus = () => {} } = {}) {
   const scenes = Array.isArray(project.scenes) ? project.scenes : [];
+  const imageFailures = [];
   onStatus('シーン画像を準備しています…');
   const images = await Promise.all(scenes.map(async (scene, index) => {
     if (!scene.imageData) return null;
     try {
-      const image = new Image();
-      image.decoding = 'async';
-      image.src = scene.imageData;
-      if (typeof image.decode === 'function') await image.decode();
-      else await new Promise((resolve, reject) => { image.onload = resolve; image.onerror = reject; });
-      return image;
+      return await loadImageSafely(scene.imageData);
     } catch (error) {
+      imageFailures.push({ index, message: error instanceof Error ? error.message : String(error) });
       console.warn(`Scene ${index + 1} image load failed`, error);
       return null;
     }
   }));
 
-  let audioBuffer = null;
   let audioArrayBuffer = null;
+  let audioMimeType = '';
+  let audioFetchError = '';
   if (project.output?.bgmEnabled && project.bgm?.audioData) {
-    onStatus('BGMを準備しています…');
+    onStatus('BGMファイルを確認しています…');
     try {
       const response = await fetch(project.bgm.audioData);
-      const arrayBuffer = await response.arrayBuffer();
-      audioArrayBuffer = arrayBuffer.slice(0);
-      const OfflineContext = globalThis.OfflineAudioContext || globalThis.webkitOfflineAudioContext;
-      if (OfflineContext) {
-        const offline = new OfflineContext(1, 1, 44100);
-        audioBuffer = await offline.decodeAudioData(arrayBuffer.slice(0));
-      }
+      if (!response.ok) throw new Error(`BGM取得エラー (${response.status})`);
+      audioArrayBuffer = await response.arrayBuffer();
+      audioMimeType = response.headers.get('content-type') || String(project.bgm.audioData).match(/^data:([^;,]+)/)?.[1] || '';
     } catch (error) {
-      console.warn('Audio decode failed', error);
+      audioFetchError = error instanceof Error ? error.message : String(error);
+      console.warn('Audio load failed', error);
     }
   }
-  onStatus('素材の準備ができました。');
-  return { images, audioBuffer, audioArrayBuffer };
+  const loadedImageCount = images.filter(Boolean).length;
+  onStatus(`素材準備完了：画像 ${loadedImageCount}/${scenes.length}${audioFetchError ? '／BGM読込失敗' : ''}`);
+  return { images, imageFailures, loadedImageCount, audioArrayBuffer, audioMimeType, audioFetchError };
 }
 
 function clamp(value, min, max) { return Math.min(max, Math.max(min, value)); }
@@ -277,36 +293,47 @@ function bitrateFor(project) {
 }
 
 async function createAudio(project, prepared, providedContext = null) {
-  if (!project.output?.bgmEnabled || (!prepared.audioBuffer && !prepared.audioArrayBuffer)) return null;
+  if (!project.output?.bgmEnabled || !prepared.audioArrayBuffer) return { audio: null, warning: '' };
   const AudioContextClass = globalThis.AudioContext || globalThis.webkitAudioContext;
-  if (!AudioContextClass) return null;
+  if (!AudioContextClass) return { audio: null, warning: 'この端末ではBGM合成に必要なWeb Audioを利用できません。' };
   const context = providedContext || new AudioContextClass();
-  if (context.state !== 'running') await context.resume();
-  const source = context.createBufferSource();
-  source.buffer = prepared.audioBuffer || await context.decodeAudioData(prepared.audioArrayBuffer.slice(0));
-  source.loop = project.bgm?.loop !== false;
-  const gain = context.createGain();
-  const destination = context.createMediaStreamDestination();
-  source.connect(gain);
-  gain.connect(destination);
-  gain.connect(context.destination);
-  source.start(0);
-  return {
-    context, source, gain, tracks: destination.stream.getAudioTracks(),
-    update(timeSec, totalSec) {
-      const base = clamp(Number(project.bgm?.volume) || 0, 0, 1);
-      const fadeIn = Math.max(0, Number(project.bgm?.fadeInSec) || 0);
-      const fadeOut = Math.max(0, Number(project.bgm?.fadeOutSec) || 0);
-      let factor = 1;
-      if (fadeIn > 0) factor = Math.min(factor, timeSec / fadeIn);
-      if (fadeOut > 0) factor = Math.min(factor, (totalSec - timeSec) / fadeOut);
-      gain.gain.value = base * clamp(factor, 0, 1);
-    },
-    async stop() {
-      try { source.stop(); } catch {}
-      try { await context.close(); } catch {}
-    }
-  };
+  try {
+    if (context.state !== 'running') await context.resume();
+    const buffer = await context.decodeAudioData(prepared.audioArrayBuffer.slice(0));
+    const source = context.createBufferSource();
+    source.buffer = buffer;
+    source.loop = project.bgm?.loop !== false;
+    const gain = context.createGain();
+    const destination = context.createMediaStreamDestination();
+    source.connect(gain);
+    gain.connect(destination);
+    source.start(0);
+    return {
+      audio: {
+        context, source, gain, tracks: destination.stream.getAudioTracks(),
+        update(timeSec, totalSec) {
+          const base = clamp(Number(project.bgm?.volume) || 0, 0, 1);
+          const fadeIn = Math.max(0, Number(project.bgm?.fadeInSec) || 0);
+          const fadeOut = Math.max(0, Number(project.bgm?.fadeOutSec) || 0);
+          let factor = 1;
+          if (fadeIn > 0) factor = Math.min(factor, timeSec / fadeIn);
+          if (fadeOut > 0) factor = Math.min(factor, (totalSec - timeSec) / fadeOut);
+          gain.gain.value = base * clamp(factor, 0, 1);
+        },
+        async stop() {
+          try { source.stop(); } catch {}
+          try { if (context.state !== 'closed') await context.close(); } catch {}
+        }
+      }, warning: ''
+    };
+  } catch (error) {
+    console.warn('BGM decode failed; continue without audio', error, prepared.audioMimeType);
+    try { if (!providedContext && context.state !== 'closed') await context.close(); } catch {}
+    return {
+      audio: null,
+      warning: `BGMをデコードできなかったため、音声なしで生成します${prepared.audioMimeType ? `（${prepared.audioMimeType}）` : ''}。MP3・AAC・M4Aの別ファイルで再登録してください。`
+    };
+  }
 }
 
 export async function exportProjectVideo(project, prepared, canvas, {
@@ -327,7 +354,9 @@ export async function exportProjectVideo(project, prepared, canvas, {
   canvas.height = Number(project.output?.height) || 1280;
   drawProjectFrame(project, prepared, canvas, 0);
   onStatus('音声と録画機能を準備しています…');
-  const audio = await createAudio(project, prepared, audioContext);
+  const audioResult = await createAudio(project, prepared, audioContext);
+  const audio = audioResult.audio;
+  if (audioResult.warning) onStatus(audioResult.warning);
   const canvasStream = canvas.captureStream(fps);
   const stream = new MediaStream([...canvasStream.getVideoTracks(), ...(audio?.tracks || [])]);
   const mimeType = chooseMime(Boolean(audio?.tracks?.length));
