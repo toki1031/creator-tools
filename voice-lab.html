@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#10131c" />
+  <link rel="stylesheet" href="./style.css" />
+  <title>Creator OS Voice Lab</title>
+</head>
+<body>
+  <main class="voice-lab">
+    <a id="backLink" class="button-link" href="./">← Creator OSへ戻る</a>
+    <h1>無料 Voice Lab <small style="font-size:.45em;color:#9ba3b9">実証版</small></h1>
+    <p class="muted">台本からブラウザ内で日本語ナレーションを生成し、そのままプロジェクトへ登録する実験機能です。</p>
+
+    <section class="voice-lab-card">
+      <h2>1. 音声エンジン</h2>
+      <p>Piper Plus 0.6.0（ブラウザ/WASM）を使用します。初回は音声モデルのダウンロードが必要です。モデルは端末にキャッシュされます。</p>
+      <div class="voice-meta">
+        <div><small>エンジン</small><br><b>Piper Plus</b></div>
+        <div><small>実証音声</small><br><b>つくよみちゃん</b></div>
+        <div><small>実行場所</small><br><b>ブラウザ内</b></div>
+        <div><small>API料金</small><br><b>なし</b></div>
+      </div>
+      <p class="muted">※この版は技術実証用です。各音声モデルの利用条件はVoice Library正式版で個別管理します。</p>
+      <button id="prepare" class="primary">音声エンジンを準備</button>
+      <progress id="progress" class="voice-progress" max="100" value="0"></progress>
+      <div id="engineStatus" class="voice-status">未準備</div>
+    </section>
+
+    <section class="voice-lab-card">
+      <h2>2. ナレーション生成</h2>
+      <label>音声用台本<textarea id="text" placeholder="ナレーション文章を入力"></textarea></label>
+      <div class="form-grid">
+        <label>話す速さ<select id="speed"><option value="1.25">少し速め</option><option value="1.5" selected>標準</option><option value="1.75">ゆっくり</option></select></label>
+        <label>言語<select id="language"><option value="ja" selected>日本語</option></select></label>
+      </div>
+      <div class="voice-actions"><button id="generate" class="primary" disabled>音声を生成</button></div>
+      <div id="generateStatus" class="voice-status">エンジン準備後に生成できます。</div>
+      <audio id="preview" controls></audio>
+      <div class="voice-actions">
+        <button id="register" class="primary" disabled>この音声を動画用ナレーションに登録</button>
+        <button id="download" disabled>WAVを保存</button>
+      </div>
+    </section>
+
+    <section class="voice-lab-card">
+      <h2>今回確認すること</h2>
+      <p>① iPhone SafariでPiper Plusが初期化できるか → ② 日本語音声をWAVとして生成できるか → ③ Creator OSのナレーション欄へ自動登録できるか、の3点だけを確認します。</p>
+      <div id="diagnostics" class="voice-status">WebAssembly: 確認中…</div>
+    </section>
+  </main>
+  <script type="module" src="./voice-lab.js"></script>
+</body>
+</html>
