@@ -12,7 +12,7 @@ export function createProject(title, genre, platform) {
     displayScript: "",
     speechScript: "",
     scenes: [],
-    narration: { voiceURI: "", rate: 0.92, pitch: 0.94, volume: 1 },
+    narration: { voiceURI: "", rate: 0.92, pitch: 0.94, volume: 1, source:"browser", audioData:"", fileName:"", mimeType:"" },
     subtitleStyle: { enabled:true, preset:"standard", fontSize:54, position:"bottom", maxCharsPerLine:16, maxLines:2, textColor:"#ffffff", outlineColor:"#000000", outlineWidth:4, backgroundEnabled:false, backgroundColor:"#000000", backgroundOpacity:0.45, align:"center" },
     createdAt: now,
     updatedAt: now,
