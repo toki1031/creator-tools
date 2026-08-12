@@ -1,20 +1,19 @@
-# Creator OS Sprint 3.1.5 — 無料 Voice Lab 実証版
+Creator OS Sprint 3.1.6 - Voice Lab Import Map修正版
 
-## 目的
-既存の動画生成・BGM・ナレーション音声ファイル合成を壊さず、無料のブラウザ内TTSを独立検証する。
+目的:
+- Sprint 3.1.5でiPhone Safariに出た「Importing a module script failed.」を切り分ける。
+- Piper Plus公式ドキュメントの No Bundler / importmap 方式へ変更。
+- jsDelivr +esm 変換URLは使用しない。
+- Piper Plus 0.7.0 と onnxruntime-web 1.24.0 を固定。
+- 既存の動画生成/BGM/ナレーション音声ファイル合成機能は変更しない。
 
-## 追加
-- 台本・音声画面 → 「無料Voice Labを開く」
-- Piper Plus 0.6.0（WASM）実証
-- 日本語モデル：つくよみちゃん（技術実証用）
-- 初回モデル取得進捗
-- 日本語台本 → WAV生成・試聴
-- WAV保存
-- 生成WAVを現在プロジェクトの `narration.audioData` へ直接登録
-- iPhone Safari診断表示
+テスト:
+1. GitHub creator-toolsへ全ファイルを上書き。
+2. Creator OS > 台本・音声 > 無料Voice Labを開く。
+3. 「音声エンジンを準備」を押す。
+4. 成功した場合はモデル取得の進捗が表示される。
+5. 失敗した場合は、画面のエラー文と「今回確認すること」欄をスクリーンショットで共有する。
 
-## 注意
-- 初回はモデル（約40MB）等のネットワーク取得が発生する。
-- 技術実証段階ではCDNからライブラリを読み込む。正式版では依存ファイル固定・キャッシュ戦略を検討する。
-- 音声モデルの利用条件はエンジン本体のMITライセンスとは別。Voice Library正式版ではモデルごとに商用利用・クレジット・再配布可否を管理する。
-- 既存の手動MP3/M4A/WAV登録経路は残している。
+重要:
+- 初回はPiperの日本語WASM辞書・音声モデルをネットから取得するため時間と通信量がかかる。
+- これは技術実証版。Voice Library正式版では音声モデルごとの利用条件を管理する。

@@ -38,17 +38,19 @@ $('#prepare').onclick = async () => {
   const btn=$('#prepare'), prog=$('#progress'), out=$('#engineStatus');
   btn.disabled=true; prog.value=1; status(out,'ライブラリを読み込んでいます…','warn');
   try{
+    // Piper Plus公式の「importmap / No Bundler」方式で読み込む。
+    // +esm変換CDNはWASM/依存モジュールの解決でSafariが失敗することがあるため使用しない。
     const [piperModule, ortModule] = await Promise.all([
-      import('https://cdn.jsdelivr.net/npm/piper-plus@0.6.0/+esm'),
-      import('https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.0/+esm')
+      import('piper-plus'),
+      import('onnxruntime-web')
     ]);
     const PiperPlus = piperModule.PiperPlus;
     if(!PiperPlus) throw new Error(`PiperPlus exportが見つかりません。exports=${Object.keys(piperModule).join(', ')}`);
-    const ort = ortModule.default || ortModule;
+    const ort = ortModule;
     globalThis.ort = ort;
     status(out,'音声モデルを準備しています。初回は約40MBの取得に時間がかかります…','warn');
     piper = await PiperPlus.initialize({
-      model:'ayousanz/piper-plus-tsukuyomi-chan',
+      model:'tsukuyomi',
       ort,
       onProgress: info => {
         const raw=Number(info?.progress ?? 0); const pct=raw<=1?raw*100:raw;
@@ -58,10 +60,10 @@ $('#prepare').onclick = async () => {
     });
     prog.value=100; status(out,'準備完了。日本語ナレーションを生成できます。','ok');
     $('#generate').disabled=false; btn.textContent='準備済み';
-    showDiagnostics(`Piper Plus: 初期化成功 / config sampleRate=${piper.config?.audio?.sample_rate ?? '不明'}`);
+    showDiagnostics(`Piper Plus 0.7.0: 公式Import Map読込・初期化成功 / config sampleRate=${piper.config?.audio?.sample_rate ?? '不明'}`);
   }catch(err){
     console.error(err); status(out,`準備に失敗しました。\n${err?.message || err}`,'warn'); btn.disabled=false;
-    showDiagnostics(`Piper Plus: 初期化失敗 / ${err?.message || err}`);
+    showDiagnostics(`Piper Plus 0.7.0: 初期化失敗 / ${err?.message || err}`);
   }
 };
 
