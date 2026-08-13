@@ -59,17 +59,32 @@ $('#prepare').onclick = async () => {
       throw new Error(`STEP 1 @piper-plus/g2p 読込失敗: ${e?.message || e}`);
     }
 
-    status(out,'[2/3] ONNX Runtimeを読み込んでいます…','warn');
-    prog.value=16;
+    status(out,'[2/4] ONNX Runtime（通常script）を確認しています…','warn');
+    prog.value=14;
+    if (!globalThis.ort) {
+      throw new Error('STEP 2A ONNX Runtime通常script 読込失敗: window.ort がありません');
+    }
+    // iOS SafariではWebGPUではなくWASMを使う。WASM補助ファイルの取得先も
+    // ONNX Runtimeと同じ公式npm配布ディレクトリへ固定する。
+    try {
+      globalThis.ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.0/dist/';
+      globalThis.ort.env.wasm.numThreads = 1;
+    } catch (_) {}
+
+    status(out,'[3/4] ONNX Runtime ES Moduleブリッジを確認しています…','warn');
+    prog.value=20;
     let ortModule;
     try {
       ortModule = await import('onnxruntime-web');
+      if (!ortModule?.InferenceSession || !ortModule?.Tensor) {
+        throw new Error(`必要export不足: ${Object.keys(ortModule || {}).join(', ')}`);
+      }
     } catch (e) {
-      throw new Error(`STEP 2 onnxruntime-web 読込失敗: ${e?.message || e}`);
+      throw new Error(`STEP 2B ONNX Runtimeブリッジ読込失敗: ${e?.message || e}`);
     }
 
-    status(out,'[3/3] Piper Plus本体を読み込んでいます…','warn');
-    prog.value=24;
+    status(out,'[4/4] Piper Plus本体を読み込んでいます…','warn');
+    prog.value=28;
     let piperModule;
     try {
       piperModule = await import('piper-plus');
@@ -93,7 +108,7 @@ $('#prepare').onclick = async () => {
     });
     prog.value=100; status(out,'準備完了。日本語ナレーションを生成できます。','ok');
     $('#generate').disabled=false; btn.textContent='準備済み';
-    showDiagnostics(`Piper Plus 0.7.0: 3依存Import Map読込・初期化成功 / G2P exports=${Object.keys(g2pModule).slice(0,8).join(', ')} / config sampleRate=${piper.config?.audio?.sample_rate ?? '不明'}`);
+    showDiagnostics(`Piper Plus 0.7.0: G2P + ONNX classic-script bridge + Piper読込・初期化成功 / G2P exports=${Object.keys(g2pModule).slice(0,8).join(', ')} / config sampleRate=${piper.config?.audio?.sample_rate ?? '不明'}`);
   }catch(err){
     console.error(err); status(out,`準備に失敗しました。\n${err?.message || err}`,'warn'); btn.disabled=false;
     showDiagnostics(`Piper Plus 0.7.0: 初期化失敗 / ${err?.message || err}`);
