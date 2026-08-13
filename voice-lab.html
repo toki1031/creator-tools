@@ -15,7 +15,7 @@
 
     <section class="voice-lab-card">
       <h2>1. 音声エンジン</h2>
-      <p>Piper Plus 0.7.0（ブラウザ/WASM）を使用します。ONNX RuntimeはSafari対策として同一オリジンのローカルキャッシュ経由で読み込みます。初回は音声モデルのダウンロードが必要です。モデルは端末にキャッシュされます。</p>
+      <p>Piper Plus 0.7.0（ブラウザ/WASM）を使用します。ONNX RuntimeはSafari対策としてcdnjsから初回取得し、端末キャッシュへ固定した同一オリジンURLとして読み込みます。初回は音声モデルのダウンロードが必要です。モデルは端末にキャッシュされます。</p>
       <div class="voice-meta">
         <div><small>エンジン</small><br><b>Piper Plus</b></div>
         <div><small>実証音声</small><br><b>つくよみちゃん</b></div>
@@ -54,7 +54,7 @@
   {
     "imports": {
       "piper-plus": "https://cdn.jsdelivr.net/npm/piper-plus@0.7.0/src/index.js",
-      "onnxruntime-web": "./vendor/onnxruntime/ort.wasm.min.mjs",
+      "onnxruntime-web": "./vendor/onnxruntime/ort.wasm.bundle.min.mjs",
       "@piper-plus/g2p": "https://cdn.jsdelivr.net/npm/@piper-plus/g2p@0.4.1/src/index.js"
     }
   }

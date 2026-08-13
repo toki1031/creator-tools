@@ -79,19 +79,15 @@ $('#prepare').onclick = async () => {
     try { g2pModule = await import('@piper-plus/g2p'); }
     catch(e){ throw new Error(`STEP 1 @piper-plus/g2p 読込失敗: ${e?.message || e}`); }
 
-    status(out,'[2/6] ONNX Runtime JSを同一オリジン経由で確認しています…','warn');
+    status(out,'[2/6] ONNX Runtime WASM専用bundleを同一オリジン化しています…','warn');
     prog.value=18;
-    const jsAsset = await checkVirtualAsset('./vendor/onnxruntime/ort.wasm.min.mjs', 'STEP 2A ONNX JS');
+    const jsAsset = await checkVirtualAsset('./vendor/onnxruntime/ort.wasm.bundle.min.mjs', 'STEP 2A ONNX WASM bundle');
 
-    status(out,'[3/6] ONNX Runtime WASM補助MJSを確認しています…','warn');
-    prog.value=24;
-    const wasmMjs = await checkVirtualAsset('./vendor/onnxruntime/ort-wasm-simd-threaded.mjs', 'STEP 2B ONNX WASM補助MJS');
+    status(out,'[3/6] ONNX Runtime WASM本体を同一オリジン化しています…','warn');
+    prog.value=28;
+    const wasmBin = await checkVirtualAsset('./vendor/onnxruntime/ort-wasm-simd-threaded.wasm', 'STEP 2B ONNX WASM本体');
 
-    status(out,'[4/6] ONNX Runtime WASM本体を確認しています…','warn');
-    prog.value=30;
-    const wasmBin = await checkVirtualAsset('./vendor/onnxruntime/ort-wasm-simd-threaded.wasm', 'STEP 2C ONNX WASM本体');
-
-    status(out,'[5/6] ONNX Runtime ES Moduleを読み込んでいます…','warn');
+    status(out,'[4/6] ONNX Runtime ES Moduleを初期化しています…','warn');
     prog.value=38;
     let ort;
     try {
@@ -103,21 +99,23 @@ $('#prepare').onclick = async () => {
       ort.env.wasm.proxy = false;
     } catch(e){ throw new Error(`STEP 3 ONNX Runtime ES Module初期化失敗: ${e?.message || e}`); }
 
-    status(out,'[6/6] Piper Plus本体と日本語モデルを準備しています…','warn');
-    prog.value=46;
+    status(out,'[5/6] Piper Plus本体を読み込んでいます…','warn');
+    prog.value=50;
     let piperModule;
     try { piperModule = await import('piper-plus'); }
     catch(e){ throw new Error(`STEP 4 piper-plus 読込失敗: ${e?.message || e}`); }
     const PiperPlus = piperModule.PiperPlus;
     if(!PiperPlus) throw new Error(`STEP 4 PiperPlus exportなし: ${Object.keys(piperModule).join(', ')}`);
 
+    status(out,'[6/6] 日本語音声モデルを準備しています…','warn');
+    prog.value=58;
     try {
       piper = await PiperPlus.initialize({
         model:'tsukuyomi',
         ort,
         onProgress: info => {
           const raw=Number(info?.progress ?? 0), pct=raw<=1?raw*100:raw;
-          prog.value=Math.max(46,Math.min(100,pct||46));
+          prog.value=Math.max(58,Math.min(100,pct||58));
           status(out,`${info?.message || info?.stage || 'モデル準備中'}\n${Math.round(prog.value)}%`,'warn');
         }
       });
@@ -126,10 +124,10 @@ $('#prepare').onclick = async () => {
     prog.value=100;
     status(out,'準備完了。日本語ナレーションを生成できます。','ok');
     $('#generate').disabled=false; btn.textContent='準備済み';
-    showDiagnostics(`成功: ORT same-origin cache bridge / JS=${jsAsset.type} / helper=${wasmMjs.type} / WASM=${wasmBin.type} / G2P exports=${Object.keys(g2pModule).slice(0,6).join(', ')}`);
+    showDiagnostics(`成功: ORT cdnjs→same-origin cache / bundle=${jsAsset.type} / WASM=${wasmBin.type} / G2P exports=${Object.keys(g2pModule).slice(0,6).join(', ')}`);
   }catch(err){
     console.error(err); status(out,`準備に失敗しました。\n${err?.message || err}`,'warn'); btn.disabled=false;
-    showDiagnostics(`Voice Lab 3.1.9 初期化失敗 / ${err?.message || err}`);
+    showDiagnostics(`Voice Lab 3.2.0 初期化失敗 / ${err?.message || err}`);
   }
 };
 
