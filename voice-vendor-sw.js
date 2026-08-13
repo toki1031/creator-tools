@@ -2,7 +2,7 @@
  * Safari対策: ONNX Runtime / Piper Plus / G2P を同一オリジン仮想URLとして配信。
  * 外部CDNはService Workerだけが取得し、ブラウザのES Moduleローダーには同一オリジンとして見せる。
  */
-const CACHE = 'creator-os-voice-vendor-v3-piper-0.7.0-ort-1.23.2-g2p-0.4.1';
+const CACHE = 'creator-os-voice-vendor-v4-piper-0.7.0-ort-1.23.2';
 const SOURCES = [
   {
     prefix: '/vendor/onnxruntime/',
@@ -13,13 +13,7 @@ const SOURCES = [
     prefix: '/vendor/piper-plus/',
     base: 'https://cdn.jsdelivr.net/npm/piper-plus@0.7.0/src/',
     label: 'piper-plus@0.7.0'
-  },
-  {
-    prefix: '/vendor/piper-g2p/',
-    base: 'https://cdn.jsdelivr.net/npm/@piper-plus/g2p@0.4.1/src/',
-    label: '@piper-plus/g2p@0.4.1'
-  }
-];
+  }];
 
 self.addEventListener('install', event => self.skipWaiting());
 self.addEventListener('activate', event => event.waitUntil(self.clients.claim()));

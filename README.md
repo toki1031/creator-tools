@@ -1,21 +1,12 @@
-Creator OS Sprint 3.2.1 VoiceLab Piper同一オリジン診断版
+# Creator OS Sprint 3.2.2 VoiceLab G2P経路固定診断版
 
-目的:
-- Sprint 3.2.0でONNX Runtime初期化まで到達し、STEP 4 piper-plus のES Module読込で停止した問題を切り分ける。
-- Piper Plus 0.7.0本体と @piper-plus/g2p 0.4.1 を、SafariのES ModuleローダーへCDN直URLで渡さず、Service Worker経由の同一オリジン仮想URLとして配信する。
+目的: Sprint 3.2.1で発生した `text/html is not a valid JavaScript MIME type` を切り分ける。
 
-診断:
-STEP 1A G2P取得
-STEP 1B G2P import
-STEP 2A ONNX JS
-STEP 2B ONNX WASM
-STEP 3 ONNX初期化
-STEP 4A Piper本体取得
-STEP 4B Piper module import
-STEP 4C PiperPlus export
-STEP 4D 主要依存接続
-STEP 5 日本語モデル初期化
+変更点:
+- G2Pの仮想vendor URLを廃止。
+- Sprint 3.1.7でiPhone Safari実機上の読み込み成功を確認した `@piper-plus/g2p@0.4.1/src/index.js` の直接ES Module経路へ固定。
+- import前にHTTP status / Content-Typeを検証し、HTML応答ならimport前に停止。
+- ONNX Runtimeの成功経路は維持。
+- Piper Plus本体の同一オリジン診断は継続。
 
-注意:
-- 初回は外部vendorファイル取得が必要。以後Cache Storageを優先。
-- 既存の動画生成/BGM/ナレーション合成コードは変更していない。
+テスト: GitHubへ全ファイルを上書きし、Voice Lab → 音声エンジンを準備。

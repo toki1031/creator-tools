@@ -75,7 +75,13 @@ $('#prepare').onclick = async () => {
 
     status(out,'[1/9] G2P本体を同一オリジン経由で取得しています…','warn');
     prog.value=10;
-    const g2pAsset = await checkVirtualAsset('./vendor/piper-g2p/index.js', 'STEP 1A G2P本体');
+    const g2pUrl = 'https://cdn.jsdelivr.net/npm/@piper-plus/g2p@0.4.1/src/index.js';
+    const g2pResp = await fetch(g2pUrl, {cache:'no-store', mode:'cors'});
+    if(!g2pResp.ok) throw new Error(`STEP 1A G2P取得失敗 HTTP ${g2pResp.status}`);
+    const g2pType = g2pResp.headers.get('content-type') || '不明';
+    if(!/javascript|ecmascript|text\/plain/i.test(g2pType)) throw new Error(`STEP 1A G2P MIME異常: ${g2pType}`);
+    const g2pSize = Number(g2pResp.headers.get('content-length') || 0);
+    const g2pAsset = {url:g2pUrl, type:g2pType, size:g2pSize};
 
     status(out,'[2/9] G2Pモジュールを読み込んでいます…','warn');
     prog.value=16;
@@ -136,10 +142,10 @@ $('#prepare').onclick = async () => {
     prog.value=100;
     status(out,'準備完了。日本語ナレーションを生成できます。','ok');
     $('#generate').disabled=false; btn.textContent='準備済み';
-    showDiagnostics(`成功: Piper same-origin / Piper=${piperAsset.type} / G2P=${g2pAsset.type} / ORT=${jsAsset.type} / WASM=${wasmBin.type}`);
+    showDiagnostics(`成功: Piper same-origin / G2P known-good direct / Piper=${piperAsset.type} / G2P=${g2pAsset.type} / ORT=${jsAsset.type} / WASM=${wasmBin.type}`);
   }catch(err){
     console.error(err); status(out,`準備に失敗しました。\n${err?.message || err}`,'warn'); btn.disabled=false;
-    showDiagnostics(`Voice Lab 3.2.1 初期化失敗 / ${err?.message || err}`);
+    showDiagnostics(`Voice Lab 3.2.2 初期化失敗 / ${err?.message || err}`);
   }
 };
 
