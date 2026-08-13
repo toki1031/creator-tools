@@ -15,15 +15,15 @@ async function initProject(){
   if(projectId){
     project = await getProject(projectId);
     $('#backLink').href = `./#/project/${encodeURIComponent(projectId)}`;
-    if(project){
-      $('#text').value = project.speechScript || project.displayScript || '';
-    }
+    if(project){ $('#text').value = project.speechScript || project.displayScript || ''; }
   }
 }
 
 function showDiagnostics(extra=''){
   const lines = [
     `WebAssembly: ${typeof WebAssembly !== 'undefined' ? 'OK' : 'NG'}`,
+    `Service Worker: ${'serviceWorker' in navigator ? 'OK' : 'NG'}`,
+    `SW controller: ${navigator.serviceWorker?.controller ? 'あり' : 'なし'}`,
     `Web Audio: ${('AudioContext' in window || 'webkitAudioContext' in window) ? 'OK' : 'NG'}`,
     `IndexedDB: ${'indexedDB' in window ? 'OK' : 'NG'}`,
     `端末: ${navigator.userAgent}`,
@@ -31,87 +31,105 @@ function showDiagnostics(extra=''){
   ].filter(Boolean);
   $('#diagnostics').textContent = lines.join('\n');
 }
-window.addEventListener('error', (ev) => {
-  const msg = ev?.error?.message || ev?.message || '不明なwindow error';
-  showDiagnostics(`window error: ${msg}`);
-});
-window.addEventListener('unhandledrejection', (ev) => {
-  const reason = ev?.reason?.message || String(ev?.reason || '不明なPromise rejection');
-  showDiagnostics(`unhandledrejection: ${reason}`);
-});
+window.addEventListener('error', ev => showDiagnostics(`window error: ${ev?.error?.message || ev?.message || '不明'}`));
+window.addEventListener('unhandledrejection', ev => showDiagnostics(`unhandledrejection: ${ev?.reason?.message || String(ev?.reason || '不明')}`));
 
 showDiagnostics();
 await initProject();
 
+async function ensureVendorServiceWorker(){
+  if (!('serviceWorker' in navigator)) throw new Error('STEP 0 Service Worker非対応');
+  const registration = await navigator.serviceWorker.register('./voice-vendor-sw.js', {scope:'./'});
+  await navigator.serviceWorker.ready;
+  if (navigator.serviceWorker.controller) return registration;
+
+  // clients.claim() normally takes control without reload. Give Safari a moment.
+  await new Promise(resolve => {
+    let done = false;
+    const finish = () => { if(!done){ done=true; resolve(); } };
+    navigator.serviceWorker.addEventListener('controllerchange', finish, {once:true});
+    setTimeout(finish, 1500);
+  });
+  if (!navigator.serviceWorker.controller) {
+    throw new Error('STEP 0 Service Worker登録済みですが、このページをまだ制御できていません。Safariでページを1回再読み込みしてから再度「準備」を押してください。');
+  }
+  return registration;
+}
+
+async function checkVirtualAsset(path, label){
+  const url = new URL(path, location.href);
+  const response = await fetch(url, {cache:'no-store'});
+  if(!response.ok) throw new Error(`${label} 取得失敗 HTTP ${response.status}`);
+  const type = response.headers.get('content-type') || '不明';
+  const size = Number(response.headers.get('content-length') || 0);
+  return {url:url.href, type, size};
+}
+
 $('#prepare').onclick = async () => {
   const btn=$('#prepare'), prog=$('#progress'), out=$('#engineStatus');
-  btn.disabled=true; prog.value=1; status(out,'ライブラリを読み込んでいます…','warn');
+  btn.disabled=true; prog.value=1; status(out,'同一オリジン音声エンジンを準備しています…','warn');
   try{
-    // Piper Plus公式の「importmap / No Bundler」方式で読み込む。
-    // +esm変換CDNはWASM/依存モジュールの解決でSafariが失敗することがあるため使用しない。
-    // Safariではimport失敗が汎用エラーになりやすいため、依存を1つずつ確認する。
-    status(out,'[1/3] G2Pモジュールを読み込んでいます…','warn');
-    prog.value=8;
+    status(out,'[0/6] Safari用ローカルキャッシュブリッジを準備しています…','warn');
+    prog.value=4;
+    await ensureVendorServiceWorker();
+
+    status(out,'[1/6] G2Pモジュールを読み込んでいます…','warn');
+    prog.value=10;
     let g2pModule;
-    try {
-      g2pModule = await import('@piper-plus/g2p');
-    } catch (e) {
-      throw new Error(`STEP 1 @piper-plus/g2p 読込失敗: ${e?.message || e}`);
-    }
+    try { g2pModule = await import('@piper-plus/g2p'); }
+    catch(e){ throw new Error(`STEP 1 @piper-plus/g2p 読込失敗: ${e?.message || e}`); }
 
-    status(out,'[2/4] ONNX Runtime（通常script）を確認しています…','warn');
-    prog.value=14;
-    if (!globalThis.ort) {
-      throw new Error('STEP 2A ONNX Runtime通常script 読込失敗: window.ort がありません');
-    }
-    // iOS SafariではWebGPUではなくWASMを使う。WASM補助ファイルの取得先も
-    // ONNX Runtimeと同じ公式npm配布ディレクトリへ固定する。
-    try {
-      globalThis.ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.0/dist/';
-      globalThis.ort.env.wasm.numThreads = 1;
-    } catch (_) {}
+    status(out,'[2/6] ONNX Runtime JSを同一オリジン経由で確認しています…','warn');
+    prog.value=18;
+    const jsAsset = await checkVirtualAsset('./vendor/onnxruntime/ort.wasm.min.mjs', 'STEP 2A ONNX JS');
 
-    status(out,'[3/4] ONNX Runtime ES Moduleブリッジを確認しています…','warn');
-    prog.value=20;
-    let ortModule;
-    try {
-      ortModule = await import('onnxruntime-web');
-      if (!ortModule?.InferenceSession || !ortModule?.Tensor) {
-        throw new Error(`必要export不足: ${Object.keys(ortModule || {}).join(', ')}`);
-      }
-    } catch (e) {
-      throw new Error(`STEP 2B ONNX Runtimeブリッジ読込失敗: ${e?.message || e}`);
-    }
+    status(out,'[3/6] ONNX Runtime WASM補助MJSを確認しています…','warn');
+    prog.value=24;
+    const wasmMjs = await checkVirtualAsset('./vendor/onnxruntime/ort-wasm-simd-threaded.mjs', 'STEP 2B ONNX WASM補助MJS');
 
-    status(out,'[4/4] Piper Plus本体を読み込んでいます…','warn');
-    prog.value=28;
+    status(out,'[4/6] ONNX Runtime WASM本体を確認しています…','warn');
+    prog.value=30;
+    const wasmBin = await checkVirtualAsset('./vendor/onnxruntime/ort-wasm-simd-threaded.wasm', 'STEP 2C ONNX WASM本体');
+
+    status(out,'[5/6] ONNX Runtime ES Moduleを読み込んでいます…','warn');
+    prog.value=38;
+    let ort;
+    try {
+      ort = await import('onnxruntime-web');
+      if(!ort?.InferenceSession || !ort?.Tensor) throw new Error(`必要export不足: ${Object.keys(ort||{}).join(', ')}`);
+      // All ORT helper assets are exposed as virtual same-origin URLs via SW.
+      ort.env.wasm.wasmPaths = new URL('./vendor/onnxruntime/', location.href).href;
+      ort.env.wasm.numThreads = 1;
+      ort.env.wasm.proxy = false;
+    } catch(e){ throw new Error(`STEP 3 ONNX Runtime ES Module初期化失敗: ${e?.message || e}`); }
+
+    status(out,'[6/6] Piper Plus本体と日本語モデルを準備しています…','warn');
+    prog.value=46;
     let piperModule;
-    try {
-      piperModule = await import('piper-plus');
-    } catch (e) {
-      throw new Error(`STEP 3 piper-plus 読込失敗: ${e?.message || e}`);
-    }
-
+    try { piperModule = await import('piper-plus'); }
+    catch(e){ throw new Error(`STEP 4 piper-plus 読込失敗: ${e?.message || e}`); }
     const PiperPlus = piperModule.PiperPlus;
-    if(!PiperPlus) throw new Error(`PiperPlus exportが見つかりません。exports=${Object.keys(piperModule).join(', ')}`);
-    const ort = ortModule;
-    globalThis.ort = ort;
-    status(out,'音声モデルを準備しています。初回は約40MBの取得に時間がかかります…','warn');
-    piper = await PiperPlus.initialize({
-      model:'tsukuyomi',
-      ort,
-      onProgress: info => {
-        const raw=Number(info?.progress ?? 0); const pct=raw<=1?raw*100:raw;
-        prog.value=Math.max(1,Math.min(100,pct||1));
-        status(out,`${info?.message || info?.stage || '準備中'}\n${Math.round(prog.value)}%`,'warn');
-      }
-    });
-    prog.value=100; status(out,'準備完了。日本語ナレーションを生成できます。','ok');
+    if(!PiperPlus) throw new Error(`STEP 4 PiperPlus exportなし: ${Object.keys(piperModule).join(', ')}`);
+
+    try {
+      piper = await PiperPlus.initialize({
+        model:'tsukuyomi',
+        ort,
+        onProgress: info => {
+          const raw=Number(info?.progress ?? 0), pct=raw<=1?raw*100:raw;
+          prog.value=Math.max(46,Math.min(100,pct||46));
+          status(out,`${info?.message || info?.stage || 'モデル準備中'}\n${Math.round(prog.value)}%`,'warn');
+        }
+      });
+    } catch(e){ throw new Error(`STEP 5 Piper/音声モデル初期化失敗: ${e?.message || e}`); }
+
+    prog.value=100;
+    status(out,'準備完了。日本語ナレーションを生成できます。','ok');
     $('#generate').disabled=false; btn.textContent='準備済み';
-    showDiagnostics(`Piper Plus 0.7.0: G2P + ONNX classic-script bridge + Piper読込・初期化成功 / G2P exports=${Object.keys(g2pModule).slice(0,8).join(', ')} / config sampleRate=${piper.config?.audio?.sample_rate ?? '不明'}`);
+    showDiagnostics(`成功: ORT same-origin cache bridge / JS=${jsAsset.type} / helper=${wasmMjs.type} / WASM=${wasmBin.type} / G2P exports=${Object.keys(g2pModule).slice(0,6).join(', ')}`);
   }catch(err){
     console.error(err); status(out,`準備に失敗しました。\n${err?.message || err}`,'warn'); btn.disabled=false;
-    showDiagnostics(`Piper Plus 0.7.0: 初期化失敗 / ${err?.message || err}`);
+    showDiagnostics(`Voice Lab 3.1.9 初期化失敗 / ${err?.message || err}`);
   }
 };
 
