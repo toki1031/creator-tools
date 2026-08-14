@@ -1,45 +1,22 @@
-# Creator OS Sprint 3.4.2 — Kokoroナレーション動画接続版
+# Creator OS Sprint 3.4.3 — Voice Lab JavaScript構文修正版
 
-## 実コード確認結果
-現行 `videoRenderer.js` には既に以下が実装済み:
-- `project.narration.audioData` の取得
-- ArrayBuffer化
-- Web Audio `decodeAudioData`
-- ナレーションGain
-- BGMとのミックス
-- ナレーション中のBGMダッキング
-- MediaRecorder音声トラックへの追加
-- MP4生成
+## 原因
+Sprint 3.4.2 の voice-lab.html 内で、登録失敗時の表示文字列が
+シングルクォート文字列の途中で実改行されていた。
 
-したがって動画レンダラーの大改造は不要。
+結果:
+- ES Module全体がSyntaxErrorで停止
+- `#prepare.onclick` が登録されない
+- ボタンは表示されるが押しても反応しない
 
-## Sprint 3.4.2の修正
-Voice Labの「この音声を動画用ナレーションに登録」で、
-Kokoro生成WAVを以下へ正式保存する。
+## 修正
+`登録失敗:\n` とエスケープした文字列へ修正。
 
-`creator-os` IndexedDB
-→ projects
-→ 対象project
-→ `project.narration.audioData`
+## 検証
+- voice-lab.html 内module scriptを `node --check` で構文検証
+- main.js
+- videoRenderer.js
+- db.js
+も構文検証
 
-同時に:
-- fileName: `Kokoro_<voice>.wav`
-- mimeType: `audio/wav`
-- source: `kokoro-js-jp`
-- voiceId
-- speechScript
-
-も保存。
-
-従来の `creator-os-audio / narrations` へのBlob保存も再利用・診断用として維持。
-
-## 実機テスト
-1. Voice LabでKokoro音声を生成
-2. 「この音声を動画用ナレーションに登録」
-3. 「project.narration.audioData 保存済み」を確認
-4. Creator OSへ戻る
-5. 出力画面の素材チェックで `✓ ナレーション：Kokoro_...wav`
-6. BGM ONのまま10秒動画を生成
-7. 動画でナレーションとBGM両方が聞こえるか確認
-
-成功したら、ナレーション生成→登録→動画合成の基本経路は完成。
+Sprint 3.4.2のKokoro→project.narration.audioData接続ロジック自体は維持。

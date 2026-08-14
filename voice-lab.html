@@ -19,7 +19,7 @@ audio,progress{width:100%;margin-top:12px}
 </head>
 <body><div class="wrap">
 <a class="btn secondary" href="./index.html">← Creator OSへ戻る</a>
-<h1>無料 Voice Lab <small>Sprint 3.4.2</small></h1>
+<h1>無料 Voice Lab <small>Sprint 3.4.3</small></h1>
 <p class="muted">実機合格したKokoro日本語TTSをCreator OS本体へ接続しました。生成WAVは対象プロジェクトのナレーションとして直接保存され、動画レンダラーがそのまま読み込みます。</p>
 
 <div class="card">
@@ -59,6 +59,7 @@ audio,progress{width:100%;margin-top:12px}
 <script type="module">
 import { getProject, saveProject } from "./db.js";
 const $=s=>document.querySelector(s);
+document.documentElement.dataset.voiceLabBoot = 'js-started';
 let tts=null, wavBlob=null, wavUrl=null;
 const params=new URLSearchParams(location.search);
 const projectId=params.get('project') || 'default';
@@ -189,8 +190,7 @@ project.narration.audioData 保存済み
     'ok'
   );
  }catch(e){
-  setLog('#registered','登録失敗:
-'+(e?.stack||e),'bad');
+  setLog('#registered','登録失敗:\n'+(e?.stack||e),'bad');
  }
 };
 $('#download').onclick=()=>{if(!wavUrl)return;const a=document.createElement('a');a.href=wavUrl;a.download='creator-os-narration.wav';a.click()};

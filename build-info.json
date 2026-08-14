@@ -1,6 +1,6 @@
 {
-  "build": "Creator OS Sprint 3.4.2",
-  "buildId": "s342-kokoro-video-connect",
+  "build": "Creator OS Sprint 3.4.3",
+  "buildId": "s343-voice-lab-syntax-fix",
   "created": "2026-08-14",
   "files": [
     {
@@ -10,8 +10,8 @@
     },
     {
       "file": "voice-lab.html",
-      "sha256": "b0575793e6b517de",
-      "bytes": 8815
+      "sha256": "88cdd54c1bcdeb22",
+      "bytes": 8878
     },
     {
       "file": "main.js",
