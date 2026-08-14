@@ -10,12 +10,12 @@
 <body>
   <main class="voice-lab">
     <a id="backLink" class="button-link" href="./">← Creator OSへ戻る</a>
-    <h1>無料 Voice Lab <small style="font-size:.45em;color:#9ba3b9">Sprint 3.3.0</small></h1>
+    <h1>無料 Voice Lab <small style="font-size:.45em;color:#9ba3b9">Sprint 3.3.1</small></h1>
     <p class="muted">台本からブラウザ内で日本語ナレーションを生成し、そのままプロジェクトへ登録する実験機能です。</p>
 
     <section class="voice-lab-card">
       <h2>1. 音声エンジン</h2>
-      <p>Piper Plus 現行ブラウザWASM系 0.7.x を使用します。公式の現行構成に合わせ、Piper側の日本語/OpenJTalk統合をそのまま利用します。G2Pは0.4.1系、ONNX Runtimeは実機成功済みのSafari対策経路を維持します。</p>
+      <p>公式WebAssemblyデモの実働経路を基準に再構築します。現行公式デモの日本語前処理はRust WASMのjpreprocess＋内蔵辞書です。まず同じiPhone Safariで公式デモが正常動作するかを確認し、Creator OSとの差分を切り分けます。</p>
       <div class="voice-meta">
         <div><small>エンジン</small><br><b>Piper Plus</b></div>
         <div><small>実証音声</small><br><b>つくよみちゃん</b></div>
@@ -23,7 +23,18 @@
         <div><small>API料金</small><br><b>なし</b></div>
       </div>
       <p class="muted">※この版は技術実証用です。各音声モデルの利用条件はVoice Library正式版で個別管理します。</p>
-      <button id="prepare" class="primary">音声エンジンを準備</button>
+      <div style="margin:18px 0;padding:16px;border:1px solid #343b50;border-radius:14px;background:#101521">
+  <b>公式WebAssemblyデモ確認</b>
+  <p class="muted" style="margin:.6em 0">Creator OSと同じiPhone Safariで、公式のブラウザ内日本語TTSが動くか確認します。公式デモはRust WASM jpreprocess＋内蔵辞書を使用しています。</p>
+  <a href="https://ayutaz.github.io/piper-plus/" target="_blank" rel="noopener" style="display:inline-block;padding:12px 16px;border-radius:12px;background:#293147;color:#fff;text-decoration:none;font-weight:700">公式WebAssemblyデモを開く</a>
+  <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
+    <button id="officialDemoOk" type="button">公式デモで音声が出た</button>
+    <button id="officialDemoNg" type="button">公式デモでも失敗した</button>
+  </div>
+  <div id="officialDemoStatus" class="voice-status" style="margin-top:10px">未確認</div>
+</div>
+
+<button id="prepare" class="primary">Creator OS側の旧経路を診断</button>
       <progress id="progress" class="voice-progress" max="100" value="0"></progress>
       <div id="engineStatus" class="voice-status">未準備</div>
     </section>

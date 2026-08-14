@@ -37,6 +37,20 @@ window.addEventListener('unhandledrejection', ev => showDiagnostics(`unhandledre
 showDiagnostics();
 await initProject();
 
+const demoStatusKey = 'creator-os-piper-official-demo-status';
+function renderOfficialDemoStatus(){
+  const el=$('#officialDemoStatus');
+  if(!el) return;
+  const v=localStorage.getItem(demoStatusKey);
+  if(v==='ok') status(el,'公式デモ：日本語音声生成に成功。Safari自体は対応しています。次はCreator OSとの差分移植へ進めます。','ok');
+  else if(v==='ng') status(el,'公式デモ：このiPhone Safariでも失敗。端末/ブラウザ条件を先に調査します。','warn');
+  else status(el,'未確認。まず公式WebAssemblyデモで「こんにちは」を生成してください。','warn');
+}
+$('#officialDemoOk').onclick=()=>{ localStorage.setItem(demoStatusKey,'ok'); renderOfficialDemoStatus(); };
+$('#officialDemoNg').onclick=()=>{ localStorage.setItem(demoStatusKey,'ng'); renderOfficialDemoStatus(); };
+renderOfficialDemoStatus();
+
+
 async function ensureVendorServiceWorker(){
   if (!('serviceWorker' in navigator)) throw new Error('STEP 0 Service Worker非対応');
   const registration = await navigator.serviceWorker.register('./voice-vendor-sw.js', {scope:'./'});
