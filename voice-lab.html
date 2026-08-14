@@ -1,75 +1,130 @@
 <!doctype html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#10131c" />
-  <link rel="stylesheet" href="./style.css" />
-  <title>Creator OS Voice Lab</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Creator OS Voice Lab</title>
+<style>
+:root{color-scheme:dark}
+body{margin:0;background:#0b0f18;color:#eef2ff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.wrap{max-width:760px;margin:auto;padding:20px}
+.card{background:#141a27;border:1px solid #30384d;border-radius:18px;padding:18px;margin:14px 0}
+h1{font-size:28px;margin:8px 0}.muted{color:#aeb7ce;line-height:1.6}
+textarea,select{width:100%;box-sizing:border-box;background:#0e1320;color:#fff;border:1px solid #3a4358;border-radius:12px;padding:13px;font-size:16px}
+button,a.btn{display:inline-block;background:#7567f8;color:#fff;border:0;border-radius:13px;padding:13px 16px;font-weight:700;text-decoration:none;margin:6px 6px 6px 0}
+button.secondary{background:#293147}button:disabled{opacity:.45}.ok{color:#8ef0c4}.warn{color:#ffd08a}.bad{color:#ff9f9f}
+pre{white-space:pre-wrap;word-break:break-word;background:#0e1320;padding:12px;border-radius:10px;max-height:300px;overflow:auto}
+audio,progress{width:100%;margin-top:12px}
+</style>
 </head>
-<body><div style='padding:10px;background:#151b29'><a href='./kokoro-lab.html' style='color:#9cc4ff;font-weight:700'>→ Kokoro日本語TTS実証版を開く</a></div><div style='position:sticky;top:0;z-index:999;background:#0b0f18;padding:9px 12px'><a href='./diagnostics.html' style='color:#9cc4ff;font-weight:700;text-decoration:none'>診断: Sprint 3.4.0 / Cache確認</a></div>
-  <main class="voice-lab">
-    <a id="backLink" class="button-link" href="./">← Creator OSへ戻る</a>
-    <h1>無料 Voice Lab <small style="font-size:.45em;color:#9ba3b9">Sprint 3.4.0</small></h1>
-    <p class="muted">台本からブラウザ内で日本語ナレーションを生成し、そのままプロジェクトへ登録する実験機能です。</p>
+<body><div class="wrap">
+<a class="btn secondary" href="./index.html">← Creator OSへ戻る</a>
+<h1>無料 Voice Lab <small>Sprint 3.4.1</small></h1>
+<p class="muted">実機合格したKokoro日本語TTSを正式経路にしました。Piper Plus旧経路は使用しません。</p>
 
-    <section class="voice-lab-card">
-      <h2>1. 音声エンジン</h2>
-      <p>公式WebAssemblyデモの実働経路を基準に再構築します。現行公式デモの日本語前処理はRust WASMのjpreprocess＋内蔵辞書です。まず同じiPhone Safariで公式デモが正常動作するかを確認し、Creator OSとの差分を切り分けます。</p>
-      <div class="voice-meta">
-        <div><small>エンジン</small><br><b>Piper Plus</b></div>
-        <div><small>実証音声</small><br><b>つくよみちゃん</b></div>
-        <div><small>実行場所</small><br><b>ブラウザ内</b></div>
-        <div><small>API料金</small><br><b>なし</b></div>
-      </div>
-      <p class="muted">※この版は技術実証用です。各音声モデルの利用条件はVoice Library正式版で個別管理します。</p>
-      <div style="margin:18px 0;padding:16px;border:1px solid #343b50;border-radius:14px;background:#101521">
-  <b>公式WebAssemblyデモ確認</b>
-  <p class="muted" style="margin:.6em 0">Creator OSと同じiPhone Safariで、公式のブラウザ内日本語TTSが動くか確認します。公式デモはRust WASM jpreprocess＋内蔵辞書を使用しています。</p>
-  <a href="https://ayutaz.github.io/piper-plus/" target="_blank" rel="noopener" style="display:inline-block;padding:12px 16px;border-radius:12px;background:#293147;color:#fff;text-decoration:none;font-weight:700">公式WebAssemblyデモを開く</a>
-  <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
-    <button id="officialDemoOk" type="button">公式デモで音声が出た</button>
-    <button id="officialDemoNg" type="button">公式デモでも失敗した</button>
-  </div>
-  <div id="officialDemoStatus" class="voice-status" style="margin-top:10px">未確認</div>
+<div class="card">
+<h2>1. 音声エンジン</h2>
+<p><b>Kokoro 日本語TTS</b><br><span class="muted">ブラウザ内 / API料金なし / WAV生成</span></p>
+<button id="prepare">音声エンジンを準備</button>
+<progress id="prog" max="100" value="0"></progress>
+<pre id="engineLog">未準備</pre>
 </div>
 
-<button id="prepare" class="primary">Creator OS側の旧経路を診断</button>
-      <progress id="progress" class="voice-progress" max="100" value="0"></progress>
-      <div id="engineStatus" class="voice-status">未準備</div>
-    </section>
+<div class="card">
+<h2>2. ナレーション生成</h2>
+<label>声</label>
+<select id="voice">
+<option value="jf_alpha">jf_alpha（女性）</option>
+<option value="jf_gongitsune">jf_gongitsune（女性）</option>
+<option value="jf_nezumi">jf_nezumi（女性）</option>
+<option value="jf_tebukuro">jf_tebukuro（女性）</option>
+<option value="jm_kumo">jm_kumo（男性）</option>
+</select>
+<label style="display:block;margin-top:12px">音声用台本</label>
+<textarea id="text" rows="7">こんにちは。今日はいい天気ですね。本田宗一郎。</textarea>
+<button id="generate" disabled>音声を生成</button>
+<audio id="audio" controls></audio>
+<pre id="result">まだ生成されていません。</pre>
+<button id="register" disabled>この音声を動画用ナレーションに登録</button>
+<button id="download" class="secondary" disabled>WAVを保存</button>
+</div>
 
-    <section class="voice-lab-card">
-      <h2>2. ナレーション生成</h2>
-      <label>音声用台本<textarea id="text" placeholder="ナレーション文章を入力"></textarea></label>
-      <div class="form-grid">
-        <label>話す速さ<select id="speed"><option value="1.25">少し速め</option><option value="1.5" selected>標準</option><option value="1.75">ゆっくり</option></select></label>
-        <label>言語<select id="language"><option value="ja" selected>日本語</option></select></label>
-      </div>
-      <div class="voice-actions"><button id="generate" class="primary" disabled>音声を生成</button></div>
-      <div id="generateStatus" class="voice-status">エンジン準備後に生成できます。</div>
-      <audio id="preview" controls></audio>
-      <div class="voice-actions">
-        <button id="register" class="primary" disabled>この音声を動画用ナレーションに登録</button>
-        <button id="download" disabled>WAVを保存</button>
-      </div>
-    </section>
+<div class="card">
+<h2>3. 登録状態</h2>
+<pre id="registered">未登録</pre>
+<p class="muted">登録した音声は、この端末のIndexedDBへ保存します。次Sprintで動画レンダラーがここから読み込みます。</p>
+</div>
+</div>
 
-    <section class="voice-lab-card">
-      <h2>今回確認すること</h2>
-      <p>① iPhone SafariでPiper Plusが初期化できるか → ② 日本語音声をWAVとして生成できるか → ③ Creator OSのナレーション欄へ自動登録できるか、の3点だけを確認します。</p>
-      <div id="diagnostics" class="voice-status">WebAssembly: 確認中…</div>
-    </section>
-  </main>
-  <script type="importmap">
-  {
-    "imports": {
-      "piper-plus": "https://cdn.jsdelivr.net/npm/piper-plus@0.7/+esm",
-      "onnxruntime-web": "./vendor/onnxruntime/ort.wasm.bundle.min.mjs",
-      "@piper-plus/g2p": "https://cdn.jsdelivr.net/npm/@piper-plus/g2p@0.4.1/+esm"
-    }
-  }
-  </script>
-  <script type="module" src="./voice-lab.js"></script>
-</body>
-</html>
+<script type="module">
+const $=s=>document.querySelector(s);
+let tts=null, wavBlob=null, wavUrl=null;
+const params=new URLSearchParams(location.search);
+const projectId=params.get('project') || 'default';
+
+function setLog(id,msg,cls=''){const e=$(id);e.textContent=msg;e.className=cls}
+function openDB(){
+ return new Promise((resolve,reject)=>{
+   const r=indexedDB.open('creator-os-audio',1);
+   r.onupgradeneeded=()=>{const db=r.result;if(!db.objectStoreNames.contains('narrations'))db.createObjectStore('narrations',{keyPath:'projectId'})};
+   r.onsuccess=()=>resolve(r.result); r.onerror=()=>reject(r.error);
+ });
+}
+async function loadRegistered(){
+ try{
+  const db=await openDB(); const tx=db.transaction('narrations','readonly');
+  const req=tx.objectStore('narrations').get(projectId);
+  req.onsuccess=()=>{
+    const x=req.result;
+    if(x) setLog('#registered',`登録済み ✓\nproject=${projectId}\nvoice=${x.voice}\nWAV=${(x.blob.size/1024).toFixed(1)}KB\ntext=${x.text}`,'ok');
+  };
+ }catch(e){}
+}
+loadRegistered();
+
+$('#prepare').onclick=async()=>{
+ $('#prepare').disabled=true; $('#prog').value=5;
+ try{
+  setLog('#engineLog','Kokoro日本語TTSを読み込み中…','warn');
+  const mod=await import('https://cdn.jsdelivr.net/npm/kokoro-js-jp@0.2.0/dist/kokoro-jp.web.js');
+  $('#prog').value=30;
+  if(!mod.KokoroJP) throw new Error('KokoroJP exportがありません');
+  setLog('#engineLog','モデルを準備中… 初回のみ時間がかかります。','warn');
+  tts=await mod.KokoroJP.load();
+  $('#prog').value=100;
+  setLog('#engineLog','準備完了 ✓ 日本語ナレーションを生成できます。','ok');
+  $('#generate').disabled=false;
+ }catch(e){
+  setLog('#engineLog','準備失敗:\n'+(e?.stack||e),'bad'); $('#prepare').disabled=false;
+ }
+};
+
+$('#generate').onclick=async()=>{
+ $('#generate').disabled=true; $('#register').disabled=true; $('#download').disabled=true;
+ try{
+  const text=$('#text').value.trim(), voice=$('#voice').value;
+  if(!text) throw new Error('文章を入力してください');
+  setLog('#result','生成中…','warn');
+  const t0=performance.now();
+  const out=await tts.speak(text,voice);
+  wavBlob=out.toBlob();
+  if(wavUrl)URL.revokeObjectURL(wavUrl);
+  wavUrl=URL.createObjectURL(wavBlob); $('#audio').src=wavUrl;
+  $('#audio').play().catch(()=>{});
+  setLog('#result',`生成成功 ✓\nvoice=${voice}\nWAV=${(wavBlob.size/1024).toFixed(1)}KB\n処理時間=${((performance.now()-t0)/1000).toFixed(1)}秒`,'ok');
+  $('#register').disabled=false; $('#download').disabled=false;
+ }catch(e){setLog('#result','生成失敗:\n'+(e?.stack||e),'bad')}
+ finally{$('#generate').disabled=false}
+};
+
+$('#register').onclick=async()=>{
+ try{
+  const db=await openDB(); const tx=db.transaction('narrations','readwrite');
+  const item={projectId,blob:wavBlob,voice:$('#voice').value,text:$('#text').value.trim(),mime:wavBlob.type||'audio/wav',updatedAt:new Date().toISOString()};
+  tx.objectStore('narrations').put(item);
+  await new Promise((res,rej)=>{tx.oncomplete=res;tx.onerror=()=>rej(tx.error)});
+  setLog('#registered',`登録完了 ✓\nproject=${projectId}\nvoice=${item.voice}\nWAV=${(item.blob.size/1024).toFixed(1)}KB\n次は動画レンダラー接続へ進めます。`,'ok');
+ }catch(e){setLog('#registered','登録失敗:\n'+(e?.stack||e),'bad')}
+};
+$('#download').onclick=()=>{if(!wavUrl)return;const a=document.createElement('a');a.href=wavUrl;a.download='creator-os-narration.wav';a.click()};
+</script></body></html>

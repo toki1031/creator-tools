@@ -1,28 +1,23 @@
-# Creator OS Sprint 3.4.0 — Kokoro日本語TTS実証版
+# Creator OS Sprint 3.4.1 — Kokoro正式Voice Lab統合
 
-## 目的
-Piper PlusのiPhone Safari問題を追い続けず、最短で
-「無料日本語ナレーション → WAV取得」まで通す。
+Sprint 3.4.0でiPhone Safari実機合格したKokoro日本語TTSをVoice Labの正式経路へ統合。
 
-## 採用
-kokoro-js-jp 0.2.0
-- ブラウザ専用
-- 日本語/英語対応
-- kokoro-js + Transformers.js/ONNX + Open JTalk WASM
-- CDN向け自己完結ESM
-- サーバー不要
-- Apache-2.0
-
-## 新ページ
-/kokoro-lab.html
+## 今回完成
+- Kokoro日本語TTSをVoice Labへ統合
+- 女性4声 / 男性1声
+- 日本語台本→生成→試聴→WAV保存
+- 「動画用ナレーションに登録」
+- 登録音声をIndexedDB `creator-os-audio / narrations` にprojectId単位で保存
+- Piper Plus旧経路をVoice Labから撤去
 
 ## テスト
-1. GitHubへ全ファイル上書き
-2. /diagnostics.html で Sprint 3.4.0確認
-3. /kokoro-lab.html
-4. 「Kokoro音声エンジンを準備」
-5. 「こんにちは。今日はいい天気ですね。本田宗一郎。」を jf_alpha で生成
-6. 音声再生
-7. WAV保存
+1. 全ファイルをGitHubへ上書き
+2. `voice-lab?project=...` を開く
+3. 音声エンジンを準備
+4. 音声を生成
+5. 再生確認
+6. 「この音声を動画用ナレーションに登録」
+7. 「登録完了 ✓」を確認
 
-成功後はSprint 3.4.1でVoice Lab/動画用ナレーション欄へ統合する。
+## 次
+Sprint 3.4.2: videoRenderer.js が登録済みWAVを読み込み、動画音声トラックへ合成。
