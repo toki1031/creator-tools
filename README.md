@@ -1,12 +1,28 @@
-# Creator OS Sprint 3.3.2 — Build / Cache 診断版
+# Creator OS Sprint 3.4.0 — Kokoro日本語TTS実証版
 
-目的:
-- 古いSprintの一部残存やSafariキャッシュ混在を切り分ける。
-- diagnostics.html で現在配信中のBuild ID、主要ファイル、Service Worker、Cache Storageを確認する。
+## 目的
+Piper PlusのiPhone Safari問題を追い続けず、最短で
+「無料日本語ナレーション → WAV取得」まで通す。
 
-手順:
-1. ZIPの中身をGitHubへ全部上書き
-2. Cloudflare Pagesデプロイ完了後 `/diagnostics.html` を開く
-3. `Creator OS Sprint 3.3.2` を確認
-4. 古いCache Storage / Service Workerが残っていれば削除
-5. Voice Labへ進む
+## 採用
+kokoro-js-jp 0.2.0
+- ブラウザ専用
+- 日本語/英語対応
+- kokoro-js + Transformers.js/ONNX + Open JTalk WASM
+- CDN向け自己完結ESM
+- サーバー不要
+- Apache-2.0
+
+## 新ページ
+/kokoro-lab.html
+
+## テスト
+1. GitHubへ全ファイル上書き
+2. /diagnostics.html で Sprint 3.4.0確認
+3. /kokoro-lab.html
+4. 「Kokoro音声エンジンを準備」
+5. 「こんにちは。今日はいい天気ですね。本田宗一郎。」を jf_alpha で生成
+6. 音声再生
+7. WAV保存
+
+成功後はSprint 3.4.1でVoice Lab/動画用ナレーション欄へ統合する。

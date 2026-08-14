@@ -1,6 +1,6 @@
 {
-  "build": "Creator OS Sprint 3.3.2",
-  "buildId": "s332-cache-diagnostics",
+  "build": "Creator OS Sprint 3.4.0",
+  "buildId": "s340-kokoro-jp-proof",
   "created": "2026-08-14",
   "files": [
     {
@@ -10,8 +10,18 @@
     },
     {
       "file": "voice-lab.html",
-      "sha256": "8302bbc3bbd167ac",
-      "bytes": 4572
+      "sha256": "0c07a3722b868e5b",
+      "bytes": 4948
+    },
+    {
+      "file": "kokoro-lab.html",
+      "sha256": "a9217842bc3bea77",
+      "bytes": 6065
+    },
+    {
+      "file": "diagnostics.html",
+      "sha256": "7f6cf907b210996b",
+      "bytes": 2518
     },
     {
       "file": "videoRenderer.js",

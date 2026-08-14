@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Creator OS Kokoro Lab</title>
+<style>
+:root{color-scheme:dark}
+body{margin:0;background:#0b0f18;color:#eef2ff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.wrap{max-width:760px;margin:auto;padding:20px}
+.card{background:#141a27;border:1px solid #30384d;border-radius:18px;padding:18px;margin:14px 0}
+h1{font-size:28px;margin:8px 0} h2{font-size:20px}
+.muted{color:#aeb7ce;line-height:1.6}
+textarea,select{width:100%;box-sizing:border-box;background:#0e1320;color:#fff;border:1px solid #3a4358;border-radius:12px;padding:13px;font-size:16px}
+button,a.btn{display:inline-block;background:#7567f8;color:#fff;border:0;border-radius:13px;padding:13px 16px;font-weight:700;text-decoration:none;margin:6px 6px 6px 0}
+button.secondary{background:#293147}
+button:disabled{opacity:.45}
+.ok{color:#8ef0c4}.warn{color:#ffd08a}.bad{color:#ff9f9f}
+pre{white-space:pre-wrap;word-break:break-word;background:#0e1320;padding:12px;border-radius:10px;max-height:320px;overflow:auto}
+audio{width:100%;margin-top:12px}
+progress{width:100%;height:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div><a class="btn secondary" href="./diagnostics.html">← 診断へ戻る</a></div>
+  <h1>無料 Kokoro 日本語Voice Lab</h1>
+  <p class="muted">Sprint 3.4.0。Piper Plus旧経路は使わず、<b>kokoro-js-jp 0.2.0</b>の自己完結ブラウザ版を直接使用します。</p>
+
+  <div class="card">
+    <h2>1. 対応確認</h2>
+    <div id="support">確認中…</div>
+    <button id="prepare">Kokoro音声エンジンを準備</button>
+    <progress id="prog" max="100" value="0"></progress>
+    <pre id="log">未準備</pre>
+  </div>
+
+  <div class="card">
+    <h2>2. 日本語ナレーション生成</h2>
+    <label>声</label>
+    <select id="voice">
+      <option value="jf_alpha">jf_alpha（女性）</option>
+      <option value="jf_gongitsune">jf_gongitsune（女性）</option>
+      <option value="jf_nezumi">jf_nezumi（女性）</option>
+      <option value="jf_tebukuro">jf_tebukuro（女性）</option>
+      <option value="jm_kumo">jm_kumo（男性）</option>
+    </select>
+    <label style="display:block;margin-top:12px">文章</label>
+    <textarea id="text" rows="6">こんにちは。今日はいい天気ですね。本田宗一郎。</textarea>
+    <button id="generate" disabled>音声を生成</button>
+    <button id="download" class="secondary" disabled>WAVを保存</button>
+    <audio id="audio" controls></audio>
+    <pre id="result">まだ生成されていません。</pre>
+  </div>
+
+  <div class="card">
+    <h2>3. 実証の合格条件</h2>
+    <div class="muted">
+      ① iPhone Safariでエンジン準備完了<br>
+      ② 日本語が発音される<br>
+      ③ WAV Blobを取得できる<br>
+      ④ 音声を保存できる
+    </div>
+  </div>
+</div>
+
+<script type="module">
+const $=s=>document.querySelector(s);
+const log=(msg,type='')=>{
+  const el=$('#log'); el.textContent += (el.textContent==='未準備'?'':'\n')+msg;
+  if(type) el.className=type;
+};
+const result=(msg,type='')=>{ $('#result').textContent=msg; $('#result').className=type; };
+
+const checks={
+  wasm: typeof WebAssembly !== 'undefined',
+  worker: typeof Worker !== 'undefined',
+  decompression: typeof DecompressionStream !== 'undefined',
+  indexedDB: typeof indexedDB !== 'undefined',
+};
+$('#support').innerHTML=Object.entries(checks).map(([k,v])=>`${v?'✓':'✕'} ${k}`).join('<br>');
+if(Object.values(checks).every(Boolean)) $('#support').className='ok'; else $('#support').className='warn';
+
+let tts=null;
+let wavBlob=null;
+let wavUrl=null;
+
+$('#prepare').onclick=async()=>{
+  $('#prepare').disabled=true;
+  $('#prog').value=5;
+  $('#log').textContent='';
+  try{
+    log('STEP 1/4: kokoro-js-jp 0.2.0 を読み込み中…','warn');
+    const mod = await import('https://cdn.jsdelivr.net/npm/kokoro-js-jp@0.2.0/dist/kokoro-jp.web.js');
+    $('#prog').value=25;
+    if(!mod.KokoroJP) throw new Error('KokoroJP exportがありません: '+Object.keys(mod).join(', '));
+
+    log('STEP 2/4: Kokoro-82Mモデルを準備中… 初回は時間がかかります。','warn');
+    tts = await mod.KokoroJP.load();
+    $('#prog').value=85;
+
+    log('STEP 3/4: 日本語音声一覧を確認中…','warn');
+    const voices = tts?.list_voices?.() ?? tts?.voices ?? null;
+    log('voices: '+(voices ? JSON.stringify(voices).slice(0,1200) : 'API上の一覧なし（固定日本語voiceでテスト）'));
+
+    $('#prog').value=100;
+    log('STEP 4/4: 準備完了。日本語音声を生成できます。','ok');
+    $('#generate').disabled=false;
+  }catch(e){
+    log('準備失敗: '+(e?.stack || e?.message || e),'bad');
+    $('#prepare').disabled=false;
+  }
+};
+
+$('#generate').onclick=async()=>{
+  if(!tts) return;
+  $('#generate').disabled=true;
+  $('#download').disabled=true;
+  result('日本語を生成中… 初回はOpen JTalk辞書約24MBの取得・展開が入ります。','warn');
+  try{
+    const text=$('#text').value.trim();
+    const voice=$('#voice').value;
+    if(!text) throw new Error('文章を入力してください。');
+
+    const started=performance.now();
+    const audio = await tts.speak(text, voice);
+    const blob = audio.toBlob();
+    const sec=((performance.now()-started)/1000).toFixed(1);
+
+    if(wavUrl) URL.revokeObjectURL(wavUrl);
+    wavBlob=blob;
+    wavUrl=URL.createObjectURL(blob);
+    $('#audio').src=wavUrl;
+    $('#audio').play().catch(()=>{});
+    $('#download').disabled=false;
+    result(`生成成功 ✓\nvoice=${voice}\nWAV=${(blob.size/1024).toFixed(1)}KB\n処理時間=${sec}秒`,'ok');
+  }catch(e){
+    result('生成失敗:\n'+(e?.stack || e?.message || e),'bad');
+  }finally{
+    $('#generate').disabled=false;
+  }
+};
+
+$('#download').onclick=()=>{
+  if(!wavBlob || !wavUrl) return;
+  const a=document.createElement('a');
+  a.href=wavUrl;
+  a.download='creator-os-kokoro-ja.wav';
+  a.click();
+};
+</script>
+</body>
+</html>
