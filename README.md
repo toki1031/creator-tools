@@ -1,12 +1,23 @@
-# Creator OS Sprint 3.2.2 VoiceLab G2P経路固定診断版
+# Creator OS Sprint 3.2.5 — 日本語G2P修正版
 
-目的: Sprint 3.2.1で発生した `text/html is not a valid JavaScript MIME type` を切り分ける。
+実機で Sprint 3.2.4 はエンジン準備に成功したが、日本語生成時に:
+G2P: language "ja" is not initialised.
+Available languages: [en, es, fr, pt]
+が発生。
 
-変更点:
-- G2Pの仮想vendor URLを廃止。
-- Sprint 3.1.7でiPhone Safari実機上の読み込み成功を確認した `@piper-plus/g2p@0.4.1/src/index.js` の直接ES Module経路へ固定。
-- import前にHTTP status / Content-Typeを検証し、HTML応答ならimport前に停止。
-- ONNX Runtimeの成功経路は維持。
-- Piper Plus本体の同一オリジン診断は継続。
+原因:
+Sprint 3.2.4 で @piper-plus/g2p を 0.4.0 に固定していた。
+Piper Plus 0.6.0 の依存仕様は @piper-plus/g2p ^0.4.1。
+日本語(OpenJTalk/WASM)を含む依存側を 0.4.1 に戻す。
 
-テスト: GitHubへ全ファイルを上書きし、Voice Lab → 音声エンジンを準備。
+変更:
+- piper-plus: 0.6.0 維持
+- @piper-plus/g2p: 0.4.0 → 0.4.1
+- ONNX/Safari対策: 成功済み経路を維持
+- synthesize(..., { language: 'ja' }) は維持
+
+テスト:
+1. GitHubへ上書き
+2. SafariでVoice Labを再読み込み
+3. 「音声エンジンを準備」
+4. 「こんにちは。いい天気ですね。」で「音声を生成」

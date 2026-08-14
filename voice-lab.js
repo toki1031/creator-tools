@@ -108,22 +108,53 @@ $('#prepare').onclick = async () => {
       ort.env.wasm.proxy = false;
     } catch(e){ throw new Error(`STEP 3 ONNX Runtime初期化失敗: ${e?.message || e}`); }
 
-    status(out,'[6/9] Piper Plus本体を同一オリジン経由で取得しています…','warn');
-    prog.value=47;
-    const piperAsset = await checkVirtualAsset('./vendor/piper-plus/index.js', 'STEP 4A Piper Plus本体');
+    status(out,'[6/10] npm公開版 Piper Plus 0.6.0 を検証しています…','warn');
+    prog.value=45;
 
-    status(out,'[7/9] Piper Plusモジュールを解析・読込しています…','warn');
-    prog.value=55;
+    const piperCandidates = [
+      'https://cdn.jsdelivr.net/npm/piper-plus@0.6.0/src/index.js',
+      'https://unpkg.com/piper-plus@0.6.0/src/index.js',
+      'https://esm.sh/piper-plus@0.6.0'
+    ];
+    let piperAsset = null;
+    let piperSourceUrl = '';
+    const failures = [];
+    for (const candidate of piperCandidates) {
+      try {
+        const r = await fetch(candidate, {cache:'no-store', mode:'cors'});
+        const type = r.headers.get('content-type') || '不明';
+        const text = r.ok ? await r.text() : '';
+        if (!r.ok) { failures.push(`${candidate} -> HTTP ${r.status}`); continue; }
+        if (!/javascript|ecmascript|text\/plain/i.test(type)) {
+          failures.push(`${candidate} -> MIME ${type}`); continue;
+        }
+        if (!text || text.length < 100) {
+          failures.push(`${candidate} -> 内容が短すぎます (${text.length} bytes)`); continue;
+        }
+        piperSourceUrl = candidate;
+        piperAsset = {url:candidate,type,size:text.length};
+        break;
+      } catch(e) {
+        failures.push(`${candidate} -> ${e?.message || e}`);
+      }
+    }
+    if (!piperSourceUrl) {
+      throw new Error(`STEP 4A 公開版 Piper Plus 0.6.0取得失敗。配布元3系統すべてNG。\n${failures.join('\n')}`);
+    }
+
+    status(out,`[7/10] 公開版 Piper Plus 0.6.0取得成功。ES Module読込を検証しています…\n${piperSourceUrl}`,'warn');
+    prog.value=53;
     let piperModule;
-    try { piperModule = await import('piper-plus'); }
-    catch(e){ throw new Error(`STEP 4B piper-plus モジュール読込失敗: ${e?.message || e}`); }
+    try { piperModule = await import(piperSourceUrl); }
+    catch(e){ throw new Error(`STEP 4B Piper Plus本体は取得成功しましたがES Module読込失敗: ${e?.message || e}\n取得元: ${piperSourceUrl}`); }
     const PiperPlus = piperModule.PiperPlus;
-    if(!PiperPlus) throw new Error(`STEP 4C PiperPlus exportなし: ${Object.keys(piperModule).join(', ')}`);
+    const piperExports = Object.keys(piperModule);
+    if(!PiperPlus) throw new Error(`STEP 4C PiperPlus exportなし。公開export: ${piperExports.join(', ') || '(なし)'}`);
 
     // Piperが使う2つの主要依存が、すでに取得済みの同じmodule namespaceとして利用可能かを確認。
     if(!g2pModule || !ort?.InferenceSession) throw new Error('STEP 4D Piper依存接続確認失敗');
 
-    status(out,'[8/9] 日本語音声モデルを準備しています…','warn');
+    status(out,'[9/10] 日本語音声モデルを準備しています…','warn');
     prog.value=64;
     try {
       piper = await PiperPlus.initialize({
@@ -138,14 +169,14 @@ $('#prepare').onclick = async () => {
       });
     } catch(e){ throw new Error(`STEP 5 Piper/音声モデル初期化失敗: ${e?.message || e}`); }
 
-    status(out,'[9/9] Voice Engine準備完了','ok');
+    status(out,'[10/10] Voice Engine準備完了','ok');
     prog.value=100;
     status(out,'準備完了。日本語ナレーションを生成できます。','ok');
     $('#generate').disabled=false; btn.textContent='準備済み';
-    showDiagnostics(`成功: Piper same-origin / G2P known-good direct / Piper=${piperAsset.type} / G2P=${g2pAsset.type} / ORT=${jsAsset.type} / WASM=${wasmBin.type}`);
+    showDiagnostics(`成功: Piper Plus 0.6.0 / G2P 0.4.1 / Piper=${piperAsset.type} / G2P=${g2pAsset.type} / ORT=${jsAsset.type} / WASM=${wasmBin.type}`);
   }catch(err){
     console.error(err); status(out,`準備に失敗しました。\n${err?.message || err}`,'warn'); btn.disabled=false;
-    showDiagnostics(`Voice Lab 3.2.2 初期化失敗 / ${err?.message || err}`);
+    showDiagnostics(`Voice Lab 3.2.3 初期化失敗 / ${err?.message || err}`);
   }
 };
 
