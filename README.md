@@ -1,25 +1,24 @@
-# Creator OS Sprint 3.2.6 — 日本語G2P明示初期化修正版
+# Creator OS Sprint 3.2.7 — 日本語辞書ロード経路診断版
 
-## 実機で確認されたエラー
-G2P: language "ja" is not initialised.
-Available languages: [en, es, fr, pt].
-Pass the language in G2P.create({ languages: [...] }) to enable it.
+## 直前の実機結果
+Sprint 3.2.6:
+STEP 1C 日本語G2P初期化失敗: Load failed
 
-## 根本修正
-@piper-plus/g2p の日本語利用手順に合わせて:
+Piper Plus / ONNX Runtime / G2P module本体の読み込みは維持し、
+日本語OpenJTalk辞書の `loadJaDict()` だけを診断する。
 
-1. `DictLoader` を生成
-2. `await loader.loadJaDict()` で日本語OpenJTalk辞書を準備
-3. `G2P.create()` をラップ
-4. Piper Plus内部からG2P.create()が呼ばれた場合でも
-   `languages` に必ず `ja` を追加
-5. `jaDict` を必ず渡す
-6. Piper初期化前に「こんにちは」で日本語G2Pのスモークテスト
+## 追加した診断
+`loadJaDict()` 実行中だけ `window.fetch` を監視し、以下を記録する。
 
-既存の英語・スペイン語・フランス語・ポルトガル語などの languages は削除せず維持する。
+- 実際に要求したURL
+- HTTP status
+- Content-Type
+- Content-Length
+- 所要時間
+- fetch自体が失敗した場合のエラー
 
-## テスト
-- Voice LabをSafariで再読み込み
-- 「音声エンジンを準備」
-- STEP 1C 日本語G2P準備成功を確認
-- 「こんにちは。いい天気ですね。」で「音声を生成」
+辞書ロードが失敗すると、STEP 1Cに取得ログを併記する。
+
+## 目的
+次の対策を推測で決めず、
+辞書ファイルURLの404/502、CORS、MIME、Safariの通信失敗などを実データで確定する。

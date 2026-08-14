@@ -89,7 +89,7 @@ $('#prepare').onclick = async () => {
     try { g2pModule = await import('@piper-plus/g2p'); }
     catch(e){ throw new Error(`STEP 1B @piper-plus/g2p 読込失敗: ${e?.message || e}`); }
 
-    // Sprint 3.2.6:
+    // Sprint 3.2.7:
     // Piper Plus 0.6.0 internally calls G2P.create() without enabling Japanese
     // in this Safari/CDN combination. Prepare the OpenJTalk dictionary here and
     // wrap G2P.create() so every internal call retains existing languages and
@@ -106,7 +106,62 @@ $('#prepare').onclick = async () => {
       }
 
       const loader = new DictLoader();
-      const jaDict = await loader.loadJaDict();
+
+      // Sprint 3.2.7:
+      // DictLoader.loadJaDict() was failing with only "Load failed" on iPhone Safari.
+      // Temporarily wrap fetch so we can identify the exact dictionary/WASM request,
+      // HTTP status and MIME type without changing the already-working Piper/ONNX paths.
+      const originalFetch = window.fetch.bind(window);
+      const jaLoadTrace = [];
+      window.fetch = async (...args) => {
+        const input = args[0];
+        const url = typeof input === 'string' ? input : (input?.url || String(input));
+        const started = Date.now();
+        try {
+          const res = await originalFetch(...args);
+          jaLoadTrace.push({
+            url,
+            ok: res.ok,
+            status: res.status,
+            type: res.headers.get('content-type') || '不明',
+            length: res.headers.get('content-length') || '不明',
+            ms: Date.now() - started
+          });
+          return res;
+        } catch (err) {
+          jaLoadTrace.push({
+            url,
+            ok: false,
+            status: 'FETCH_ERROR',
+            type: '-',
+            length: '-',
+            ms: Date.now() - started,
+            error: err?.message || String(err)
+          });
+          throw err;
+        }
+      };
+
+      let jaDict;
+      try {
+        jaDict = await loader.loadJaDict();
+      } catch (e) {
+        const traceText = jaLoadTrace.length
+          ? jaLoadTrace.map((x,i) =>
+              `${i+1}. ${x.url}\n   status=${x.status} / MIME=${x.type} / size=${x.length} / ${x.ms}ms${x.error ? ` / error=${x.error}` : ''}`
+            ).join('\n')
+          : 'fetch監視ではリクエストを検出できませんでした。';
+        throw new Error(`日本語辞書 loadJaDict() 失敗: ${e?.message || e}\n\n取得ログ:\n${traceText}`);
+      } finally {
+        window.fetch = originalFetch;
+      }
+
+      const traceTextOk = jaLoadTrace.length
+        ? jaLoadTrace.map((x,i) =>
+            `${i+1}. ${x.url} -> ${x.status} / ${x.type} / size=${x.length}`
+          ).join('\n')
+        : 'fetchリクエストなし';
+      status(out,`日本語辞書取得成功。\n${traceTextOk}`,'ok');
 
       // Keep the original factory once. Re-preparing the engine must not stack wrappers.
       if (!G2P.__creatorOsOriginalCreate) {
