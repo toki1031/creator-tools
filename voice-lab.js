@@ -11,6 +11,58 @@ let resultUrl = '';
 const status = (el, text, kind='') => { el.textContent = text; el.className = `voice-status ${kind}`.trim(); };
 const blobToDataUrl = blob => new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result));r.onerror=()=>reject(r.error);r.readAsDataURL(blob);});
 
+const JA_DICT_DB = 'creator-os-voice-assets';
+const JA_DICT_STORE = 'assets';
+const JA_DICT_KEY = 'open_jtalk_dic_utf_8-1.11.tar.gz';
+const JA_DICT_MIN_BYTES = 5 * 1024 * 1024;
+
+function openVoiceAssetDb(){
+  return new Promise((resolve,reject)=>{
+    const req = indexedDB.open(JA_DICT_DB, 1);
+    req.onupgradeneeded = () => {
+      const db=req.result;
+      if(!db.objectStoreNames.contains(JA_DICT_STORE)) db.createObjectStore(JA_DICT_STORE);
+    };
+    req.onsuccess=()=>resolve(req.result);
+    req.onerror=()=>reject(req.error);
+  });
+}
+async function getStoredJaDict(){
+  const db=await openVoiceAssetDb();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(JA_DICT_STORE,'readonly');
+    const req=tx.objectStore(JA_DICT_STORE).get(JA_DICT_KEY);
+    req.onsuccess=()=>resolve(req.result || null);
+    req.onerror=()=>reject(req.error);
+  });
+}
+async function putStoredJaDict(blob){
+  const db=await openVoiceAssetDb();
+  await new Promise((resolve,reject)=>{
+    const tx=db.transaction(JA_DICT_STORE,'readwrite');
+    tx.objectStore(JA_DICT_STORE).put(blob,JA_DICT_KEY);
+    tx.oncomplete=resolve;
+    tx.onerror=()=>reject(tx.error);
+  });
+}
+async function refreshJaDictStatus(){
+  const el=$('#jaDictStatus');
+  if(!el) return;
+  try{
+    const blob=await getStoredJaDict();
+    if(blob && blob.size>=JA_DICT_MIN_BYTES){
+      status(el,`登録済み：${(blob.size/1024/1024).toFixed(1)}MB。以後は端末内辞書を使用します。`,'ok');
+    }else if(blob){
+      status(el,`登録データが小さすぎます：${(blob.size/1024/1024).toFixed(1)}MB。正しいtar.gzを再登録してください。`,'warn');
+    }else{
+      status(el,'未登録。上のリンクから辞書を取得し、ファイルを選択して保存してください。','warn');
+    }
+  }catch(e){
+    status(el,`辞書状態確認失敗：${e?.message || e}`,'warn');
+  }
+}
+
+
 async function initProject(){
   if(projectId){
     project = await getProject(projectId);
@@ -36,6 +88,26 @@ window.addEventListener('unhandledrejection', ev => showDiagnostics(`unhandledre
 
 showDiagnostics();
 await initProject();
+
+$('#saveJaDict').onclick = async () => {
+  const file=$('#jaDictFile')?.files?.[0];
+  if(!file){
+    status($('#jaDictStatus'),'辞書ファイルを選択してください。','warn');
+    return;
+  }
+  if(file.size < JA_DICT_MIN_BYTES){
+    status($('#jaDictStatus'),`選択ファイルが小さすぎます（${(file.size/1024/1024).toFixed(1)}MB）。正しいOpenJTalk辞書tar.gzを選択してください。`,'warn');
+    return;
+  }
+  try{
+    status($('#jaDictStatus'),'端末へ保存しています…','warn');
+    await putStoredJaDict(file);
+    await refreshJaDictStatus();
+  }catch(e){
+    status($('#jaDictStatus'),`保存失敗：${e?.message || e}`,'warn');
+  }
+};
+await refreshJaDictStatus();
 
 async function ensureVendorServiceWorker(){
   if (!('serviceWorker' in navigator)) throw new Error('STEP 0 Service Worker非対応');
@@ -89,7 +161,7 @@ $('#prepare').onclick = async () => {
     try { g2pModule = await import('@piper-plus/g2p'); }
     catch(e){ throw new Error(`STEP 1B @piper-plus/g2p 読込失敗: ${e?.message || e}`); }
 
-    // Sprint 3.2.7:
+    // Sprint 3.2.8:
     // Piper Plus 0.6.0 internally calls G2P.create() without enabling Japanese
     // in this Safari/CDN combination. Prepare the OpenJTalk dictionary here and
     // wrap G2P.create() so every internal call retains existing languages and
@@ -107,61 +179,76 @@ $('#prepare').onclick = async () => {
 
       const loader = new DictLoader();
 
-      // Sprint 3.2.7:
-      // DictLoader.loadJaDict() was failing with only "Load failed" on iPhone Safari.
-      // Temporarily wrap fetch so we can identify the exact dictionary/WASM request,
-      // HTTP status and MIME type without changing the already-working Piper/ONNX paths.
+      // Sprint 3.2.8:
+      // Japanese dictionary is registered once by the user and persisted in IndexedDB.
+      // DictLoader still requests its normal GitHub URL, but during loadJaDict() only,
+      // that request is satisfied from the local Blob. Other fetches are untouched.
+      const storedJaDict = await getStoredJaDict();
+      if(!storedJaDict || storedJaDict.size < JA_DICT_MIN_BYTES){
+        throw new Error('日本語辞書が未登録です。上の「OpenJTalk辞書を取得」→ ファイル選択 →「端末へ保存」を先に実行してください。');
+      }
+
       const originalFetch = window.fetch.bind(window);
       const jaLoadTrace = [];
       window.fetch = async (...args) => {
-        const input = args[0];
-        const url = typeof input === 'string' ? input : (input?.url || String(input));
-        const started = Date.now();
-        try {
-          const res = await originalFetch(...args);
+        const input=args[0];
+        const url=typeof input==='string' ? input : (input?.url || String(input));
+        const started=Date.now();
+
+        if(/open_jtalk_dic_utf_8-1\.11\.tar\.gz/i.test(url)){
           jaLoadTrace.push({
-            url,
-            ok: res.ok,
-            status: res.status,
-            type: res.headers.get('content-type') || '不明',
-            length: res.headers.get('content-length') || '不明',
-            ms: Date.now() - started
+            url:'IndexedDB:'+JA_DICT_KEY,
+            ok:true,
+            status:200,
+            type:storedJaDict.type || 'application/gzip',
+            length:storedJaDict.size,
+            ms:Date.now()-started,
+            local:true
+          });
+          return new Response(storedJaDict, {
+            status:200,
+            headers:{
+              'Content-Type': storedJaDict.type || 'application/gzip',
+              'Content-Length': String(storedJaDict.size),
+              'X-Creator-OS-Source':'IndexedDB'
+            }
+          });
+        }
+
+        try{
+          const res=await originalFetch(...args);
+          jaLoadTrace.push({
+            url, ok:res.ok, status:res.status,
+            type:res.headers.get('content-type')||'不明',
+            length:res.headers.get('content-length')||'不明',
+            ms:Date.now()-started
           });
           return res;
-        } catch (err) {
+        }catch(err){
           jaLoadTrace.push({
-            url,
-            ok: false,
-            status: 'FETCH_ERROR',
-            type: '-',
-            length: '-',
-            ms: Date.now() - started,
-            error: err?.message || String(err)
+            url, ok:false, status:'FETCH_ERROR', type:'-', length:'-',
+            ms:Date.now()-started, error:err?.message||String(err)
           });
           throw err;
         }
       };
 
       let jaDict;
-      try {
-        jaDict = await loader.loadJaDict();
-      } catch (e) {
-        const traceText = jaLoadTrace.length
-          ? jaLoadTrace.map((x,i) =>
-              `${i+1}. ${x.url}\n   status=${x.status} / MIME=${x.type} / size=${x.length} / ${x.ms}ms${x.error ? ` / error=${x.error}` : ''}`
-            ).join('\n')
-          : 'fetch監視ではリクエストを検出できませんでした。';
-        throw new Error(`日本語辞書 loadJaDict() 失敗: ${e?.message || e}\n\n取得ログ:\n${traceText}`);
-      } finally {
-        window.fetch = originalFetch;
+      try{
+        jaDict=await loader.loadJaDict();
+      }catch(e){
+        const traceText=jaLoadTrace.length
+          ? jaLoadTrace.map((x,i)=>`${i+1}. ${x.url}\n   status=${x.status} / MIME=${x.type} / size=${x.length}${x.local?' / LOCAL':''}`).join('\n')
+          : '辞書要求を検出できませんでした。';
+        throw new Error(`日本語辞書 loadJaDict() 失敗: ${e?.message||e}\n\n取得ログ:\n${traceText}`);
+      }finally{
+        window.fetch=originalFetch;
       }
 
-      const traceTextOk = jaLoadTrace.length
-        ? jaLoadTrace.map((x,i) =>
-            `${i+1}. ${x.url} -> ${x.status} / ${x.type} / size=${x.length}`
-          ).join('\n')
-        : 'fetchリクエストなし';
-      status(out,`日本語辞書取得成功。\n${traceTextOk}`,'ok');
+      const traceTextOk=jaLoadTrace.length
+        ? jaLoadTrace.map((x,i)=>`${i+1}. ${x.url} -> ${x.status} / ${x.type} / size=${x.length}${x.local?' / LOCAL':''}`).join('\n')
+        : '辞書要求なし';
+      status(out,`日本語辞書ロード成功。\n${traceTextOk}`,'ok');
 
       // Keep the original factory once. Re-preparing the engine must not stack wrappers.
       if (!G2P.__creatorOsOriginalCreate) {

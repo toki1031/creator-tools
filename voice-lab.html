@@ -10,7 +10,7 @@
 <body>
   <main class="voice-lab">
     <a id="backLink" class="button-link" href="./">← Creator OSへ戻る</a>
-    <h1>無料 Voice Lab <small style="font-size:.45em;color:#9ba3b9">Sprint 3.2.7</small></h1>
+    <h1>無料 Voice Lab <small style="font-size:.45em;color:#9ba3b9">Sprint 3.2.8</small></h1>
     <p class="muted">台本からブラウザ内で日本語ナレーションを生成し、そのままプロジェクトへ登録する実験機能です。</p>
 
     <section class="voice-lab-card">
@@ -23,6 +23,16 @@
         <div><small>API料金</small><br><b>なし</b></div>
       </div>
       <p class="muted">※この版は技術実証用です。各音声モデルの利用条件はVoice Library正式版で個別管理します。</p>
+
+      <div class="voice-dict-box" style="margin:18px 0;padding:16px;border:1px solid #343b50;border-radius:14px;background:#101521">
+        <b>日本語辞書（初回のみ）</b>
+        <p class="muted" style="margin:.6em 0">iPhone SafariからGitHub Releasesへの直接取得が失敗するため、OpenJTalk辞書を一度だけ端末へ登録します。登録後はIndexedDBから使用します。</p>
+        <a class="button-link" href="https://github.com/r9y9/open_jtalk/releases/download/v1.11.1/open_jtalk_dic_utf_8-1.11.tar.gz" target="_blank" rel="noopener">OpenJTalk辞書を取得</a>
+        <input id="jaDictFile" type="file" accept=".gz,.tgz,application/gzip,application/x-gzip,application/octet-stream" style="display:block;margin-top:12px;width:100%" />
+        <button id="saveJaDict" type="button" style="margin-top:10px">選択した辞書を端末へ保存</button>
+        <div id="jaDictStatus" class="voice-status" style="margin-top:10px">辞書状態を確認中…</div>
+      </div>
+
       <button id="prepare" class="primary">音声エンジンを準備</button>
       <progress id="progress" class="voice-progress" max="100" value="0"></progress>
       <div id="engineStatus" class="voice-status">未準備</div>

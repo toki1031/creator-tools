@@ -1,24 +1,27 @@
-# Creator OS Sprint 3.2.7 — 日本語辞書ロード経路診断版
+# Creator OS Sprint 3.2.8 — OpenJTalk辞書 端末ローカル版
 
 ## 直前の実機結果
-Sprint 3.2.6:
-STEP 1C 日本語G2P初期化失敗: Load failed
+Sprint 3.2.7で `loadJaDict()` が以下へfetchして失敗:
+`https://github.com/ayutaz/piper-plus/releases/download/dict-v1.0.0/open_jtalk_dic_utf_8-1.11.tar.gz`
 
-Piper Plus / ONNX Runtime / G2P module本体の読み込みは維持し、
-日本語OpenJTalk辞書の `loadJaDict()` だけを診断する。
+Piper Plus公式のiOS統合ガイドでは、日本語辞書として
+`r9y9/open_jtalk v1.11.1` の `open_jtalk_dic_utf_8-1.11.tar.gz`
+を取得し、アプリ側へバンドルする方式を案内している。
 
-## 追加した診断
-`loadJaDict()` 実行中だけ `window.fetch` を監視し、以下を記録する。
+## Sprint 3.2.8
+ブラウザ版でも同じ思想に変更。
 
-- 実際に要求したURL
-- HTTP status
-- Content-Type
-- Content-Length
-- 所要時間
-- fetch自体が失敗した場合のエラー
+1. Voice Labの「OpenJTalk辞書を取得」からtar.gzを一度だけ取得
+2. ファイル選択でCreator OSへ登録
+3. IndexedDBへBlobとして永続保存
+4. `DictLoader.loadJaDict()` が辞書URLを要求した瞬間だけ、IndexedDBのBlobをResponseとして返す
+5. 以後はGitHub Releasesへfetchしない
 
-辞書ロードが失敗すると、STEP 1Cに取得ログを併記する。
+Piper / ONNX / G2Pの成功済み経路は維持。
 
-## 目的
-次の対策を推測で決めず、
-辞書ファイルURLの404/502、CORS、MIME、Safariの通信失敗などを実データで確定する。
+## テスト
+- GitHubへ上書き
+- Voice Labを開く
+- 初回のみ辞書を取得・選択・端末へ保存
+- 「音声エンジンを準備」
+- 「こんにちは。今日はいい天気ですね。本田宗一郎。」で生成
