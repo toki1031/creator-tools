@@ -1,23 +1,45 @@
-# Creator OS Sprint 3.4.1 — Kokoro正式Voice Lab統合
+# Creator OS Sprint 3.4.2 — Kokoroナレーション動画接続版
 
-Sprint 3.4.0でiPhone Safari実機合格したKokoro日本語TTSをVoice Labの正式経路へ統合。
+## 実コード確認結果
+現行 `videoRenderer.js` には既に以下が実装済み:
+- `project.narration.audioData` の取得
+- ArrayBuffer化
+- Web Audio `decodeAudioData`
+- ナレーションGain
+- BGMとのミックス
+- ナレーション中のBGMダッキング
+- MediaRecorder音声トラックへの追加
+- MP4生成
 
-## 今回完成
-- Kokoro日本語TTSをVoice Labへ統合
-- 女性4声 / 男性1声
-- 日本語台本→生成→試聴→WAV保存
-- 「動画用ナレーションに登録」
-- 登録音声をIndexedDB `creator-os-audio / narrations` にprojectId単位で保存
-- Piper Plus旧経路をVoice Labから撤去
+したがって動画レンダラーの大改造は不要。
 
-## テスト
-1. 全ファイルをGitHubへ上書き
-2. `voice-lab?project=...` を開く
-3. 音声エンジンを準備
-4. 音声を生成
-5. 再生確認
-6. 「この音声を動画用ナレーションに登録」
-7. 「登録完了 ✓」を確認
+## Sprint 3.4.2の修正
+Voice Labの「この音声を動画用ナレーションに登録」で、
+Kokoro生成WAVを以下へ正式保存する。
 
-## 次
-Sprint 3.4.2: videoRenderer.js が登録済みWAVを読み込み、動画音声トラックへ合成。
+`creator-os` IndexedDB
+→ projects
+→ 対象project
+→ `project.narration.audioData`
+
+同時に:
+- fileName: `Kokoro_<voice>.wav`
+- mimeType: `audio/wav`
+- source: `kokoro-js-jp`
+- voiceId
+- speechScript
+
+も保存。
+
+従来の `creator-os-audio / narrations` へのBlob保存も再利用・診断用として維持。
+
+## 実機テスト
+1. Voice LabでKokoro音声を生成
+2. 「この音声を動画用ナレーションに登録」
+3. 「project.narration.audioData 保存済み」を確認
+4. Creator OSへ戻る
+5. 出力画面の素材チェックで `✓ ナレーション：Kokoro_...wav`
+6. BGM ONのまま10秒動画を生成
+7. 動画でナレーションとBGM両方が聞こえるか確認
+
+成功したら、ナレーション生成→登録→動画合成の基本経路は完成。

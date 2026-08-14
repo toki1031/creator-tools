@@ -1,6 +1,6 @@
 {
-  "build": "Creator OS Sprint 3.4.1",
-  "buildId": "s341-kokoro-voice-lab",
+  "build": "Creator OS Sprint 3.4.2",
+  "buildId": "s342-kokoro-video-connect",
   "created": "2026-08-14",
   "files": [
     {
@@ -10,23 +10,33 @@
     },
     {
       "file": "voice-lab.html",
-      "sha256": "a944d6e3775e1b5d",
-      "bytes": 6433
+      "sha256": "b0575793e6b517de",
+      "bytes": 8815
     },
     {
-      "file": "kokoro-lab.html",
-      "sha256": "c1e4acd14ae399ba",
-      "bytes": 6080
-    },
-    {
-      "file": "diagnostics.html",
-      "sha256": "7f6cf907b210996b",
-      "bytes": 2518
+      "file": "main.js",
+      "sha256": "2a5bd6a913165527",
+      "bytes": 113332
     },
     {
       "file": "videoRenderer.js",
       "sha256": "8bdd3af518de0e04",
       "bytes": 24868
+    },
+    {
+      "file": "db.js",
+      "sha256": "33628bafac775d67",
+      "bytes": 2307
+    },
+    {
+      "file": "style.css",
+      "sha256": "4730d04116ce77fa",
+      "bytes": 16354
+    },
+    {
+      "file": "diagnostics.html",
+      "sha256": "7f6cf907b210996b",
+      "bytes": 2518
     }
   ]
 }

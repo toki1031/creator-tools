@@ -19,8 +19,8 @@ audio,progress{width:100%;margin-top:12px}
 </head>
 <body><div class="wrap">
 <a class="btn secondary" href="./index.html">← Creator OSへ戻る</a>
-<h1>無料 Voice Lab <small>Sprint 3.4.1</small></h1>
-<p class="muted">実機合格したKokoro日本語TTSを正式経路にしました。Piper Plus旧経路は使用しません。</p>
+<h1>無料 Voice Lab <small>Sprint 3.4.2</small></h1>
+<p class="muted">実機合格したKokoro日本語TTSをCreator OS本体へ接続しました。生成WAVは対象プロジェクトのナレーションとして直接保存され、動画レンダラーがそのまま読み込みます。</p>
 
 <div class="card">
 <h2>1. 音声エンジン</h2>
@@ -52,17 +52,43 @@ audio,progress{width:100%;margin-top:12px}
 <div class="card">
 <h2>3. 登録状態</h2>
 <pre id="registered">未登録</pre>
-<p class="muted">登録した音声は、この端末のIndexedDBへ保存します。次Sprintで動画レンダラーがここから読み込みます。</p>
+<p class="muted">登録した音声は、対象プロジェクトの narration.audioData にWAVとして保存します。出力画面の素材チェックで「ナレーション ✓」になり、そのまま動画生成へ使用できます。</p>
 </div>
 </div>
 
 <script type="module">
+import { getProject, saveProject } from "./db.js";
 const $=s=>document.querySelector(s);
 let tts=null, wavBlob=null, wavUrl=null;
 const params=new URLSearchParams(location.search);
 const projectId=params.get('project') || 'default';
 
 function setLog(id,msg,cls=''){const e=$(id);e.textContent=msg;e.className=cls}
+const blobToDataUrl = blob => new Promise((resolve,reject)=>{
+  const r=new FileReader();
+  r.onload=()=>resolve(String(r.result));
+  r.onerror=()=>reject(r.error || new Error('WAVのData URL変換に失敗しました'));
+  r.readAsDataURL(blob);
+});
+
+async function loadProjectIntoVoiceLab(){
+  if(projectId==='default') return;
+  try{
+    const project=await getProject(projectId);
+    if(!project) return;
+    if(project.speechScript) $('#text').value=project.speechScript;
+    const n=project.narration||{};
+    if(n.voiceId && [...$('#voice').options].some(o=>o.value===n.voiceId)) $('#voice').value=n.voiceId;
+    if(n.audioData){
+      setLog('#registered',
+        `プロジェクト登録済み ✓\nproject=${projectId}\nvoice=${n.voiceId||n.fileName||'不明'}\nsource=${n.source||'不明'}\n出力画面でそのまま使用できます。`,
+        'ok'
+      );
+    }
+  }catch(e){
+    setLog('#registered','プロジェクト読込警告:\n'+(e?.message||e),'warn');
+  }
+}
 function openDB(){
  return new Promise((resolve,reject)=>{
    const r=indexedDB.open('creator-os-audio',1);
@@ -81,6 +107,7 @@ async function loadRegistered(){
  }catch(e){}
 }
 loadRegistered();
+loadProjectIntoVoiceLab();
 
 $('#prepare').onclick=async()=>{
  $('#prepare').disabled=true; $('#prog').value=5;
@@ -119,12 +146,52 @@ $('#generate').onclick=async()=>{
 
 $('#register').onclick=async()=>{
  try{
-  const db=await openDB(); const tx=db.transaction('narrations','readwrite');
-  const item={projectId,blob:wavBlob,voice:$('#voice').value,text:$('#text').value.trim(),mime:wavBlob.type||'audio/wav',updatedAt:new Date().toISOString()};
+  if(!wavBlob) throw new Error('先に音声を生成してください。');
+  if(projectId==='default') throw new Error('プロジェクトIDがありません。Creator OSの「無料Voice Labを開く」から開いてください。');
+
+  const voice=$('#voice').value;
+  const text=$('#text').value.trim();
+  const mime=wavBlob.type||'audio/wav';
+  const audioData=await blobToDataUrl(wavBlob);
+
+  // 1) Creator OS本体のプロジェクトへ正式保存。
+  const project=await getProject(projectId);
+  if(!project) throw new Error(`対象プロジェクトが見つかりません: ${projectId}`);
+
+  project.narration={
+    ...(project.narration||{}),
+    audioData,
+    fileName:`Kokoro_${voice}.wav`,
+    mimeType:mime,
+    source:'kokoro-js-jp',
+    voiceId:voice,
+    volume:project.narration?.volume ?? 1
+  };
+  project.speechScript=text || project.speechScript || '';
+  project.updatedAt=new Date().toISOString();
+  await saveProject(project);
+
+  // 2) 生成WAV Blobも端末内へ保持（再利用・診断用）。
+  const db=await openDB();
+  const tx=db.transaction('narrations','readwrite');
+  const item={projectId,blob:wavBlob,voice,text,mime,updatedAt:new Date().toISOString()};
   tx.objectStore('narrations').put(item);
   await new Promise((res,rej)=>{tx.oncomplete=res;tx.onerror=()=>rej(tx.error)});
-  setLog('#registered',`登録完了 ✓\nproject=${projectId}\nvoice=${item.voice}\nWAV=${(item.blob.size/1024).toFixed(1)}KB\n次は動画レンダラー接続へ進めます。`,'ok');
- }catch(e){setLog('#registered','登録失敗:\n'+(e?.stack||e),'bad')}
+
+  setLog('#registered',
+    `登録完了 ✓
+project=${projectId}
+voice=${voice}
+WAV=${(wavBlob.size/1024).toFixed(1)}KB
+project.narration.audioData 保存済み
+
+次はCreator OSへ戻り、出力画面の素材チェックで「ナレーション ✓」を確認して動画を生成してください。`,
+    'ok'
+  );
+ }catch(e){
+  setLog('#registered','登録失敗:
+'+(e?.stack||e),'bad');
+ }
 };
 $('#download').onclick=()=>{if(!wavUrl)return;const a=document.createElement('a');a.href=wavUrl;a.download='creator-os-narration.wav';a.click()};
 </script></body></html>
