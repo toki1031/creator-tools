@@ -75,7 +75,7 @@ $('#prepare').onclick = async () => {
 
     status(out,'[1/9] G2P本体を同一オリジン経由で取得しています…','warn');
     prog.value=10;
-    const g2pUrl = 'https://cdn.jsdelivr.net/npm/@piper-plus/g2p@0.4.1/src/index.js';
+    const g2pUrl = 'https://cdn.jsdelivr.net/npm/@piper-plus/g2p@0.4.0/src/index.js';
     const g2pResp = await fetch(g2pUrl, {cache:'no-store', mode:'cors'});
     if(!g2pResp.ok) throw new Error(`STEP 1A G2P取得失敗 HTTP ${g2pResp.status}`);
     const g2pType = g2pResp.headers.get('content-type') || '不明';
@@ -108,13 +108,13 @@ $('#prepare').onclick = async () => {
       ort.env.wasm.proxy = false;
     } catch(e){ throw new Error(`STEP 3 ONNX Runtime初期化失敗: ${e?.message || e}`); }
 
-    status(out,'[6/10] Piper Plus配布元を検証しています…','warn');
+    status(out,'[6/10] npm公開版 Piper Plus 0.6.0 を検証しています…','warn');
     prog.value=45;
 
     const piperCandidates = [
-      'https://unpkg.com/piper-plus@0.7.0/src/index.js',
-      'https://cdn.jsdelivr.net/npm/piper-plus@0.7.0/src/index.js',
-      'https://esm.sh/piper-plus@0.7.0'
+      'https://cdn.jsdelivr.net/npm/piper-plus@0.6.0/src/index.js',
+      'https://unpkg.com/piper-plus@0.6.0/src/index.js',
+      'https://esm.sh/piper-plus@0.6.0'
     ];
     let piperAsset = null;
     let piperSourceUrl = '';
@@ -139,16 +139,17 @@ $('#prepare').onclick = async () => {
       }
     }
     if (!piperSourceUrl) {
-      throw new Error(`STEP 4A Piper Plus取得失敗。配布元3系統すべてNG。\n${failures.join('\n')}`);
+      throw new Error(`STEP 4A 公開版 Piper Plus 0.6.0取得失敗。配布元3系統すべてNG。\n${failures.join('\n')}`);
     }
 
-    status(out,`[7/10] Piper Plus取得成功。モジュール読込を検証しています…\n${piperSourceUrl}`,'warn');
+    status(out,`[7/10] 公開版 Piper Plus 0.6.0取得成功。ES Module読込を検証しています…\n${piperSourceUrl}`,'warn');
     prog.value=53;
     let piperModule;
     try { piperModule = await import(piperSourceUrl); }
     catch(e){ throw new Error(`STEP 4B Piper Plus本体は取得成功しましたがES Module読込失敗: ${e?.message || e}\n取得元: ${piperSourceUrl}`); }
     const PiperPlus = piperModule.PiperPlus;
-    if(!PiperPlus) throw new Error(`STEP 4C PiperPlus exportなし: ${Object.keys(piperModule).join(', ')}`);
+    const piperExports = Object.keys(piperModule);
+    if(!PiperPlus) throw new Error(`STEP 4C PiperPlus exportなし。公開export: ${piperExports.join(', ') || '(なし)'}`);
 
     // Piperが使う2つの主要依存が、すでに取得済みの同じmodule namespaceとして利用可能かを確認。
     if(!g2pModule || !ort?.InferenceSession) throw new Error('STEP 4D Piper依存接続確認失敗');
@@ -172,7 +173,7 @@ $('#prepare').onclick = async () => {
     prog.value=100;
     status(out,'準備完了。日本語ナレーションを生成できます。','ok');
     $('#generate').disabled=false; btn.textContent='準備済み';
-    showDiagnostics(`成功: Piper same-origin / G2P known-good direct / Piper=${piperAsset.type} / G2P=${g2pAsset.type} / ORT=${jsAsset.type} / WASM=${wasmBin.type}`);
+    showDiagnostics(`成功: Piper Plus 0.6.0 / G2P 0.4.0 / Piper=${piperAsset.type} / G2P=${g2pAsset.type} / ORT=${jsAsset.type} / WASM=${wasmBin.type}`);
   }catch(err){
     console.error(err); status(out,`準備に失敗しました。\n${err?.message || err}`,'warn'); btn.disabled=false;
     showDiagnostics(`Voice Lab 3.2.3 初期化失敗 / ${err?.message || err}`);

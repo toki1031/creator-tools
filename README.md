@@ -1,14 +1,35 @@
-# Creator OS Sprint 3.2.3 — Piper配布元切り分け診断版
+# Creator OS Sprint 3.2.4 — Piper npm公開版0.6.0準拠
 
-目的:
-- Sprint 3.2.2 で STEP 4A が HTTP 502 だったため、Piper Plus本体の「取得失敗」と
-  「取得後のES Module解決失敗」を分離して診断する。
-- G2P / ONNX Runtime の成功経路は維持する。
-- Piper本体は unpkg → jsDelivr → esm.sh の順に取得可否を検査し、
-  HTTP status / MIME / 内容サイズを確認する。
-- 取得できた配布元だけを import し、STEP 4Bでモジュール解決を診断する。
+## この版で直したこと
+Sprint 3.2.3 の診断で、piper-plus@0.7.0 は unpkg / jsDelivr / esm.sh の3系統で取得できず、
+jsDelivr と esm.sh では 404 になった。
 
-注意:
-この版は「完全ローカル同梱」を装う版ではありません。
-物理同梱には npm 配布物と依存WASMを正しく取得・固定する必要があるため、
-まず現在の502が特定CDN由来か、Piperパッケージ自体のブラウザ解決由来かを確定します。
+公開npmパッケージの package.json を確認した結果:
+- piper-plus 公開版: 0.6.0
+- ES Module正式入口: src/index.js
+- @piper-plus/g2p 依存: ^0.4.0
+- onnxruntime-web peer dependency: >=1.21.0
+
+このため Sprint 3.2.4 では 0.7.0 前提を完全撤去し、
+公開npm仕様に合わせて以下を固定した。
+
+- piper-plus@0.6.0/src/index.js
+- @piper-plus/g2p@0.4.0/src/index.js
+- ONNX Runtime Web: Sprint 3.2.0以降で実機突破済みのSafari対策経路を維持
+
+## 診断順
+STEP 1  G2P
+STEP 2  ONNX JS/WASM
+STEP 3  ONNX初期化
+STEP 4A Piper Plus 0.6.0取得
+STEP 4B Piper Plus ES Module読込
+STEP 4C PiperPlus export確認
+STEP 4D G2P / ONNX接続確認
+STEP 5  日本語モデル初期化
+STEP 6  日本語WAV生成
+
+## テスト
+GitHubへ中身を上書きし、
+Voice Lab → 「音声エンジンを準備」を実行する。
+
+次に失敗した場合は、STEP番号と全文をそのまま記録する。
