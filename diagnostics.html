@@ -1,0 +1,21 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Creator OS 診断</title>
+<style>body{font-family:-apple-system,sans-serif;background:#0b0f18;color:#eef2ff;margin:0;padding:22px}.card{background:#141a27;border:1px solid #30384d;border-radius:18px;padding:18px;margin:14px 0}.ok{color:#8ef0c4}.bad{color:#ff9f9f}button,a{background:#7567f8;color:#fff;border:0;border-radius:12px;padding:13px 16px;font-weight:700;text-decoration:none;margin:5px}pre{white-space:pre-wrap;word-break:break-word;background:#0e1320;padding:12px;border-radius:10px}</style></head>
+<body><h1>Creator OS 診断</h1><div class="card"><h2>現在のビルド</h2><div id="build">確認中…</div></div>
+<div class="card"><h2>キャッシュ状態</h2><div id="cache">確認中…</div><button id="clear">Cache Storageを削除</button><button id="sw">Service Workerを解除</button></div>
+<div class="card"><h2>主要ファイル</h2><div id="files">確認中…</div></div>
+<div class="card"><a href="./voice-lab">Voice Labへ</a></div>
+<script>
+const $=s=>document.querySelector(s);
+async function load(){
+ try{
+  const r=await fetch('./build-info.json?ts='+Date.now(),{cache:'no-store'}); const j=await r.json();
+  $('#build').innerHTML='<div class="ok"><b>'+j.build+'</b></div><pre>'+JSON.stringify(j,null,2)+'</pre>';
+  let out=[]; for(const f of j.files||[]){try{const rr=await fetch('./'+f.file+'?ts='+Date.now(),{cache:'no-store'});const ab=await rr.arrayBuffer();out.push(f.file+': HTTP '+rr.status+' / '+ab.byteLength+' bytes / '+(rr.headers.get('content-type')||'unknown'));}catch(e){out.push(f.file+': '+e.message)}}
+  $('#files').innerHTML='<pre>'+out.join('\n')+'</pre>';
+ }catch(e){$('#build').innerHTML='<div class="bad">'+e.message+'</div>'}
+ try{const regs=await navigator.serviceWorker.getRegistrations();const keys=await caches.keys();$('#cache').innerHTML='<div>Service Worker: '+regs.length+'件</div><div>Cache Storage: '+keys.length+'件</div><pre>'+(keys.join('\n')||'なし')+'</pre>';}catch(e){$('#cache').textContent=e.message}
+}
+$('#clear').onclick=async()=>{for(const k of await caches.keys())await caches.delete(k);alert('Cache Storageを削除しました');load()};
+$('#sw').onclick=async()=>{for(const r of await navigator.serviceWorker.getRegistrations())await r.unregister();alert('Service Workerを解除しました');load()};
+load();
+</script></body></html>

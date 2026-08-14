@@ -1,0 +1,22 @@
+{
+  "build": "Creator OS Sprint 3.3.2",
+  "buildId": "s332-cache-diagnostics",
+  "created": "2026-08-14",
+  "files": [
+    {
+      "file": "index.html",
+      "sha256": "a6564c7e5519e8c5",
+      "bytes": 1291
+    },
+    {
+      "file": "voice-lab.html",
+      "sha256": "8302bbc3bbd167ac",
+      "bytes": 4572
+    },
+    {
+      "file": "videoRenderer.js",
+      "sha256": "8bdd3af518de0e04",
+      "bytes": 24868
+    }
+  ]
+}
