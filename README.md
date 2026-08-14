@@ -1,23 +1,25 @@
-# Creator OS Sprint 3.2.5 — 日本語G2P修正版
+# Creator OS Sprint 3.2.6 — 日本語G2P明示初期化修正版
 
-実機で Sprint 3.2.4 はエンジン準備に成功したが、日本語生成時に:
+## 実機で確認されたエラー
 G2P: language "ja" is not initialised.
-Available languages: [en, es, fr, pt]
-が発生。
+Available languages: [en, es, fr, pt].
+Pass the language in G2P.create({ languages: [...] }) to enable it.
 
-原因:
-Sprint 3.2.4 で @piper-plus/g2p を 0.4.0 に固定していた。
-Piper Plus 0.6.0 の依存仕様は @piper-plus/g2p ^0.4.1。
-日本語(OpenJTalk/WASM)を含む依存側を 0.4.1 に戻す。
+## 根本修正
+@piper-plus/g2p の日本語利用手順に合わせて:
 
-変更:
-- piper-plus: 0.6.0 維持
-- @piper-plus/g2p: 0.4.0 → 0.4.1
-- ONNX/Safari対策: 成功済み経路を維持
-- synthesize(..., { language: 'ja' }) は維持
+1. `DictLoader` を生成
+2. `await loader.loadJaDict()` で日本語OpenJTalk辞書を準備
+3. `G2P.create()` をラップ
+4. Piper Plus内部からG2P.create()が呼ばれた場合でも
+   `languages` に必ず `ja` を追加
+5. `jaDict` を必ず渡す
+6. Piper初期化前に「こんにちは」で日本語G2Pのスモークテスト
 
-テスト:
-1. GitHubへ上書き
-2. SafariでVoice Labを再読み込み
-3. 「音声エンジンを準備」
-4. 「こんにちは。いい天気ですね。」で「音声を生成」
+既存の英語・スペイン語・フランス語・ポルトガル語などの languages は削除せず維持する。
+
+## テスト
+- Voice LabをSafariで再読み込み
+- 「音声エンジンを準備」
+- STEP 1C 日本語G2P準備成功を確認
+- 「こんにちは。いい天気ですね。」で「音声を生成」

@@ -89,15 +89,64 @@ $('#prepare').onclick = async () => {
     try { g2pModule = await import('@piper-plus/g2p'); }
     catch(e){ throw new Error(`STEP 1B @piper-plus/g2p 読込失敗: ${e?.message || e}`); }
 
-    status(out,'[3/9] ONNX Runtime WASM bundleを確認しています…','warn');
+    // Sprint 3.2.6:
+    // Piper Plus 0.6.0 internally calls G2P.create() without enabling Japanese
+    // in this Safari/CDN combination. Prepare the OpenJTalk dictionary here and
+    // wrap G2P.create() so every internal call retains existing languages and
+    // always enables "ja".
+    status(out,'[2.5/10] 日本語G2P（OpenJTalk辞書）を初期化しています…','warn');
+    prog.value=20;
+    try {
+      const { G2P, DictLoader } = g2pModule || {};
+      if (!G2P || typeof G2P.create !== 'function') {
+        throw new Error(`G2P.create exportなし: ${Object.keys(g2pModule || {}).join(', ')}`);
+      }
+      if (!DictLoader) {
+        throw new Error(`DictLoader exportなし: ${Object.keys(g2pModule || {}).join(', ')}`);
+      }
+
+      const loader = new DictLoader();
+      const jaDict = await loader.loadJaDict();
+
+      // Keep the original factory once. Re-preparing the engine must not stack wrappers.
+      if (!G2P.__creatorOsOriginalCreate) {
+        const originalCreate = G2P.create.bind(G2P);
+        Object.defineProperty(G2P, '__creatorOsOriginalCreate', {
+          value: originalCreate,
+          configurable: true
+        });
+
+        G2P.create = async (options = {}) => {
+          const current = Array.isArray(options.languages) ? options.languages : [];
+          const languages = [...new Set(['ja', ...current])];
+          return G2P.__creatorOsOriginalCreate({
+            ...options,
+            languages,
+            jaDict: options.jaDict || jaDict
+          });
+        };
+      }
+
+      // Smoke-test the exact factory Piper Plus will call.
+      const smoke = await G2P.create({ languages: ['ja'] });
+      const smokeResult = smoke.phonemize('こんにちは', 'ja');
+      if (!smokeResult) throw new Error('日本語phonemizeが空の結果を返しました');
+      if (typeof smoke.dispose === 'function') smoke.dispose();
+
+      status(out,'日本語G2P準備成功。Piper Plusへ接続します…','ok');
+    } catch(e) {
+      throw new Error(`STEP 1C 日本語G2P初期化失敗: ${e?.message || e}`);
+    }
+
+    status(out,'[3/10] ONNX Runtime WASM bundleを確認しています…','warn');
     prog.value=23;
     const jsAsset = await checkVirtualAsset('./vendor/onnxruntime/ort.wasm.bundle.min.mjs', 'STEP 2A ONNX WASM bundle');
 
-    status(out,'[4/9] ONNX Runtime WASM本体を確認しています…','warn');
+    status(out,'[4/10] ONNX Runtime WASM本体を確認しています…','warn');
     prog.value=30;
     const wasmBin = await checkVirtualAsset('./vendor/onnxruntime/ort-wasm-simd-threaded.wasm', 'STEP 2B ONNX WASM本体');
 
-    status(out,'[5/9] ONNX Runtimeを初期化しています…','warn');
+    status(out,'[5/10] ONNX Runtimeを初期化しています…','warn');
     prog.value=38;
     let ort;
     try {
@@ -173,10 +222,10 @@ $('#prepare').onclick = async () => {
     prog.value=100;
     status(out,'準備完了。日本語ナレーションを生成できます。','ok');
     $('#generate').disabled=false; btn.textContent='準備済み';
-    showDiagnostics(`成功: Piper Plus 0.6.0 / G2P 0.4.1 / Piper=${piperAsset.type} / G2P=${g2pAsset.type} / ORT=${jsAsset.type} / WASM=${wasmBin.type}`);
+    showDiagnostics(`成功: Piper Plus 0.6.0 / G2P 0.4.1 + JA/OpenJTalk / Piper=${piperAsset.type} / G2P=${g2pAsset.type} / ORT=${jsAsset.type} / WASM=${wasmBin.type}`);
   }catch(err){
     console.error(err); status(out,`準備に失敗しました。\n${err?.message || err}`,'warn'); btn.disabled=false;
-    showDiagnostics(`Voice Lab 3.2.3 初期化失敗 / ${err?.message || err}`);
+    showDiagnostics(`Voice Lab 3.2.6 初期化失敗 / ${err?.message || err}`);
   }
 };
 
