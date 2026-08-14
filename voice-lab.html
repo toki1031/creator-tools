@@ -10,12 +10,12 @@
 <body>
   <main class="voice-lab">
     <a id="backLink" class="button-link" href="./">← Creator OSへ戻る</a>
-    <h1>無料 Voice Lab <small style="font-size:.45em;color:#9ba3b9">Sprint 3.2.4</small></h1>
+    <h1>無料 Voice Lab <small style="font-size:.45em;color:#9ba3b9">実証版</small></h1>
     <p class="muted">台本からブラウザ内で日本語ナレーションを生成し、そのままプロジェクトへ登録する実験機能です。</p>
 
     <section class="voice-lab-card">
       <h2>1. 音声エンジン</h2>
-      <p>Piper Plus npm公開版 0.6.0（ブラウザ/WASM）を使用します。公開package.jsonのexportsに従い src/index.js を正式入口として読み込みます。G2Pは公開依存 ^0.4.0 に合わせ、ONNX Runtimeは前版で実機成功したSafari対策経路を維持します。</p>
+      <p>Piper Plus 0.7.0（ブラウザ/WASM）を使用します。ONNX Runtimeに加え、Piper Plus本体は同一オリジン経由、G2Pは前版で実機成功した公式npm CDN経路へ固定して読み込みます。初回は必要ファイルと音声モデルの取得が必要です。取得後は端末キャッシュを優先します。</p>
       <div class="voice-meta">
         <div><small>エンジン</small><br><b>Piper Plus</b></div>
         <div><small>実証音声</small><br><b>つくよみちゃん</b></div>
@@ -53,9 +53,9 @@
   <script type="importmap">
   {
     "imports": {
-      "piper-plus": "https://cdn.jsdelivr.net/npm/piper-plus@0.6.0/src/index.js",
+      "piper-plus": "./vendor/piper-plus/index.js",
       "onnxruntime-web": "./vendor/onnxruntime/ort.wasm.bundle.min.mjs",
-      "@piper-plus/g2p": "https://cdn.jsdelivr.net/npm/@piper-plus/g2p@0.4.0/src/index.js"
+      "@piper-plus/g2p": "https://cdn.jsdelivr.net/npm/@piper-plus/g2p@0.4.1/src/index.js"
     }
   }
   </script>
