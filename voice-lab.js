@@ -161,7 +161,7 @@ $('#prepare').onclick = async () => {
     try { g2pModule = await import('@piper-plus/g2p'); }
     catch(e){ throw new Error(`STEP 1B @piper-plus/g2p 読込失敗: ${e?.message || e}`); }
 
-    // Sprint 3.2.8:
+    // Sprint 3.2.9:
     // Piper Plus 0.6.0 internally calls G2P.create() without enabling Japanese
     // in this Safari/CDN combination. Prepare the OpenJTalk dictionary here and
     // wrap G2P.create() so every internal call retains existing languages and
@@ -177,9 +177,50 @@ $('#prepare').onclick = async () => {
         throw new Error(`DictLoader exportなし: ${Object.keys(g2pModule || {}).join(', ')}`);
       }
 
+      // Sprint 3.2.9:
+      // JapaneseG2P requires an initialized OpenJTalk WASM module.
+      // Try the exports exposed by @piper-plus/g2p first, then report exact exports
+      // if the runtime shape differs.
+      status(out,'[2.4/10] OpenJTalk WASMモジュールを初期化しています…','warn');
+      prog.value=18;
+
+      let openjtalkModule = null;
+      try {
+        const candidates = [
+          g2pModule.createOpenJTalkModule,
+          g2pModule.createOpenjtalkModule,
+          g2pModule.initOpenJTalk,
+          g2pModule.initializeOpenJTalk,
+          g2pModule.OpenJTalkModule
+        ].filter(Boolean);
+
+        if (typeof candidates[0] === 'function') {
+          openjtalkModule = await candidates[0]();
+        } else if (candidates[0]) {
+          openjtalkModule = candidates[0];
+        }
+
+        // Some builds expose a dedicated JapaneseG2P initializer.
+        if (!openjtalkModule && g2pModule.JapaneseG2P?.initialize) {
+          try {
+            openjtalkModule = await g2pModule.JapaneseG2P.initialize();
+          } catch (_) {}
+        }
+
+        if (!openjtalkModule) {
+          throw new Error(
+            `OpenJTalk初期化exportが見つかりません。公開export: ${Object.keys(g2pModule || {}).join(', ')}`
+          );
+        }
+
+        status(out,'OpenJTalk WASMモジュール初期化成功。日本語辞書を接続します…','ok');
+      } catch (e) {
+        throw new Error(`STEP 1B2 OpenJTalk WASM初期化失敗: ${e?.message || e}`);
+      }
+
       const loader = new DictLoader();
 
-      // Sprint 3.2.8:
+      // Sprint 3.2.9:
       // Japanese dictionary is registered once by the user and persisted in IndexedDB.
       // DictLoader still requests its normal GitHub URL, but during loadJaDict() only,
       // that request is satisfied from the local Blob. Other fetches are untouched.
@@ -264,13 +305,14 @@ $('#prepare').onclick = async () => {
           return G2P.__creatorOsOriginalCreate({
             ...options,
             languages,
-            jaDict: options.jaDict || jaDict
+            jaDict: options.jaDict || jaDict,
+            openjtalkModule: options.openjtalkModule || openjtalkModule
           });
         };
       }
 
       // Smoke-test the exact factory Piper Plus will call.
-      const smoke = await G2P.create({ languages: ['ja'] });
+      const smoke = await G2P.create({ languages: ['ja'], jaDict, openjtalkModule });
       const smokeResult = smoke.phonemize('こんにちは', 'ja');
       if (!smokeResult) throw new Error('日本語phonemizeが空の結果を返しました');
       if (typeof smoke.dispose === 'function') smoke.dispose();
