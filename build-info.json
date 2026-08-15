@@ -1,6 +1,6 @@
 {
-  "build": "Creator OS Sprint 3.5.0",
-  "buildId": "s350-scene-narration-sync",
+  "build": "Creator OS Sprint 3.6.0",
+  "buildId": "s360-phrase-subtitle-sync",
   "created": "2026-08-15",
   "files": [
     {
@@ -10,18 +10,18 @@
     },
     {
       "file": "voice-lab.html",
-      "sha256": "1d261f715e4874bd",
+      "sha256": "ed57271eb9fa6871",
       "bytes": 13028
     },
     {
       "file": "main.js",
-      "sha256": "59e3e7bf44c18d8b",
-      "bytes": 113761
+      "sha256": "14d4217fbc7124a2",
+      "bytes": 113856
     },
     {
       "file": "videoRenderer.js",
-      "sha256": "4d5320162673ef78",
-      "bytes": 27578
+      "sha256": "3fe8bd0d1a691ce6",
+      "bytes": 29445
     },
     {
       "file": "db.js",

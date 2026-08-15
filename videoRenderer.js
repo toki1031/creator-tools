@@ -228,6 +228,48 @@ function subtitleLines(text, maxChars = 16, maxLines = 2) {
   return result.slice(0, Math.max(1, maxLines));
 }
 
+function splitSubtitlePhrases(text, maxChars = 13) {
+  const normalized = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!normalized) return [];
+  const units = normalized.match(/[^、。！？!?，,.]+[、。！？!?，,.]?/g) || [normalized];
+  const phrases = [];
+  for (const unitRaw of units) {
+    const unit = unitRaw.trim();
+    if (!unit) continue;
+    const chars = Array.from(unit);
+    while (chars.length > maxChars) phrases.push(chars.splice(0, maxChars).join(''));
+    if (chars.length) phrases.push(chars.join(''));
+  }
+  // 極端に短い断片は前の字幕へ結合し、ちらつきを抑える。
+  const merged = [];
+  for (const phrase of phrases) {
+    if (merged.length && Array.from(phrase).length <= 3 && Array.from(merged[merged.length-1] + phrase).length <= maxChars + 3) {
+      merged[merged.length-1] += phrase;
+    } else merged.push(phrase);
+  }
+  return merged;
+}
+
+function activeSubtitlePhrase(scene, localTime, start, end, maxChars = 13) {
+  const text = scene.subtitleText || scene.text || '';
+  const phrases = splitSubtitlePhrases(text, maxChars);
+  if (phrases.length <= 1 || scene.subtitlePhraseSync === false) return text;
+  const span = Math.max(0.001, end - start);
+  const weights = phrases.map(phrase => {
+    const chars = Math.max(1, Array.from(phrase.replace(/\s/g, '')).length);
+    const pause = /[。！？!?]$/.test(phrase) ? 4 : /[、，,]$/.test(phrase) ? 2 : 0;
+    return chars + pause;
+  });
+  const total = weights.reduce((a,b)=>a+b,0) || 1;
+  const position = clamp((localTime - start) / span, 0, 0.999999) * total;
+  let cursor = 0;
+  for (let i=0;i<phrases.length;i++) {
+    cursor += weights[i];
+    if (position < cursor) return phrases[i];
+  }
+  return phrases[phrases.length-1];
+}
+
 function roundedRect(ctx, x, y, width, height, radius) {
   const r = Math.min(radius, width / 2, height / 2);
   ctx.beginPath();
@@ -253,7 +295,8 @@ function drawSubtitle(ctx, project, item, localTime, width, height) {
   const start = Math.max(0, Number(scene.subtitleStartSec) || 0);
   const end = Math.min(item.duration, Math.max(start, Number(scene.subtitleEndSec) || item.duration));
   if (localTime < start || localTime > end) return;
-  const lines = subtitleLines(scene.subtitleText || scene.text || '', style.maxCharsPerLine || 16, style.maxLines || 2);
+  const phraseText = activeSubtitlePhrase(scene, localTime, start, end, Math.min(14, Math.max(8, Number(style.maxCharsPerLine || 16))));
+  const lines = subtitleLines(phraseText, style.maxCharsPerLine || 16, style.maxLines || 2);
   if (!lines.length) return;
 
   const scale = width / 1080;

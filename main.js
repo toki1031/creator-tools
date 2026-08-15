@@ -226,7 +226,7 @@ async function renderScenes(id) {
         <div class="scene-preview">${s.imageData?`<img src="${s.imageData}" alt="">`:`<span>画像未登録</span>`}</div>
         <div class="scene-body"><div class="scene-title"><b>シーン ${i+1}</b><div><button data-up="${i}" ${i===0?"disabled":""}>↑</button><button data-down="${i}" ${i===project.scenes.length-1?"disabled":""}>↓</button><button class="danger" data-remove="${i}">削除</button></div></div>
         <textarea data-text="${i}" placeholder="このシーンの字幕・内容">${escapeHtml(s.text||"")}</textarea>
-        <p class="${s.narration?.audioData?'ok':'muted'}">${s.narration?.audioData?`✓ シーン音声 ${Number(s.narration.durationSec||0).toFixed(2)}秒`:'− シーン音声 未生成'}</p>
+        <p class="${s.narration?.audioData?'ok':'muted'}">${s.narration?.audioData?`✓ シーン音声 ${Number(s.narration.durationSec||0).toFixed(2)}秒／字幕フレーズ同期 ON`:'− シーン音声 未生成'}</p>
         <div class="scene-settings"><label>画像<input data-image="${i}" type="file" accept="image/*"></label><label>秒数<input data-duration="${i}" type="number" min="1" max="3600" value="${Number(s.durationSec)||5}"></label><label>動き<select data-motion="${i}"><option value="none" ${s.motion==="none"?"selected":""}>なし</option><option value="zoom-in" ${s.motion==="zoom-in"?"selected":""}>ズームイン</option><option value="zoom-out" ${s.motion==="zoom-out"?"selected":""}>ズームアウト</option><option value="pan-left" ${s.motion==="pan-left"?"selected":""}>左へパン</option><option value="pan-right" ${s.motion==="pan-right"?"selected":""}>右へパン</option></select></label></div></div>
       </article>`).join(""):`<div class="empty"><div>🖼️</div><h3>シーンがありません</h3><p>「台本から自動分割」または「空のシーン」を押してください。</p></div>`;
     root.querySelectorAll("[data-text]").forEach(el=>el.oninput=()=>{project.scenes[Number(el.dataset.text)].text=el.value;save();});
@@ -262,6 +262,7 @@ function ensureProjectSettings(project) {
     const duration = Math.max(1, Number(scene.durationSec) || 5);
     scene.subtitleText = scene.subtitleText ?? scene.text ?? "";
     scene.subtitleEnabled = scene.subtitleEnabled ?? true;
+    scene.subtitlePhraseSync = scene.subtitlePhraseSync ?? true;
     scene.subtitleStartSec = Math.max(0, Math.min(duration, Number(scene.subtitleStartSec) || 0));
     scene.subtitleEndSec = Math.max(scene.subtitleStartSec, Math.min(duration, Number(scene.subtitleEndSec) || duration));
   });
