@@ -18,9 +18,9 @@ audio,progress{width:100%;margin-top:12px}
 </style>
 </head>
 <body><div class="wrap">
-<a class="btn secondary" href="./index.html">← Creator OSへ戻る</a>
-<h1>無料 Voice Lab <small>Sprint 3.6.0</small></h1>
-<p class="muted">シーン別ナレーション同期に対応しました。各シーンの文章からKokoro音声を順番に生成し、実際のWAV尺を測定してシーン尺・字幕尺を自動同期します。</p>
+<a class="btn secondary" id="returnToProject" href="./index.html">← このプロジェクトのシーン編集へ戻る</a>
+<h1>無料 Voice Lab <small>Sprint 3.7.0</small></h1>
+<p class="muted">シーン編集後のナレーション工程です。確定した各シーンからKokoro音声を生成し、WAV実尺を基準にシーン尺・字幕尺を自動同期します。</p>
 
 <div class="card">
 <h2>1. 音声エンジン</h2>
@@ -31,7 +31,15 @@ audio,progress{width:100%;margin-top:12px}
 </div>
 
 <div class="card">
-<h2>2. ナレーション生成</h2>
+<h2>2. シーン別ナレーション同期（推奨）</h2>
+<p class="muted">Creator OSのシーンを読み込み、1シーンずつ音声を自動生成します。生成したWAVの実尺を基準に、映像のシーン尺と字幕表示尺も自動調整します。</p>
+<button id="generateScenes" disabled>全シーンの音声を生成して同期</button>
+<progress id="sceneProg" max="100" value="0"></progress>
+<pre id="sceneResult">音声エンジン準備後に実行できます。</pre>
+</div>
+
+<div class="card">
+<h2>3. 全文1本ナレーション（任意）</h2>
 <label>声</label>
 <select id="voice">
 <option value="jf_alpha">jf_alpha（女性）</option>
@@ -50,14 +58,6 @@ audio,progress{width:100%;margin-top:12px}
 </div>
 
 <div class="card">
-<h2>3. シーン別ナレーション同期</h2>
-<p class="muted">Creator OSのシーンを読み込み、1シーンずつ音声を自動生成します。生成したWAVの実尺を基準に、映像のシーン尺と字幕表示尺も自動調整します。</p>
-<button id="generateScenes" disabled>全シーンの音声を生成して同期</button>
-<progress id="sceneProg" max="100" value="0"></progress>
-<pre id="sceneResult">音声エンジン準備後に実行できます。</pre>
-</div>
-
-<div class="card">
 <h2>4. 登録状態</h2>
 <pre id="registered">未登録</pre>
 <p class="muted">登録した音声は、対象プロジェクトの narration.audioData にWAVとして保存します。出力画面の素材チェックで「ナレーション ✓」になり、そのまま動画生成へ使用できます。</p>
@@ -71,6 +71,12 @@ document.documentElement.dataset.voiceLabBoot = 'js-started';
 let tts=null, wavBlob=null, wavUrl=null;
 const params=new URLSearchParams(location.search);
 const projectId=params.get('project') || 'default';
+const returnLink=$('#returnToProject');
+if(projectId!=='default'){
+  returnLink.href=`./index.html#/project/${encodeURIComponent(projectId)}/scenes`;
+}else{
+  returnLink.textContent='← Creator OSへ戻る';
+}
 
 function setLog(id,msg,cls=''){const e=$(id);e.textContent=msg;e.className=cls}
 const blobToDataUrl = blob => new Promise((resolve,reject)=>{
@@ -279,9 +285,16 @@ $('#generateScenes').onclick=async()=>{
     await saveProject(project);
 
     setLog('#sceneResult',
-      `シーン同期完了 ✓\n${results.join('\n')}\n\n合計 ${total.toFixed(2)}秒\n映像尺・字幕尺をWAV実尺へ同期しました。\nCreator OSの「2. シーン」または「4. 出力」で確認してください。`,
+      `シーン同期完了 ✓\n${results.join('\n')}\n\n合計 ${total.toFixed(2)}秒\n映像尺・字幕尺をWAV実尺へ同期しました。\nCreator OSのシーン編集へ戻って確認してください。`,
       'ok'
     );
+    if(!document.querySelector('#afterSceneSync')){
+      const box=document.createElement('div');
+      box.id='afterSceneSync';
+      box.className='tool-row';
+      box.innerHTML=`<a class="btn" href="./index.html#/project/${encodeURIComponent(projectId)}/scenes">← シーン編集で確認</a><a class="btn" href="./index.html#/project/${encodeURIComponent(projectId)}/bgm">次へ：字幕・BGM →</a>`;
+      $('#sceneResult').after(box);
+    }
   }catch(e){
     setLog('#sceneResult','シーン同期失敗:\n'+(e?.stack||e),'bad');
   }finally{
