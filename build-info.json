@@ -1,6 +1,6 @@
 {
-  "build": "Creator OS Sprint 3.7.1",
-  "buildId": "s371-remove-stale-narration-ui-handlers",
+  "build": "Creator OS Sprint 3.9.0",
+  "buildId": "s390-natural-japanese-subtitle-split",
   "created": "2026-08-16",
   "files": [
     {
@@ -10,18 +10,18 @@
     },
     {
       "file": "voice-lab.html",
-      "sha256": "c4b88059272011a5",
+      "sha256": "7a2fe86b5dda35f9",
       "bytes": 13735
     },
     {
       "file": "main.js",
-      "sha256": "5f3d293326b08e9a",
-      "bytes": 111121
+      "sha256": "080a37856f594df8",
+      "bytes": 114659
     },
     {
       "file": "videoRenderer.js",
-      "sha256": "3fe8bd0d1a691ce6",
-      "bytes": 29445
+      "sha256": "2394e890376e1600",
+      "bytes": 31857
     },
     {
       "file": "db.js",
@@ -30,8 +30,8 @@
     },
     {
       "file": "style.css",
-      "sha256": "4730d04116ce77fa",
-      "bytes": 16354
+      "sha256": "1ad66312c42c998f",
+      "bytes": 17030
     },
     {
       "file": "diagnostics.html",

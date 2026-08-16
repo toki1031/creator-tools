@@ -10,6 +10,20 @@ const root = rootElement;
 const DICT_KEY = "creator-os-pronunciation-v1";
 
 const escapeHtml = (value = "") => String(value).replace(/[&<>'"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c] ?? c));
+const finalReviewSignature = project => {
+  const scenes=Array.isArray(project?.scenes)?project.scenes:[];
+  return scenes.map((s,i)=>[
+    i,
+    String(s.imageData||"").length,
+    String(s.videoData||"").length,
+    String(s.text||"").trim(),
+    String(s.subtitleText||"").trim(),
+    String(s.speechText||"").trim(),
+    String(s.narration?.audioData||"").length,
+    Number(s.durationSec||0).toFixed(2)
+  ].join(":")).join("|");
+};
+
 const formatDate = (iso) => new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
 const STUDIO = {
   "great-person": { icon:"🎓", title:"偉人Studio", desc:"調査・台本・ナレーション・画像・Shortsを一つの流れで制作", genre:"great-person", platform:"youtube-shorts", status:"利用可能" },
@@ -438,7 +452,8 @@ async function renderOutput(id) {
   const hasImages=scenes.filter(s=>s.imageData).length, total=getProjectDuration(project);
   const timeline=buildSubtitleTimeline(project), subtitleReady=timeline.length, subtitleWarnings=scenes.filter(s=>{const f=formatSubtitleLines(s.subtitleText||'',st.maxCharsPerLine,st.maxLines);return s.subtitleEnabled!==false&&f.overflow;}).length;
   const capabilities=getVideoCapabilities();
-  const validation=validateVideoProject(project);
+  const validation=validateVideoProject(project); const currentReviewSignature=finalReviewSignature(project);
+  const finalReviewApproved=Boolean(project.finalReview?.approved && project.finalReview?.signature===currentReviewSignature);
   const formatLabel=capabilities.mp4?'MP4対応':capabilities.webm?'WebM対応（MP4非対応）':'動画生成非対応';
   const longProject=total>180;
   root.innerHTML=`<main class="shell editor-shell"><header class="editor-head"><button id="back">←</button><div><span>${labelPlatform(project.platform)}</span><h1>${escapeHtml(project.title)}</h1></div><button id="menu">•••</button></header>
@@ -446,12 +461,26 @@ async function renderOutput(id) {
   <section class="editor-card"><div class="section-head"><div><h2>動画出力設定</h2><p>完成動画の形式を設定します。</p></div><span id="saveState">保存済み</span></div><div class="form-grid"><label>解像度<select id="resolution"><option value="1080x1920">1080×1920（高画質）</option><option value="720x1280">720×1280（iPhone推奨・軽量）</option></select></label><label>フレームレート<select id="fps"><option value="30">30fps（推奨）</option><option value="60">60fps（高負荷）</option></select></label><label>品質<select id="quality"><option value="standard">標準</option><option value="high">高品質</option></select></label><label class="check"><input id="subtitles" type="checkbox" ${o.subtitles?'checked':''}>字幕を表示</label><label>字幕位置<select id="subtitlePosition"><option value="top">上</option><option value="center">中央</option><option value="bottom">下</option></select></label><label class="check"><input id="bgmEnabled" type="checkbox" ${o.bgmEnabled?'checked':''}>BGMを使用</label></div></section>
   <section class="editor-card"><div class="section-head"><div><h2>素材チェック</h2><p>動画生成前に不足素材を確認します。</p></div><span class="status-chip ${capabilities.supported?'':'status-warn'}">${formatLabel}</span></div><div class="check-list"><p class="${project.displayScript?'ok':'warn'}">${project.displayScript?'✓':'!'} 台本：${project.displayScript.length}文字</p><p class="${scenes.length?'ok':'warn'}">${scenes.length?'✓':'!'} シーン：${scenes.length}件</p><p class="${hasImages===scenes.length&&scenes.length?'ok':'warn'}">${hasImages===scenes.length&&scenes.length?'✓':'!'} 画像：${hasImages}/${scenes.length}件</p><p class="${subtitleReady?'ok':'warn'}">${subtitleReady?'✓':'!'} 字幕：${subtitleReady}/${scenes.length}件${subtitleWarnings?`（長文警告${subtitleWarnings}件）`:''}</p><p class="${validation.bgmInvalid?'warn':project.bgm?.audioData&&o.bgmEnabled?'ok':'muted'}">${validation.bgmInvalid?'!':project.bgm?.audioData&&o.bgmEnabled?'✓':'−'} BGM音源：${escapeHtml(project.bgm?.fileName||project.bgm?.title||'なし')}${validation.bgmInvalid?'（動画ファイルのため要再登録）':''}</p><p class="${validation.narrationInvalid?'warn':validation.sceneNarrationCount===scenes.length&&scenes.length?'ok':project.narration?.audioData?'ok':'muted'}">${validation.narrationInvalid?'!':validation.sceneNarrationCount===scenes.length&&scenes.length?'✓':project.narration?.audioData?'✓':'−'} ナレーション：${validation.sceneNarrationCount?`シーン別 ${validation.sceneNarrationCount}/${scenes.length}件`:escapeHtml(project.narration?.fileName||'未登録')}${validation.narrationInvalid?'（動画ファイルのため要再登録）':''}</p><p>予定尺：${total.toFixed(1)}秒</p></div>${validation.warnings.length?`<div class="render-warnings">${validation.warnings.map(item=>`<p>⚠ ${escapeHtml(item)}</p>`).join('')}</div>`:''}</section>
 
+  <section class="editor-card final-review-card">
+    <div class="section-head"><div><h2>最終素材チェック</h2><p>動画へ焼き込む直前のシーン素材を目視確認します。ここでは素材の内容を自動判定せず、選択した画像・字幕・ナレーション・尺が意図どおりかを確認します。</p></div><span id="finalReviewStatus" class="status-chip ${finalReviewApproved?'':'status-warn'}">${finalReviewApproved?'確認済み':'未確認'}</span></div>
+    <div class="final-review-grid">
+      ${scenes.map((scene,index)=>`<article class="final-review-item">
+        <div class="final-review-thumb">${scene.imageData?`<img src="${scene.imageData}" alt="シーン${index+1}素材">`:`<div class="warn">映像素材なし</div>`}</div>
+        <div><strong>シーン${index+1}</strong>
+        <p>${escapeHtml((scene.subtitleText||scene.text||scene.speechText||'字幕なし').slice(0,90))}</p>
+        <small>${scene.narration?.audioData?`✓ 音声 ${Number(scene.narration?.durationSec||0).toFixed(2)}秒`:'! ナレーションなし'} / ${Number(scene.durationSec||0).toFixed(2)}秒</small></div>
+      </article>`).join('')}
+    </div>
+    <div class="tool-row"><button id="approveFinalReview" class="primary">${finalReviewApproved?'✓ この素材は確認済み':'✓ この内容で動画生成を許可'}</button><button id="backToScenesReview">← シーン編集へ戻る</button></div>
+    <p id="finalReviewHelp" class="${finalReviewApproved?'ok':'warn'}">${finalReviewApproved?'✓ 現在の素材構成で動画生成できます。':'! 最終確認が終わるまで「動画を生成」は無効です。素材を変更すると確認は自動的に無効になります。'}</p>
+  </section>
+
   <section class="editor-card video-render-card">
     <div class="section-head"><div><h2>動画プレビュー・生成</h2><p>画像、動き、字幕、BGMをブラウザ内で合成します。</p></div><span id="renderStatus">素材準備中…</span></div><div id="assetDiagnostics" class="asset-diagnostics">素材を確認しています…</div>
     <div class="video-canvas-wrap"><canvas id="renderCanvas" width="${o.width}" height="${o.height}"></canvas></div>
     <div class="render-options"><label>生成範囲<select id="renderRange"><option value="10">先頭10秒（動作テスト）</option><option value="full" ${longProject?'disabled':''}>全編（${Math.ceil(total)}秒）</option></select></label><p>${longProject?'全編が3分を超えるため、初版では10秒テストのみです。長時間BGMは今後のサーバー／高速エンジンで対応します。':'全編生成は実時間と同程度かかります。画面を閉じずにお待ちください。'}</p></div>
     <div class="render-progress"><progress id="renderProgress" max="1" value="0"></progress><span id="renderProgressText">0%</span></div>
-    <div class="tool-row"><button id="showFirstFrame">🖼 1フレーム確認</button><button id="previewVideo">▶ 10秒プレビュー</button><button id="stopPreview" disabled>■ プレビュー停止</button><button class="primary" id="generateVideo" ${capabilities.supported?'':'disabled'}>🎬 動画を生成</button><button class="danger" id="cancelRender" disabled>生成を中止</button></div>
+    <div class="tool-row"><button id="showFirstFrame">🖼 1フレーム確認</button><button id="previewVideo">▶ 10秒プレビュー</button><button id="stopPreview" disabled>■ プレビュー停止</button><button class="primary" id="generateVideo" ${capabilities.supported&&finalReviewApproved?'':'disabled'}>🎬 動画を生成</button><button class="danger" id="cancelRender" disabled>生成を中止</button></div>
     <p class="notice">初版は画像＋字幕＋BGMの動画生成です。生成中はSafariを前面に表示し、画面をロックしないでください。対応形式は端末が自動判定します。</p>
     <div id="renderResult" class="render-result" hidden><h3>生成完了</h3><video id="resultVideo" controls playsinline></video><div class="tool-row"><a id="downloadVideo" class="button-link primary" download>動画を保存</a><button id="shareVideo">共有</button></div><div class="tool-row"><button id="verifySavedVideo">保存後ファイルを検証</button><input id="verifySavedVideoInput" type="file" accept="video/*" hidden></div><p id="verifySavedVideoInfo" class="muted"></p><p id="resultInfo"></p></div>
   </section>
@@ -461,6 +490,21 @@ async function renderOutput(id) {
 
   root.querySelector('#resolution').value=`${o.width}x${o.height}`;root.querySelector('#fps').value=String(o.fps);root.querySelector('#quality').value=o.quality;root.querySelector('#subtitlePosition').value=o.subtitlePosition||st.position;
   root.querySelector('#back').onclick=()=>goStudio(studioForGenre(project.genre));root.querySelector('#stepAi').onclick=()=>goAi(id);root.querySelector('#stepScript').onclick=()=>goProject(id);root.querySelector('#stepScenes').onclick=()=>goScenes(id);root.querySelector('#stepBgm').onclick=()=>goBgm(id);root.querySelector('#backBgm').onclick=()=>goBgm(id);root.querySelector('#publish').onclick=root.querySelector('#publish2').onclick=()=>goPublish(id);attachProjectMenu(project,root.querySelector('#menu'),()=>goStudio(studioForGenre(project.genre)));
+  root.querySelector('#backToScenesReview').onclick=()=>goScenes(id);
+  root.querySelector('#approveFinalReview').onclick=async()=>{
+    const missingVisual=scenes.findIndex(scene=>!scene.imageData);
+    if(missingVisual>=0){alert(`シーン${missingVisual+1}に映像素材がありません。シーン編集へ戻って画像または動画を設定してください。`);return;}
+    if(!scenes.length){alert('シーンがありません。');return;}
+    project.finalReview={
+      approved:true,
+      signature:finalReviewSignature(project),
+      approvedAt:new Date().toISOString()
+    };
+    project.updatedAt=new Date().toISOString();
+    await saveProject(project);
+    renderOutput(id);
+  };
+
 
   const canvas=root.querySelector('#renderCanvas');
   const renderStatus=root.querySelector('#renderStatus');
@@ -486,6 +530,10 @@ async function renderOutput(id) {
   root.querySelector('#stopPreview').onclick=()=>previewController?.abort();
 
   root.querySelector('#generateVideo').onclick=async()=>{
+    if(!(project.finalReview?.approved && project.finalReview?.signature===finalReviewSignature(project))){
+      alert('最終素材チェックが未確認、または確認後に素材が変更されています。もう一度「この素材で動画生成を許可」を押してください。');
+      return;
+    }
     if(renderController)return;
     const check=validateVideoProject(project);if(check.errors.length)return alert(check.errors.join('\n'));
     const range=root.querySelector('#renderRange').value;const limit=range==='full'?undefined:10;const duration=limit?Math.min(total,limit):total;
@@ -501,7 +549,7 @@ async function renderOutput(id) {
       const resultBox=root.querySelector('#renderResult');resultBox.hidden=false;const resultVideo=root.querySelector('#resultVideo');resultVideo.src=resultUrl;const link=root.querySelector('#downloadVideo');link.href=resultUrl;link.download=resultFile.name;const info=root.querySelector('#resultInfo');const verifyInfo=root.querySelector('#verifySavedVideoInfo');verifyInfo.textContent='保存後に「保存後ファイルを検証」で同じ動画を選ぶと、変換・縮小の有無を確認できます。';const d=result.diagnostics||{};const captureSize=d.captureWidth&&d.captureHeight?`${d.captureWidth}×${d.captureHeight}`:'取得不可';const baseInfo=`${result.extension.toUpperCase()}・${result.mimeType}・${(result.blob.size/1024/1024).toFixed(1)}MB・${result.durationSec.toFixed(1)}秒`;generatedMeta={size:result.blob.size,width:null,height:null,mime:result.mimeType};try{if(globalThis.crypto?.subtle){const buf=await result.blob.arrayBuffer();const digest=await crypto.subtle.digest('SHA-256',buf);generatedHash=Array.from(new Uint8Array(digest)).map(b=>b.toString(16).padStart(2,'0')).join('');}}catch{}info.textContent=`${baseInfo}\n要求 ${d.requestedWidth||'?'}×${d.requestedHeight||'?'} ／ Canvas ${d.canvasWidth||'?'}×${d.canvasHeight||'?'} ／ captureStream ${captureSize}`;resultVideo.onloadedmetadata=()=>{generatedMeta.width=resultVideo.videoWidth||null;generatedMeta.height=resultVideo.videoHeight||null;info.textContent=`${baseInfo}\n要求 ${d.requestedWidth||'?'}×${d.requestedHeight||'?'} ／ Canvas ${d.canvasWidth||'?'}×${d.canvasHeight||'?'} ／ captureStream ${captureSize} ／ 生成Blob ${resultVideo.videoWidth||'?'}×${resultVideo.videoHeight||'?'}`;};renderStatus.textContent='動画生成が完了しました。';
       resultBox.scrollIntoView({behavior:'smooth',block:'center'});
     }catch(error){if(error.name!=='AbortError'){console.error(error);alert(`動画生成に失敗しました：${error.message}`);}renderStatus.textContent=error.name==='AbortError'?'動画生成を中止しました':'動画生成エラー';}
-    finally{renderController=null;root.querySelector('#cancelRender').disabled=true;root.querySelector('#generateVideo').disabled=!capabilities.supported;root.querySelector('#previewVideo').disabled=false;}
+    finally{renderController=null;root.querySelector('#cancelRender').disabled=true;root.querySelector('#generateVideo').disabled=!(capabilities.supported && project.finalReview?.approved && project.finalReview?.signature===finalReviewSignature(project));root.querySelector('#previewVideo').disabled=false;}
   };
   root.querySelector('#cancelRender').onclick=()=>renderController?.abort();
   root.querySelector('#shareVideo').onclick=async()=>{if(!resultFile)return;try{if(navigator.canShare?.({files:[resultFile]}))await navigator.share({title:project.title,files:[resultFile]});else alert('この端末ではファイル共有を利用できません。「動画を保存」をお使いください。');}catch(error){if(error.name!=='AbortError')alert(`共有できませんでした：${error.message}`);}};
