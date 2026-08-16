@@ -1,6 +1,6 @@
 {
-  "build": "Creator OS Sprint 3.7.0",
-  "buildId": "s370-workflow-navigation",
+  "build": "Creator OS Sprint 3.7.1",
+  "buildId": "s371-remove-stale-narration-ui-handlers",
   "created": "2026-08-16",
   "files": [
     {
@@ -10,13 +10,13 @@
     },
     {
       "file": "voice-lab.html",
-      "sha256": "8e44ea45c2a8b66c",
+      "sha256": "c4b88059272011a5",
       "bytes": 13735
     },
     {
       "file": "main.js",
-      "sha256": "aaac1573dcd0a9fa",
-      "bytes": 113172
+      "sha256": "5f3d293326b08e9a",
+      "bytes": 111121
     },
     {
       "file": "videoRenderer.js",

@@ -1,4 +1,4 @@
-# Creator OS Sprint 3.7.0 — 制作導線再設計版
+# Creator OS Sprint 3.7.1 — 制作導線再設計版
 
 ## 制作順
 0 AIスタッフ
