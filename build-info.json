@@ -1,6 +1,6 @@
 {
-  "build": "Creator OS Sprint 3.9.1",
-  "buildId": "s391-manual-subtitle-linebreaks",
+  "build": "Creator OS Sprint 3.9.2",
+  "buildId": "s392-preview-media-preserve-undo",
   "created": "2026-08-17",
   "files": [
     {
@@ -10,13 +10,13 @@
     },
     {
       "file": "voice-lab.html",
-      "sha256": "8887f988213feb30",
+      "sha256": "6a72a0bbedbe235d",
       "bytes": 13735
     },
     {
       "file": "main.js",
-      "sha256": "080a37856f594df8",
-      "bytes": 114659
+      "sha256": "9d2ece1bcdd868f3",
+      "bytes": 116900
     },
     {
       "file": "videoRenderer.js",

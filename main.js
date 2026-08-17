@@ -208,7 +208,7 @@ async function renderScenes(id) {
     <main class="shell editor-shell">
       <header class="editor-head"><button id="back">←</button><div><span>${labelPlatform(project.platform)}</span><h1>${escapeHtml(project.title)}</h1></div><button id="menu">•••</button></header>
       <nav class="steps"><button id="stepAi">0 AIスタッフ</button><button id="stepScript">1 台本</button><button class="active">2 シーン・ナレーション</button><button id="stepBgm">3 字幕・BGM</button><button id="stepOutput">4 出力</button></nav>
-      <section class="editor-card"><div class="section-head"><div><h2>シーン編集</h2><p>台本を場面に分け、画像・表示秒数・演出を設定します。</p></div><span id="sceneCount">${project.scenes.length}シーン</span></div><div class="tool-row"><button class="primary" id="autoSplit">台本から自動分割</button><button id="addScene">＋ 空のシーン</button></div></section>
+      <section class="editor-card"><div class="section-head"><div><h2>シーン編集</h2><p>台本を場面に分け、画像・表示秒数・演出を設定します。</p></div><span id="sceneCount">${project.scenes.length}シーン</span></div><div class="tool-row"><button class="primary" id="autoSplit">台本から自動分割</button><button id="addScene">＋ 空のシーン</button><button id="undoScenes" disabled>↶ 1つ前に戻す</button></div><p class="muted">再分割時は既存の画像・動画をできるだけ保持します。文章が変わったシーンのナレーションは誤読防止のため再生成対象になります。</p></section>
       <section id="sceneList" class="scene-list"></section>
       <section class="editor-card">
         <div class="section-head"><div><h2>次にナレーション</h2><p>シーンの文章・画像・順番を確定してから、各シーンの音声を生成します。音声実尺に合わせてシーン尺と字幕タイミングを自動同期します。</p></div><span>${project.scenes.filter(s=>s.narration?.audioData).length}/${project.scenes.length} 音声済み</span></div>
@@ -228,6 +228,10 @@ async function renderScenes(id) {
   const aiStep = root.querySelector("#stepAi"); if (aiStep) aiStep.onclick = () => goAi(project.id);
   const saveState=root.querySelector("#saveState"); let timer;
   const save=()=>{saveState.textContent="保存中…";clearTimeout(timer);timer=setTimeout(async()=>{project.scenes.forEach((s,i)=>s.order=i+1);project.updatedAt=new Date().toISOString();await saveProject(project);saveState.textContent="保存済み";},400);};
+  let sceneUndoSnapshot=null;
+  const cloneScenes=value=>{try{return structuredClone(value);}catch{return JSON.parse(JSON.stringify(value));}};
+  const snapshotScenes=()=>{sceneUndoSnapshot=cloneScenes(project.scenes||[]);const b=root.querySelector("#undoScenes");if(b)b.disabled=false;};
+  const restoreScenes=()=>{if(!sceneUndoSnapshot)return;const current=cloneScenes(project.scenes||[]);project.scenes=cloneScenes(sceneUndoSnapshot);sceneUndoSnapshot=current;save();renderList();};
   const total=()=>project.scenes.reduce((sum,s)=>sum+(Number(s.durationSec)||0),0);
   const renderList=()=>{
     root.querySelector("#sceneCount").textContent=`${project.scenes.length}シーン`;
@@ -244,12 +248,38 @@ async function renderScenes(id) {
     root.querySelectorAll("[data-duration]").forEach(el=>el.oninput=()=>{project.scenes[Number(el.dataset.duration)].durationSec=Math.max(1,Number(el.value)||1);root.querySelector("#totalDuration").textContent=`${total()}秒`;save();});
     root.querySelectorAll("[data-motion]").forEach(el=>el.onchange=()=>{project.scenes[Number(el.dataset.motion)].motion=el.value;save();});
     root.querySelectorAll("[data-image]").forEach(el=>el.onchange=async()=>{const file=el.files?.[0];if(!file)return;if(file.size>3_000_000&&!confirm("画像が大きいため保存容量を圧迫する可能性があります。続けますか？"))return;project.scenes[Number(el.dataset.image)].imageData=await fileToDataUrl(file);save();renderList();});
-    root.querySelectorAll("[data-remove]").forEach(el=>el.onclick=()=>{project.scenes.splice(Number(el.dataset.remove),1);save();renderList();});
+    root.querySelectorAll("[data-remove]").forEach(el=>el.onclick=()=>{if(!confirm("このシーンを削除しますか？ 削除後も「1つ前に戻す」で復元できます。"))return;snapshotScenes();project.scenes.splice(Number(el.dataset.remove),1);save();renderList();});
     root.querySelectorAll("[data-up]").forEach(el=>el.onclick=()=>{const i=Number(el.dataset.up);[project.scenes[i-1],project.scenes[i]]=[project.scenes[i],project.scenes[i-1]];save();renderList();});
     root.querySelectorAll("[data-down]").forEach(el=>el.onclick=()=>{const i=Number(el.dataset.down);[project.scenes[i+1],project.scenes[i]]=[project.scenes[i],project.scenes[i+1]];save();renderList();});
   };
-  root.querySelector("#autoSplit").onclick=()=>{if(project.scenes.length&&!confirm("現在のシーンを削除して、台本から作り直しますか？"))return;project.scenes=splitIntoScenes(project.displayScript||project.speechScript,project.targetDurationSec);save();renderList();};
-  root.querySelector("#addScene").onclick=()=>{project.scenes.push({id:crypto.randomUUID?.()||`scene-${Date.now()}`,order:project.scenes.length+1,text:"",speechText:"",durationSec:5,imageData:"",motion:"zoom-in",transition:"fade"});save();renderList();};
+  root.querySelector("#autoSplit").onclick=()=>{
+    const oldScenes=project.scenes||[];
+    if(oldScenes.length&&!confirm("台本を再分割します。\n\n現在の画像・動画・演出は、同じ順番のシーンへできるだけ保持します。\n文章が変わったシーンのナレーションは再生成対象になります。\n\n続けますか？"))return;
+    const fresh=splitIntoScenes(project.displayScript||project.speechScript,project.targetDurationSec);
+    snapshotScenes();
+    project.scenes=fresh.map((scene,i)=>{
+      const old=oldScenes[i];
+      if(!old)return scene;
+      const sameText=String(old.text||"").trim()===String(scene.text||"").trim();
+      return {
+        ...scene,
+        id:old.id||scene.id,
+        imageData:old.imageData||"",
+        videoData:old.videoData||"",
+        motion:old.motion||scene.motion,
+        transition:old.transition||scene.transition,
+        durationSec:sameText?(Number(old.durationSec)||scene.durationSec):scene.durationSec,
+        subtitleText:scene.text,
+        subtitleEnabled:old.subtitleEnabled ?? true,
+        subtitleStartSec:0,
+        subtitleEndSec:sameText?(Number(old.subtitleEndSec)||Number(old.durationSec)||scene.durationSec):scene.durationSec,
+        narration:sameText?old.narration:undefined
+      };
+    });
+    save();renderList();
+  };
+  root.querySelector("#undoScenes").onclick=restoreScenes;
+  root.querySelector("#addScene").onclick=()=>{snapshotScenes();project.scenes.push({id:crypto.randomUUID?.()||`scene-${Date.now()}`,order:project.scenes.length+1,text:"",speechText:"",durationSec:5,imageData:"",motion:"zoom-in",transition:"fade"});save();renderList();};
   root.querySelector("#exportJson").onclick=()=>downloadJson(`${safeName(project.title)}.json`,project);
   renderList();
 }
@@ -283,11 +313,17 @@ function countChars(value="") { return Array.from(String(value).replace(/\\s/g, 
 function formatSubtitleLines(value, maxChars=16, maxLines=2) {
   const normalized = String(value || "").trim();
   if (!normalized) return { lines:[], overflow:false, chars:0 };
-  const explicit = normalized.split(/\\n+/).map(line => line.trim()).filter(Boolean);
+  const hasManualBreak = /\n/.test(normalized);
+  const explicit = normalized.split(/\n/).map(line => line.trim()).filter(Boolean);
   const lines = [];
-  for (const block of explicit) {
-    const chars = Array.from(block);
-    while (chars.length) lines.push(chars.splice(0, Math.max(1,maxChars)).join(""));
+  if (hasManualBreak) {
+    // 手動改行はプレビューでも最優先。文字数で勝手に組み直さない。
+    lines.push(...explicit);
+  } else {
+    for (const block of explicit) {
+      const chars = Array.from(block);
+      while (chars.length) lines.push(chars.splice(0, Math.max(1,maxChars)).join(""));
+    }
   }
   return { lines:lines.slice(0, Math.max(1,maxLines)), overflow:lines.length > maxLines, chars:countChars(normalized) };
 }
