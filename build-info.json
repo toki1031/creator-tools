@@ -1,7 +1,7 @@
 {
-  "build": "Creator OS Sprint 3.9.0",
-  "buildId": "s390-natural-japanese-subtitle-split",
-  "created": "2026-08-16",
+  "build": "Creator OS Sprint 3.9.1",
+  "buildId": "s391-manual-subtitle-linebreaks",
+  "created": "2026-08-17",
   "files": [
     {
       "file": "index.html",
@@ -10,7 +10,7 @@
     },
     {
       "file": "voice-lab.html",
-      "sha256": "7a2fe86b5dda35f9",
+      "sha256": "8887f988213feb30",
       "bytes": 13735
     },
     {
@@ -20,8 +20,8 @@
     },
     {
       "file": "videoRenderer.js",
-      "sha256": "2394e890376e1600",
-      "bytes": 31857
+      "sha256": "521e542dd621cd89",
+      "bytes": 32546
     },
     {
       "file": "db.js",
