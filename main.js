@@ -526,7 +526,9 @@ async function renderBgm(id) {
       return;
     }
     if(file.size>12_000_000&&!confirm('音源が大きいため端末保存容量を圧迫します。続けますか？')){e.target.value='';return;}
-    pendingAsset=fileToDataUrl(file).then(data=>{b.audioData=data;b.fileName=file.name;b.source='upload';});save();await pendingAsset;root.querySelector('#source').value='upload';root.querySelector('#fileName').textContent=file.name;root.querySelector('#audioPreview').src=b.audioData;
+    root.querySelector('#source').value='upload';
+    pendingAsset=fileToDataUrl(file).then(data=>{b.audioData=data;b.fileName=file.name;b.source='upload';});
+    save();await pendingAsset;root.querySelector('#fileName').textContent=file.name;root.querySelector('#audioPreview').src=b.audioData;
   };
 
   function renderSubtitlePreview(){
@@ -682,8 +684,13 @@ async function renderOutput(id) {
 async function renderPublish(id) {
   const project=await getProject(id);if(!project){goHome();return;}ensureProjectSettings(project);const p=project.publish;
   root.innerHTML=`<main class="shell editor-shell"><header class="editor-head"><button id="back">←</button><div><span>投稿準備</span><h1>${escapeHtml(project.title)}</h1></div><button id="menu">•••</button></header><section class="editor-card"><div class="section-head"><div><h2>YouTube投稿情報</h2><p>タイトル・概要欄・タグをまとめます。</p></div><span id="saveState">保存済み</span></div><label>タイトル<input id="publishTitle" value="${escapeHtml(p.title)}"></label><label>概要欄<textarea id="description" placeholder="動画の概要、出典、クレジットなど">${escapeHtml(p.description)}</textarea></label><label>タグ<input id="tags" value="${escapeHtml(p.tags)}" placeholder="偉人, 名言, Shorts"></label><label>サムネ文字<input id="thumbnailText" value="${escapeHtml(p.thumbnailText)}" placeholder="短く強い言葉"></label><label>公開設定<select id="visibility"><option value="private">非公開</option><option value="unlisted">限定公開</option><option value="public">公開</option></select></label><div class="tool-row"><button id="copyTitle">タイトルをコピー</button><button id="copyDescription">概要欄をコピー</button><button id="copyAll" class="primary">全部コピー</button></div></section><section class="actions"><button id="backOutput">← 出力へ</button><button id="exportJson">JSONを書き出す</button><button class="primary" id="done">Studioへ戻る</button></section></main>`;
-  root.querySelector('#visibility').value=p.visibility;root.querySelector('#back').onclick=root.querySelector('#backOutput').onclick=()=>goOutput(id);root.querySelector('#done').onclick=()=>goStudio(studioForGenre(project.genre));attachProjectMenu(project,root.querySelector('#menu'),()=>goStudio(studioForGenre(project.genre)));
-  let timer;const save=()=>{root.querySelector('#saveState').textContent='保存中…';clearTimeout(timer);timer=setTimeout(async()=>{Object.assign(p,{title:root.querySelector('#publishTitle').value,description:root.querySelector('#description').value,tags:root.querySelector('#tags').value,thumbnailText:root.querySelector('#thumbnailText').value,visibility:root.querySelector('#visibility').value});project.updatedAt=new Date().toISOString();await saveProject(project);root.querySelector('#saveState').textContent='保存済み';},400)};['publishTitle','description','tags','thumbnailText','visibility'].forEach(k=>root.querySelector('#'+k).oninput=save);
+  root.querySelector('#visibility').value=p.visibility;attachProjectMenu(project,root.querySelector('#menu'),()=>goStudio(studioForGenre(project.genre)));
+  const persist=async()=>{Object.assign(p,{title:root.querySelector('#publishTitle').value,description:root.querySelector('#description').value,tags:root.querySelector('#tags').value,thumbnailText:root.querySelector('#thumbnailText').value,visibility:root.querySelector('#visibility').value});project.updatedAt=new Date().toISOString();await saveProject(project);};
+  const {scheduleSave:save,flushSave}=createSaveController({delay:400,persist,setStatus:text=>root.querySelector('#saveState').textContent=text});
+  bindSavedNavigation(root.querySelector('#back'),flushSave,()=>goOutput(id));
+  bindSavedNavigation(root.querySelector('#backOutput'),flushSave,()=>goOutput(id));
+  bindSavedNavigation(root.querySelector('#done'),flushSave,()=>goStudio(studioForGenre(project.genre)));
+  ['publishTitle','description','tags','thumbnailText','visibility'].forEach(k=>root.querySelector('#'+k).oninput=save);
   const copy=async t=>{try{await navigator.clipboard.writeText(t);alert('コピーしました');}catch{prompt('コピーしてください',t);}};root.querySelector('#copyTitle').onclick=()=>copy(root.querySelector('#publishTitle').value);root.querySelector('#copyDescription').onclick=()=>copy(root.querySelector('#description').value);root.querySelector('#copyAll').onclick=()=>copy(`${root.querySelector('#publishTitle').value}\n\n${root.querySelector('#description').value}\n\n${root.querySelector('#tags').value}`);root.querySelector('#exportJson').onclick=()=>downloadJson(`${safeName(project.title)}-publish.json`,p);
 }
 
