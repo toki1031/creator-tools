@@ -9,6 +9,47 @@ if (!rootElement) throw new Error("#app がありません。");
 const root = rootElement;
 const DICT_KEY = "creator-os-pronunciation-v1";
 
+function normalizeSceneText(value = "") {
+  return String(value).replace(/\r\n?/g, "\n").trim().replace(/[ \t]+/g, " ").replace(/\s*\n\s*/g, "\n").replace(/\n+/g, "\n");
+}
+
+function createSaveController({ delay, persist, setStatus = () => {} }) {
+  let timer = 0;
+  let dirty = false;
+  let savePromise = Promise.resolve();
+  const flushSave = () => {
+    clearTimeout(timer);
+    timer = 0;
+    if (!dirty) return savePromise;
+    dirty = false;
+    savePromise = savePromise.catch(() => {}).then(async () => {
+      setStatus("保存中…");
+      await persist();
+      setStatus("保存済み");
+    });
+    return savePromise;
+  };
+  const scheduleSave = () => {
+    dirty = true;
+    setStatus("保存中…");
+    clearTimeout(timer);
+    timer = setTimeout(() => { void flushSave().catch(error => { console.error(error); setStatus("保存失敗"); }); }, delay);
+  };
+  return { scheduleSave, flushSave };
+}
+
+function bindSavedNavigation(button, flushSave, navigate) {
+  if (!button) return;
+  let navigating = false;
+  button.onclick = async () => {
+    if (navigating) return;
+    navigating = true;
+    button.disabled = true;
+    try { await flushSave(); navigate(); }
+    catch (error) { console.error(error); alert(`保存できなかったため移動を中止しました：${error.message}`); navigating = false; button.disabled = false; }
+  };
+}
+
 const escapeHtml = (value = "") => String(value).replace(/[&<>'"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c] ?? c));
 const finalReviewSignature = project => {
   const scenes=Array.isArray(project?.scenes)?project.scenes:[];
@@ -139,27 +180,22 @@ async function renderProject(id) {
       <dialog id="dictDialog"><form method="dialog" id="dictForm"><h2>読み方を登録</h2><input type="hidden" name="index"><label>表示語<input name="from" required placeholder="例：本田宗一郎"></label><label>読み<input name="to" required placeholder="例：ほんだ そういちろう"></label><div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" value="default">保存</button></div></form></dialog>
     </main>`;
 
-  root.querySelector("#back").onclick = () => goStudio(studioForGenre(project.genre));
-  root.querySelector("#stepAi").onclick = () => goAi(project.id);
-  root.querySelector("#stepScenes").onclick = () => goScenes(project.id);
-  root.querySelector("#stepBgm").onclick = () => goBgm(project.id);
-  root.querySelector("#stepOutput").onclick = () => goOutput(project.id);
-  root.querySelector("#nextScenes").onclick = () => goScenes(project.id);
   attachProjectMenu(project, root.querySelector("#menu"), () => goStudio(studioForGenre(project.genre)));
-  const aiStep = root.querySelector("#stepAi"); if (aiStep) aiStep.onclick = () => goAi(project.id);
   const display = root.querySelector("#displayScript");
   const speech = root.querySelector("#speechScript");
   const duration = root.querySelector("#duration");
   const saveState = root.querySelector("#saveState");
-  let timer;
-  const scheduleSave = () => {
-    saveState.textContent = "保存中…";
-    clearTimeout(timer);
-    timer = setTimeout(async () => {
-      const updated = { ...project, displayScript: display.value, speechScript: speech.value, targetDurationSec: Math.max(5, Number(duration.value) || 60), narration:{...(project.narration||{}),rate:Number(root.querySelector("#rate").value),pitch:Number(root.querySelector("#pitch").value),volume:Number(root.querySelector("#narrationVolume")?.value ?? project.narration?.volume ?? 1)}, updatedAt:new Date().toISOString() };
-      await saveProject(updated); Object.assign(project, updated); saveState.textContent = "保存済み";
-    }, 500);
+  const persist=async()=>{
+    Object.assign(project,{displayScript:display.value,speechScript:speech.value,targetDurationSec:Math.max(5,Number(duration.value)||60),narration:{...(project.narration||{}),rate:Number(root.querySelector("#rate").value),pitch:Number(root.querySelector("#pitch").value),volume:Number(root.querySelector("#narrationVolume")?.value??project.narration?.volume??1)},updatedAt:new Date().toISOString()});
+    await saveProject(project);
   };
+  const {scheduleSave,flushSave}=createSaveController({delay:500,persist,setStatus:text=>saveState.textContent=text});
+  bindSavedNavigation(root.querySelector("#back"),flushSave,()=>goStudio(studioForGenre(project.genre)));
+  bindSavedNavigation(root.querySelector("#stepAi"),flushSave,()=>goAi(project.id));
+  bindSavedNavigation(root.querySelector("#stepScenes"),flushSave,()=>goScenes(project.id));
+  bindSavedNavigation(root.querySelector("#stepBgm"),flushSave,()=>goBgm(project.id));
+  bindSavedNavigation(root.querySelector("#stepOutput"),flushSave,()=>goOutput(project.id));
+  bindSavedNavigation(root.querySelector("#nextScenes"),flushSave,()=>goScenes(project.id));
   display.oninput = () => { root.querySelector("#displayCount").textContent = `${display.value.length}文字`; scheduleSave(); };
   speech.oninput = scheduleSave; duration.oninput = scheduleSave;
   root.querySelector("#copyDisplay").onclick = () => { speech.value = display.value; scheduleSave(); };
@@ -196,6 +232,54 @@ function splitIntoScenes(text, targetDuration=60) {
   return blocks.map((text,index)=>({id:crypto.randomUUID?.()||`scene-${Date.now()}-${index}`,order:index+1,text,speechText:text,durationSec:per,imageData:"",motion:"zoom-in",transition:"fade"}));
 }
 
+function reconcileScenes(oldScenes, freshScenes) {
+  const used = new Set();
+  const matches = freshScenes.map(scene => {
+    const normalized = normalizeSceneText(scene.text);
+    const index = oldScenes.findIndex((old, oldIndex) => !used.has(oldIndex) && normalizeSceneText(old.text) === normalized);
+    if (index < 0) return null;
+    used.add(index);
+    return { old:oldScenes[index], exact:true };
+  });
+  return freshScenes.map((scene,index) => {
+    let match = matches[index];
+    if (!match && oldScenes[index] && !used.has(index)) {
+      used.add(index);
+      match = { old:oldScenes[index], exact:false };
+    }
+    if (!match) return { ...scene, subtitleText:scene.text, subtitleEnabled:true, subtitlePhraseSync:true, subtitleStartSec:0, subtitleEndSec:scene.durationSec };
+    const old = match.old;
+    if (match.exact) {
+      const duration=Math.max(1,Number(old.durationSec)||scene.durationSec);
+      const start=Math.min(duration,Math.max(0,Number(old.subtitleStartSec)||0));
+      const end=Math.min(duration,Math.max(start,Number(old.subtitleEndSec)||duration));
+      return {...scene,...old,id:old.id||scene.id,text:scene.text,speechText:old.speechText??scene.speechText,durationSec:duration,subtitleText:old.subtitleText??scene.text,subtitleEnabled:old.subtitleEnabled??true,subtitlePhraseSync:old.subtitlePhraseSync??true,subtitleStartSec:start,subtitleEndSec:end};
+    }
+    return {...scene,id:old.id||scene.id,imageData:old.imageData||"",videoData:old.videoData||"",motion:old.motion||scene.motion,transition:old.transition||scene.transition,subtitleText:scene.text,subtitleEnabled:true,subtitlePhraseSync:true,subtitleStartSec:0,subtitleEndSec:scene.durationSec};
+  });
+}
+
+function updateSceneText(scene, newText) {
+  const oldText=String(scene.text||"");
+  const oldNormalized=normalizeSceneText(oldText), newNormalized=normalizeSceneText(newText);
+  if (scene.subtitleText == null || normalizeSceneText(scene.subtitleText) === oldNormalized) scene.subtitleText=newText;
+  if (scene.speechText == null || normalizeSceneText(scene.speechText) === oldNormalized) scene.speechText=newText;
+  scene.text=newText;
+  if (oldNormalized !== newNormalized) delete scene.narration;
+}
+
+function updateSceneDuration(scene, value) {
+  const oldDuration=Math.max(1,Number(scene.durationSec)||1);
+  const newDuration=Math.max(1,Number(value)||1);
+  const oldEnd=Number(scene.subtitleEndSec);
+  let start=Math.min(newDuration,Math.max(0,Number(scene.subtitleStartSec)||0));
+  let end=scene.subtitleEndSec==null||Math.abs(oldEnd-oldDuration)<0.001?newDuration:Math.min(newDuration,Math.max(0,oldEnd||newDuration));
+  end=Math.max(start,end);
+  scene.durationSec=newDuration;
+  scene.subtitleStartSec=start;
+  scene.subtitleEndSec=end;
+}
+
 async function fileToDataUrl(file) {
   return await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result));r.onerror=()=>reject(r.error);r.readAsDataURL(file);});
 }
@@ -217,17 +301,17 @@ async function renderScenes(id) {
       <section class="editor-card compact"><div><b>合計時間</b><p id="totalDuration">0秒</p></div><p id="saveState">保存済み</p></section>
       <section class="actions"><button id="backScript">← 台本へ</button><button id="exportJson">JSONを書き出す</button><button class="primary" id="nextBgm">次へ：字幕・BGM</button></section>
     </main>`;
-  root.querySelector("#back").onclick=()=>goStudio(studioForGenre(project.genre));
-  root.querySelector("#stepAi").onclick=()=>goAi(project.id);
-  root.querySelector("#stepScript").onclick=()=>goProject(project.id);
-  root.querySelector("#stepBgm").onclick=()=>goBgm(project.id);
-  root.querySelector("#stepOutput").onclick=()=>goOutput(project.id);
-  root.querySelector("#nextBgm").onclick=()=>goBgm(project.id);
-  root.querySelector("#backScript").onclick=()=>goProject(project.id);
   attachProjectMenu(project, root.querySelector("#menu"), () => goStudio(studioForGenre(project.genre)));
-  const aiStep = root.querySelector("#stepAi"); if (aiStep) aiStep.onclick = () => goAi(project.id);
-  const saveState=root.querySelector("#saveState"); let timer;
-  const save=()=>{saveState.textContent="保存中…";clearTimeout(timer);timer=setTimeout(async()=>{project.scenes.forEach((s,i)=>s.order=i+1);project.updatedAt=new Date().toISOString();await saveProject(project);saveState.textContent="保存済み";},400);};
+  const saveState=root.querySelector("#saveState"); let pendingAsset=Promise.resolve();
+  const persist=async()=>{await pendingAsset;project.scenes.forEach((s,i)=>s.order=i+1);project.updatedAt=new Date().toISOString();await saveProject(project);};
+  const {scheduleSave:save,flushSave}=createSaveController({delay:400,persist,setStatus:text=>saveState.textContent=text});
+  bindSavedNavigation(root.querySelector("#back"),flushSave,()=>goStudio(studioForGenre(project.genre)));
+  bindSavedNavigation(root.querySelector("#stepAi"),flushSave,()=>goAi(project.id));
+  bindSavedNavigation(root.querySelector("#stepScript"),flushSave,()=>goProject(project.id));
+  bindSavedNavigation(root.querySelector("#stepBgm"),flushSave,()=>goBgm(project.id));
+  bindSavedNavigation(root.querySelector("#stepOutput"),flushSave,()=>goOutput(project.id));
+  bindSavedNavigation(root.querySelector("#nextBgm"),flushSave,()=>goBgm(project.id));
+  bindSavedNavigation(root.querySelector("#backScript"),flushSave,()=>goProject(project.id));
   let sceneUndoSnapshot=null;
   const cloneScenes=value=>{try{return structuredClone(value);}catch{return JSON.parse(JSON.stringify(value));}};
   const snapshotScenes=()=>{sceneUndoSnapshot=cloneScenes(project.scenes||[]);const b=root.querySelector("#undoScenes");if(b)b.disabled=false;};
@@ -244,10 +328,10 @@ async function renderScenes(id) {
         <p class="${s.narration?.audioData?'ok':'muted'}">${s.narration?.audioData?`✓ シーン音声 ${Number(s.narration.durationSec||0).toFixed(2)}秒／字幕フレーズ同期 ON`:'− シーン音声 未生成'}</p>
         <div class="scene-settings"><label>画像<input data-image="${i}" type="file" accept="image/*"></label><label>秒数<input data-duration="${i}" type="number" min="1" max="3600" value="${Number(s.durationSec)||5}"></label><label>動き<select data-motion="${i}"><option value="none" ${s.motion==="none"?"selected":""}>なし</option><option value="zoom-in" ${s.motion==="zoom-in"?"selected":""}>ズームイン</option><option value="zoom-out" ${s.motion==="zoom-out"?"selected":""}>ズームアウト</option><option value="pan-left" ${s.motion==="pan-left"?"selected":""}>左へパン</option><option value="pan-right" ${s.motion==="pan-right"?"selected":""}>右へパン</option></select></label></div></div>
       </article>`).join(""):`<div class="empty"><div>🖼️</div><h3>シーンがありません</h3><p>「台本から自動分割」または「空のシーン」を押してください。</p></div>`;
-    root.querySelectorAll("[data-text]").forEach(el=>el.oninput=()=>{project.scenes[Number(el.dataset.text)].text=el.value;save();});
-    root.querySelectorAll("[data-duration]").forEach(el=>el.oninput=()=>{project.scenes[Number(el.dataset.duration)].durationSec=Math.max(1,Number(el.value)||1);root.querySelector("#totalDuration").textContent=`${total()}秒`;save();});
+    root.querySelectorAll("[data-text]").forEach(el=>el.oninput=()=>{updateSceneText(project.scenes[Number(el.dataset.text)],el.value);save();});
+    root.querySelectorAll("[data-duration]").forEach(el=>el.oninput=()=>{updateSceneDuration(project.scenes[Number(el.dataset.duration)],el.value);root.querySelector("#totalDuration").textContent=`${total()}秒`;save();});
     root.querySelectorAll("[data-motion]").forEach(el=>el.onchange=()=>{project.scenes[Number(el.dataset.motion)].motion=el.value;save();});
-    root.querySelectorAll("[data-image]").forEach(el=>el.onchange=async()=>{const file=el.files?.[0];if(!file)return;if(file.size>3_000_000&&!confirm("画像が大きいため保存容量を圧迫する可能性があります。続けますか？"))return;project.scenes[Number(el.dataset.image)].imageData=await fileToDataUrl(file);save();renderList();});
+    root.querySelectorAll("[data-image]").forEach(el=>el.onchange=async()=>{const file=el.files?.[0];if(!file)return;if(file.size>3_000_000&&!confirm("画像が大きいため保存容量を圧迫する可能性があります。続けますか？"))return;const scene=project.scenes[Number(el.dataset.image)];pendingAsset=fileToDataUrl(file).then(data=>{scene.imageData=data;});save();await pendingAsset;renderList();});
     root.querySelectorAll("[data-remove]").forEach(el=>el.onclick=()=>{if(!confirm("このシーンを削除しますか？ 削除後も「1つ前に戻す」で復元できます。"))return;snapshotScenes();project.scenes.splice(Number(el.dataset.remove),1);save();renderList();});
     root.querySelectorAll("[data-up]").forEach(el=>el.onclick=()=>{const i=Number(el.dataset.up);[project.scenes[i-1],project.scenes[i]]=[project.scenes[i],project.scenes[i-1]];save();renderList();});
     root.querySelectorAll("[data-down]").forEach(el=>el.onclick=()=>{const i=Number(el.dataset.down);[project.scenes[i+1],project.scenes[i]]=[project.scenes[i],project.scenes[i+1]];save();renderList();});
@@ -257,29 +341,11 @@ async function renderScenes(id) {
     if(oldScenes.length&&!confirm("台本を再分割します。\n\n現在の画像・動画・演出は、同じ順番のシーンへできるだけ保持します。\n文章が変わったシーンのナレーションは再生成対象になります。\n\n続けますか？"))return;
     const fresh=splitIntoScenes(project.displayScript||project.speechScript,project.targetDurationSec);
     snapshotScenes();
-    project.scenes=fresh.map((scene,i)=>{
-      const old=oldScenes[i];
-      if(!old)return scene;
-      const sameText=String(old.text||"").trim()===String(scene.text||"").trim();
-      return {
-        ...scene,
-        id:old.id||scene.id,
-        imageData:old.imageData||"",
-        videoData:old.videoData||"",
-        motion:old.motion||scene.motion,
-        transition:old.transition||scene.transition,
-        durationSec:sameText?(Number(old.durationSec)||scene.durationSec):scene.durationSec,
-        subtitleText:scene.text,
-        subtitleEnabled:old.subtitleEnabled ?? true,
-        subtitleStartSec:0,
-        subtitleEndSec:sameText?(Number(old.subtitleEndSec)||Number(old.durationSec)||scene.durationSec):scene.durationSec,
-        narration:sameText?old.narration:undefined
-      };
-    });
+    project.scenes=reconcileScenes(oldScenes,fresh);
     save();renderList();
   };
   root.querySelector("#undoScenes").onclick=restoreScenes;
-  root.querySelector("#addScene").onclick=()=>{snapshotScenes();project.scenes.push({id:crypto.randomUUID?.()||`scene-${Date.now()}`,order:project.scenes.length+1,text:"",speechText:"",durationSec:5,imageData:"",motion:"zoom-in",transition:"fade"});save();renderList();};
+  root.querySelector("#addScene").onclick=()=>{snapshotScenes();project.scenes.push({id:crypto.randomUUID?.()||`scene-${Date.now()}`,order:project.scenes.length+1,text:"",speechText:"",durationSec:5,imageData:"",motion:"zoom-in",transition:"fade",subtitleText:"",subtitleEnabled:true,subtitlePhraseSync:true,subtitleStartSec:0,subtitleEndSec:5});save();renderList();};
   root.querySelector("#exportJson").onclick=()=>downloadJson(`${safeName(project.title)}.json`,project);
   renderList();
 }
@@ -309,23 +375,21 @@ function ensureProjectSettings(project) {
   });
 }
 
-function countChars(value="") { return Array.from(String(value).replace(/\\s/g, "")).length; }
+function countChars(value="") { return Array.from(String(value).replace(/\s/g, "")).length; }
+function splitSubtitleCards(value="") {
+  return String(value||"").replace(/\r\n?/g,"\n").trim().split(/\n\s*\n+/).map(card=>card.trim()).filter(Boolean);
+}
 function formatSubtitleLines(value, maxChars=16, maxLines=2) {
   const normalized = String(value || "").trim();
-  if (!normalized) return { lines:[], overflow:false, chars:0 };
-  const hasManualBreak = /\n/.test(normalized);
-  const explicit = normalized.split(/\n/).map(line => line.trim()).filter(Boolean);
-  const lines = [];
-  if (hasManualBreak) {
-    // 手動改行はプレビューでも最優先。文字数で勝手に組み直さない。
-    lines.push(...explicit);
-  } else {
-    for (const block of explicit) {
-      const chars = Array.from(block);
-      while (chars.length) lines.push(chars.splice(0, Math.max(1,maxChars)).join(""));
-    }
-  }
-  return { lines:lines.slice(0, Math.max(1,maxLines)), overflow:lines.length > maxLines, chars:countChars(normalized) };
+  if (!normalized) return { lines:[], cards:[], overflow:false, chars:0 };
+  const cards=splitSubtitleCards(normalized).map(card=>{
+    const manual=/\n/.test(card);
+    const lines=[];
+    if(manual) lines.push(...card.split("\n").map(line=>line.trim()).filter(Boolean));
+    else { const chars=Array.from(card); while(chars.length) lines.push(chars.splice(0,Math.max(1,maxChars)).join("")); }
+    return {lines:lines.slice(0,Math.max(1,maxLines)),overflow:lines.length>maxLines};
+  });
+  return {lines:cards[0]?.lines||[],cards,overflow:cards.some(card=>card.overflow),chars:countChars(normalized)};
 }
 function hexToRgba(hex, alpha) {
   const clean = String(hex || "#000000").replace("#", "");
@@ -414,9 +478,9 @@ async function renderBgm(id) {
   </main>`;
   root.querySelector('#source').value=b.source; root.querySelector('#category').value=b.category;
   root.querySelector('#subtitlePreset').value=st.preset||'standard'; root.querySelector('#subtitlePosition').value=st.position; root.querySelector('#maxLines').value=String(st.maxLines);
-  root.querySelector('#back').onclick=()=>goStudio(studioForGenre(project.genre)); root.querySelector('#stepScript').onclick=()=>goProject(id); root.querySelector('#stepScenes').onclick=()=>goScenes(id); root.querySelector('#stepOutput').onclick=()=>goOutput(id); root.querySelector('#backScenes').onclick=()=>goScenes(id); root.querySelector('#nextOutput').onclick=()=>goOutput(id); attachProjectMenu(project,root.querySelector('#menu'),()=>goStudio(studioForGenre(project.genre)));
+  attachProjectMenu(project,root.querySelector('#menu'),()=>goStudio(studioForGenre(project.genre)));
 
-  const saveState=root.querySelector('#saveState'); let timer;
+  const saveState=root.querySelector('#saveState'); let pendingAsset=Promise.resolve();
   const readGlobalSettings=()=>Object.assign(st,{
     enabled:root.querySelector('#subtitleEnabled').checked,preset:root.querySelector('#subtitlePreset').value,
     position:root.querySelector('#subtitlePosition').value,fontSize:Number(root.querySelector('#fontSize').value),
@@ -425,10 +489,19 @@ async function renderBgm(id) {
     outlineWidth:Number(root.querySelector('#outlineWidth').value),backgroundEnabled:root.querySelector('#backgroundEnabled').checked,
     backgroundColor:root.querySelector('#backgroundColor').value,backgroundOpacity:Number(root.querySelector('#backgroundOpacity').value)
   });
-  const save=()=>{saveState.textContent='保存中…';clearTimeout(timer);timer=setTimeout(async()=>{
+  const persist=async()=>{
+    await pendingAsset;
     Object.assign(b,{source:root.querySelector('#source').value,category:root.querySelector('#category').value,title:root.querySelector('#bgmTitle').value,volume:Number(root.querySelector('#volume').value),fadeInSec:Number(root.querySelector('#fadeIn').value),fadeOutSec:Number(root.querySelector('#fadeOut').value),ducking:root.querySelector('#ducking').checked,loop:root.querySelector('#loop').checked,license:root.querySelector('#license').value,credit:root.querySelector('#credit').value});
     readGlobalSettings(); project.output.subtitles=st.enabled; project.output.subtitlePosition=st.position; project.updatedAt=new Date().toISOString();await saveProject(project);saveState.textContent='保存済み';
-  },350)};
+  };
+  const {scheduleSave:save,flushSave}=createSaveController({delay:350,persist,setStatus:text=>saveState.textContent=text});
+  bindSavedNavigation(root.querySelector('#back'),flushSave,()=>goStudio(studioForGenre(project.genre)));
+  bindSavedNavigation(root.querySelector('#stepAi'),flushSave,()=>goAi(id));
+  bindSavedNavigation(root.querySelector('#stepScript'),flushSave,()=>goProject(id));
+  bindSavedNavigation(root.querySelector('#stepScenes'),flushSave,()=>goScenes(id));
+  bindSavedNavigation(root.querySelector('#stepOutput'),flushSave,()=>goOutput(id));
+  bindSavedNavigation(root.querySelector('#backScenes'),flushSave,()=>goScenes(id));
+  bindSavedNavigation(root.querySelector('#nextOutput'),flushSave,()=>goOutput(id));
 
   const updateLabels=()=>{root.querySelector('#volumeValue').textContent=`${Math.round(Number(root.querySelector('#volume').value)*100)}%`;root.querySelector('#fontSizeValue').textContent=root.querySelector('#fontSize').value;root.querySelector('#outlineWidthValue').textContent=root.querySelector('#outlineWidth').value;root.querySelector('#backgroundOpacityValue').textContent=`${Math.round(Number(root.querySelector('#backgroundOpacity').value)*100)}%`;};
   ['source','category','bgmTitle','volume','fadeIn','fadeOut','ducking','loop','license','credit'].forEach(k=>root.querySelector('#'+k).oninput=()=>{updateLabels();save();});
@@ -453,7 +526,9 @@ async function renderBgm(id) {
       return;
     }
     if(file.size>12_000_000&&!confirm('音源が大きいため端末保存容量を圧迫します。続けますか？')){e.target.value='';return;}
-    b.audioData=await fileToDataUrl(file);b.fileName=file.name;b.source='upload';root.querySelector('#source').value='upload';root.querySelector('#fileName').textContent=file.name;root.querySelector('#audioPreview').src=b.audioData;save();
+    root.querySelector('#source').value='upload';
+    pendingAsset=fileToDataUrl(file).then(data=>{b.audioData=data;b.fileName=file.name;b.source='upload';});
+    save();await pendingAsset;root.querySelector('#fileName').textContent=file.name;root.querySelector('#audioPreview').src=b.audioData;
   };
 
   function renderSubtitlePreview(){
@@ -462,7 +537,8 @@ async function renderBgm(id) {
     const result=formatSubtitleLines(scene.subtitleText||'',st.maxCharsPerLine,st.maxLines); const visible=st.enabled&&scene.subtitleEnabled!==false&&result.lines.length;
     const background=st.backgroundEnabled?hexToRgba(st.backgroundColor,st.backgroundOpacity):'transparent';
     const stroke=Math.max(0,st.outlineWidth*.28);
-    box.innerHTML=`${scene.imageData?`<img src="${scene.imageData}" alt="">`:`<div class="subtitle-preview-fallback">シーン ${index+1}</div>`}<div class="subtitle-layer pos-${st.position}">${visible?`<div class="subtitle-render ${result.overflow?'overflow':''}" style="font-size:${Math.max(14,st.fontSize*.32)}px;color:${st.textColor};-webkit-text-stroke:${stroke}px ${st.outlineColor};background:${background}">${result.lines.map(escapeHtml).join('<br>')}</div>`:''}</div>`;
+    const cardLabel=result.cards.length>1?`<small class="subtitle-card-count">字幕 1/${result.cards.length}（空行で切替）</small>`:'';
+    box.innerHTML=`${scene.imageData?`<img src="${scene.imageData}" alt="">`:`<div class="subtitle-preview-fallback">シーン ${index+1}</div>`}${cardLabel}<div class="subtitle-layer pos-${st.position}">${visible?`<div class="subtitle-render ${result.overflow?'overflow':''}" style="font-size:${Math.max(14,st.fontSize*.32)}px;color:${st.textColor};-webkit-text-stroke:${stroke}px ${st.outlineColor};background:${background}">${result.lines.map(escapeHtml).join('<br>')}</div>`:''}</div>`;
   }
   function updateSubtitleCount(){const count=scenes.filter(s=>s.subtitleEnabled!==false&&(s.subtitleText||'').trim()).length;root.querySelector('#subtitleCount').textContent=`${count}/${scenes.length}`;}
   function renderSubtitleEditor(){
@@ -525,8 +601,7 @@ async function renderOutput(id) {
   <section class="actions"><button id="backBgm">← BGM・字幕へ</button><button id="exportJson">プロジェクトJSON</button><button class="primary" id="publish2">次へ：投稿準備</button></section></main>`;
 
   root.querySelector('#resolution').value=`${o.width}x${o.height}`;root.querySelector('#fps').value=String(o.fps);root.querySelector('#quality').value=o.quality;root.querySelector('#subtitlePosition').value=o.subtitlePosition||st.position;
-  root.querySelector('#back').onclick=()=>goStudio(studioForGenre(project.genre));root.querySelector('#stepAi').onclick=()=>goAi(id);root.querySelector('#stepScript').onclick=()=>goProject(id);root.querySelector('#stepScenes').onclick=()=>goScenes(id);root.querySelector('#stepBgm').onclick=()=>goBgm(id);root.querySelector('#backBgm').onclick=()=>goBgm(id);root.querySelector('#publish').onclick=root.querySelector('#publish2').onclick=()=>goPublish(id);attachProjectMenu(project,root.querySelector('#menu'),()=>goStudio(studioForGenre(project.genre)));
-  root.querySelector('#backToScenesReview').onclick=()=>goScenes(id);
+  root.querySelector('#publish').onclick=root.querySelector('#publish2').onclick=()=>goPublish(id);attachProjectMenu(project,root.querySelector('#menu'),()=>goStudio(studioForGenre(project.genre)));
   root.querySelector('#approveFinalReview').onclick=async()=>{
     const missingVisual=scenes.findIndex(scene=>!scene.imageData);
     if(missingVisual>=0){alert(`シーン${missingVisual+1}に映像素材がありません。シーン編集へ戻って画像または動画を設定してください。`);return;}
@@ -547,9 +622,18 @@ async function renderOutput(id) {
   const progress=root.querySelector('#renderProgress');
   const progressText=root.querySelector('#renderProgressText');
   const updateProgress=(elapsed,duration)=>{const value=duration?Math.min(1,elapsed/duration):0;progress.value=value;progressText.textContent=`${Math.round(value*100)}%（${elapsed.toFixed(1)}/${duration.toFixed(1)}秒）`;};
-  let settingsTimer;
   const persistSettings=async()=>{const [w,h]=root.querySelector('#resolution').value.split('x').map(Number);Object.assign(o,{width:w,height:h,fps:Number(root.querySelector('#fps').value),quality:root.querySelector('#quality').value,subtitles:root.querySelector('#subtitles').checked,subtitlePosition:root.querySelector('#subtitlePosition').value,bgmEnabled:root.querySelector('#bgmEnabled').checked});st.enabled=o.subtitles;st.position=o.subtitlePosition;project.updatedAt=new Date().toISOString();await saveProject(project);canvas.width=w;canvas.height=h;};
-  const scheduleSave=()=>{root.querySelector('#saveState').textContent='保存中…';clearTimeout(settingsTimer);settingsTimer=setTimeout(async()=>{await persistSettings();root.querySelector('#saveState').textContent='保存済み';if(prepared)drawProjectFrame(project,prepared,canvas,0);},350)};['resolution','fps','quality','subtitles','subtitlePosition','bgmEnabled'].forEach(k=>root.querySelector('#'+k).onchange=scheduleSave);
+  const {scheduleSave,flushSave}=createSaveController({delay:350,persist:async()=>{await persistSettings();if(prepared)drawProjectFrame(project,prepared,canvas,0);},setStatus:text=>root.querySelector('#saveState').textContent=text});
+  ['resolution','fps','quality','subtitles','subtitlePosition','bgmEnabled'].forEach(k=>root.querySelector('#'+k).onchange=scheduleSave);
+  bindSavedNavigation(root.querySelector('#back'),flushSave,()=>goStudio(studioForGenre(project.genre)));
+  bindSavedNavigation(root.querySelector('#stepAi'),flushSave,()=>goAi(id));
+  bindSavedNavigation(root.querySelector('#stepScript'),flushSave,()=>goProject(id));
+  bindSavedNavigation(root.querySelector('#stepScenes'),flushSave,()=>goScenes(id));
+  bindSavedNavigation(root.querySelector('#stepBgm'),flushSave,()=>goBgm(id));
+  bindSavedNavigation(root.querySelector('#backBgm'),flushSave,()=>goBgm(id));
+  bindSavedNavigation(root.querySelector('#backToScenesReview'),flushSave,()=>goScenes(id));
+  bindSavedNavigation(root.querySelector('#publish'),flushSave,()=>goPublish(id));
+  bindSavedNavigation(root.querySelector('#publish2'),flushSave,()=>goPublish(id));
 
   let prepared=null;
   const diagnostics=root.querySelector('#assetDiagnostics');
@@ -600,8 +684,13 @@ async function renderOutput(id) {
 async function renderPublish(id) {
   const project=await getProject(id);if(!project){goHome();return;}ensureProjectSettings(project);const p=project.publish;
   root.innerHTML=`<main class="shell editor-shell"><header class="editor-head"><button id="back">←</button><div><span>投稿準備</span><h1>${escapeHtml(project.title)}</h1></div><button id="menu">•••</button></header><section class="editor-card"><div class="section-head"><div><h2>YouTube投稿情報</h2><p>タイトル・概要欄・タグをまとめます。</p></div><span id="saveState">保存済み</span></div><label>タイトル<input id="publishTitle" value="${escapeHtml(p.title)}"></label><label>概要欄<textarea id="description" placeholder="動画の概要、出典、クレジットなど">${escapeHtml(p.description)}</textarea></label><label>タグ<input id="tags" value="${escapeHtml(p.tags)}" placeholder="偉人, 名言, Shorts"></label><label>サムネ文字<input id="thumbnailText" value="${escapeHtml(p.thumbnailText)}" placeholder="短く強い言葉"></label><label>公開設定<select id="visibility"><option value="private">非公開</option><option value="unlisted">限定公開</option><option value="public">公開</option></select></label><div class="tool-row"><button id="copyTitle">タイトルをコピー</button><button id="copyDescription">概要欄をコピー</button><button id="copyAll" class="primary">全部コピー</button></div></section><section class="actions"><button id="backOutput">← 出力へ</button><button id="exportJson">JSONを書き出す</button><button class="primary" id="done">Studioへ戻る</button></section></main>`;
-  root.querySelector('#visibility').value=p.visibility;root.querySelector('#back').onclick=root.querySelector('#backOutput').onclick=()=>goOutput(id);root.querySelector('#done').onclick=()=>goStudio(studioForGenre(project.genre));attachProjectMenu(project,root.querySelector('#menu'),()=>goStudio(studioForGenre(project.genre)));
-  let timer;const save=()=>{root.querySelector('#saveState').textContent='保存中…';clearTimeout(timer);timer=setTimeout(async()=>{Object.assign(p,{title:root.querySelector('#publishTitle').value,description:root.querySelector('#description').value,tags:root.querySelector('#tags').value,thumbnailText:root.querySelector('#thumbnailText').value,visibility:root.querySelector('#visibility').value});project.updatedAt=new Date().toISOString();await saveProject(project);root.querySelector('#saveState').textContent='保存済み';},400)};['publishTitle','description','tags','thumbnailText','visibility'].forEach(k=>root.querySelector('#'+k).oninput=save);
+  root.querySelector('#visibility').value=p.visibility;attachProjectMenu(project,root.querySelector('#menu'),()=>goStudio(studioForGenre(project.genre)));
+  const persist=async()=>{Object.assign(p,{title:root.querySelector('#publishTitle').value,description:root.querySelector('#description').value,tags:root.querySelector('#tags').value,thumbnailText:root.querySelector('#thumbnailText').value,visibility:root.querySelector('#visibility').value});project.updatedAt=new Date().toISOString();await saveProject(project);};
+  const {scheduleSave:save,flushSave}=createSaveController({delay:400,persist,setStatus:text=>root.querySelector('#saveState').textContent=text});
+  bindSavedNavigation(root.querySelector('#back'),flushSave,()=>goOutput(id));
+  bindSavedNavigation(root.querySelector('#backOutput'),flushSave,()=>goOutput(id));
+  bindSavedNavigation(root.querySelector('#done'),flushSave,()=>goStudio(studioForGenre(project.genre)));
+  ['publishTitle','description','tags','thumbnailText','visibility'].forEach(k=>root.querySelector('#'+k).oninput=save);
   const copy=async t=>{try{await navigator.clipboard.writeText(t);alert('コピーしました');}catch{prompt('コピーしてください',t);}};root.querySelector('#copyTitle').onclick=()=>copy(root.querySelector('#publishTitle').value);root.querySelector('#copyDescription').onclick=()=>copy(root.querySelector('#description').value);root.querySelector('#copyAll').onclick=()=>copy(`${root.querySelector('#publishTitle').value}\n\n${root.querySelector('#description').value}\n\n${root.querySelector('#tags').value}`);root.querySelector('#exportJson').onclick=()=>downloadJson(`${safeName(project.title)}-publish.json`,p);
 }
 
