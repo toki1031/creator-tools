@@ -1,3 +1,5 @@
+import { resolveSubtitleYRatio } from './subtitlePosition.js';
+
 const MIME_CANDIDATES_AUDIO = [
   'video/mp4',
   'video/mp4;codecs="avc1.42E01E,mp4a.40.2"',
@@ -380,7 +382,7 @@ function drawSubtitle(ctx, project, item, localTime, width, height) {
   const boxWidth = Math.min(width * .9, widest + paddingX * 2);
   const boxHeight = lines.length * lineHeight + paddingY * 2;
   const position = project.output?.subtitlePosition || style.position || 'bottom';
-  const centerY = position === 'top' ? height * .2 : position === 'center' ? height * .5 : height * .82;
+  const centerY = height * resolveSubtitleYRatio(position, style.positionOffsetPercent, boxHeight / height / 2);
   const x = width / 2;
   const top = centerY - boxHeight / 2;
   if (style.backgroundEnabled) {

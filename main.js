@@ -3,6 +3,8 @@ import { createProject } from "./projectFactory.js";
 import { deleteProject, getProject, listProjects, saveProject } from "./db.js";
 import { downloadJson, downloadText } from "./download.js";
 import { getVideoCapabilities, getProjectDuration, validateVideoProject, prepareVideoProject, runVisualPreview, exportProjectVideo, drawProjectFrame } from "./videoRenderer.js";
+import { createRestoredProject, LARGE_BACKUP_WARNING_BYTES, mergePronunciationDictionaries, normalizeImportedProject, parseProjectBackup, summarizeProjectBackup } from "./projectBackup.js";
+import { normalizeSubtitleOffset, resolveSubtitleYRatio } from "./subtitlePosition.js";
 
 const rootElement = document.querySelector("#app");
 if (!rootElement) throw new Error("#app がありません。");
@@ -81,6 +83,62 @@ function loadDictionary() {
   } catch { return []; }
 }
 function saveDictionary(entries) { localStorage.setItem(DICT_KEY, JSON.stringify(entries)); }
+function projectBackupValue(project) { return { ...project, pronunciationDictionary:loadDictionary() }; }
+function downloadProjectBackup(project) { downloadJson(`${safeName(project.title)}.json`, projectBackupValue(project)); }
+function restoreDialogMarkup() {
+  return `<input id="restoreFile" type="file" accept=".json,application/json" hidden>
+    <dialog id="restoreDialog"><form method="dialog" id="restoreForm">
+      <h2>バックアップから復元</h2><div id="restoreSummary" class="restore-summary"></div>
+      <label>復元後のプロジェクト名<input id="restoreTitle" required></label>
+      <label id="restoreDictionaryOption" class="check"><input id="restoreDictionary" type="checkbox">読み方辞書も追加する（既存登録を優先）</label>
+      <p class="notice">新しいプロジェクトとして保存します。元のプロジェクトは上書きしません。カスタムブランド設定は完全復元されない場合があります。</p>
+      <div class="dialog-actions"><button type="button" id="cancelRestore">キャンセル</button><button type="submit" class="primary">新しいプロジェクトとして復元</button></div>
+    </form></dialog>`;
+}
+function formatFileSize(bytes) { return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.ceil(bytes / 1024))} KB`; }
+async function readFileText(file) {
+  if (typeof file.text === 'function') return await file.text();
+  return await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result));reader.onerror=()=>reject(reader.error||new Error('ファイルを読み込めませんでした。'));reader.readAsText(file);});
+}
+function mergePronunciationDictionary(imported) {
+  const result=mergePronunciationDictionaries(loadDictionary(),imported);saveDictionary(result.dictionary);return result;
+}
+function bindProjectRestoreUi() {
+  const button=root.querySelector('#openRestore'),input=root.querySelector('#restoreFile'),dialog=root.querySelector('#restoreDialog'),form=root.querySelector('#restoreForm');
+  if(!button||!input||!dialog||!form)return;
+  let candidate=null;
+  button.onclick=()=>{input.value='';input.click();};
+  root.querySelector('#cancelRestore').onclick=()=>{candidate=null;dialog.close();};
+  input.onchange=async()=>{
+    const file=input.files?.[0];if(!file)return;
+    if(file.size===0){alert('JSONファイルが空です。');return;}
+    if(file.size>=LARGE_BACKUP_WARNING_BYTES&&!confirm(`このバックアップは${formatFileSize(file.size)}あります。iPhoneでは読み込みに時間がかかる場合があります。続けますか？`))return;
+    try{
+      const parsed=parseProjectBackup(await readFileText(file));
+      const normalized=normalizeImportedProject(parsed);
+      const summary=summarizeProjectBackup(normalized.project,normalized.pronunciationDictionary,normalized.sourceSchemaVersion);
+      candidate={file, ...normalized, summary};
+      root.querySelector('#restoreTitle').value=`${summary.originalTitle}（復元）`;
+      const dictionaryOption=root.querySelector('#restoreDictionaryOption');dictionaryOption.hidden=!summary.dictionaryCount;root.querySelector('#restoreDictionary').checked=false;
+      const changes=[...normalized.fixes,...normalized.warnings];
+      root.querySelector('#restoreSummary').innerHTML=`
+        <dl><div><dt>ファイル</dt><dd>${escapeHtml(file.name)}（${formatFileSize(file.size)}）</dd></div><div><dt>元プロジェクト</dt><dd>${escapeHtml(summary.originalTitle)}</dd></div><div><dt>schemaVersion</dt><dd>${escapeHtml(String(summary.schemaVersion))}</dd></div><div><dt>シーン</dt><dd>${summary.sceneCount}件</dd></div><div><dt>画像／動画</dt><dd>${summary.imageCount}件／${summary.videoCount}件</dd></div><div><dt>字幕あり</dt><dd>${summary.subtitleCount}件</dd></div><div><dt>シーン音声</dt><dd>${summary.sceneNarrationCount}件</dd></div><div><dt>全体音声／BGM</dt><dd>${summary.hasNarration?'あり':'なし'}／${summary.hasBgm?'あり':'なし'}</dd></div><div><dt>AI保存データ</dt><dd>${summary.hasAiData?'あり':'なし'}</dd></div><div><dt>読み方辞書</dt><dd>${summary.dictionaryCount}件</dd></div></dl>
+        <div class="restore-warnings"><b>補完・修正・警告</b>${changes.length?`<ul>${changes.map(item=>`<li>${escapeHtml(item)}</li>`).join('')}</ul>`:'<p>特別な修正はありません。</p>'}</div>`;
+      dialog.showModal();
+    }catch(error){candidate=null;alert(error instanceof Error?error.message:'バックアップを読み込めませんでした。');}
+  };
+  form.onsubmit=async event=>{
+    event.preventDefault();if(!candidate)return;
+    const submit=form.querySelector('button[type="submit"]');submit.disabled=true;
+    try{
+      const restored=createRestoredProject(candidate.project,{title:root.querySelector('#restoreTitle').value});
+      await saveProject(restored);
+      let dictionaryMessage='';
+      if(root.querySelector('#restoreDictionary').checked){const result=mergePronunciationDictionary(candidate.pronunciationDictionary);dictionaryMessage=`\n読み方辞書：${result.added}件追加、${result.skipped}件重複でスキップ`;}
+      candidate=null;dialog.close();alert(`新しいプロジェクトとして復元しました。${dictionaryMessage}`);goProject(restored.id);
+    }catch(error){alert(`復元に失敗しました：${error instanceof Error?error.message:String(error)}`);submit.disabled=false;}
+  };
+}
 function applyDictionary(text, entries = loadDictionary()) {
   return [...entries].sort((a,b) => b.from.length - a.from.length).reduce((result, item) => result.split(item.from).join(item.to), text);
 }
@@ -105,15 +163,16 @@ async function renderHome() {
   root.innerHTML = `
     <main class="shell">
       <header class="brand"><div class="logo">✦</div><div><h1>Creator OS</h1><p>事業ごとの制作フローを、一つの場所に。</p></div></header>
-      <section class="hero"><span class="eyebrow">STUDIO HUB</span><h2>今日は、どの事業を進めますか？</h2><p>共通機能は共有しながら、チャンネルごとに必要な作業と制作手順を分けて管理します。</p></section>
+      <section class="hero"><span class="eyebrow">STUDIO HUB</span><h2>今日は、どの事業を進めますか？</h2><p>共通機能は共有しながら、チャンネルごとに必要な作業と制作手順を分けて管理します。</p><div class="hero-buttons"><button id="openRestore">↥ バックアップから復元</button></div></section>
       <section class="studio-grid">
         ${Object.entries(STUDIO).map(([key,s]) => `<button class="studio-card ${s.status==="準備中"?"muted":""}" data-studio="${key}"><span class="studio-icon">${s.icon}</span><div><h3>${s.title}</h3><p>${s.desc}</p></div><small>${s.status}</small></button>`).join("")}
       </section>
       <section class="section-head recent-head"><div><h2>最近のプロジェクト</h2><p>${projects.length}件をこの端末に保存中</p></div></section>
       <section class="project-grid">
         ${projects.length ? projects.slice(0,6).map(p => `<article class="project-card" data-id="${p.id}"><span>${labelPlatform(p.platform)}</span><h3>${escapeHtml(p.title)}</h3><p>${labelGenre(p.genre)}・目標${p.targetDurationSec}秒</p><small>更新 ${formatDate(p.updatedAt)}</small></article>`).join("") : `<div class="empty"><div>🎬</div><h3>まだプロジェクトがありません</h3><p>上のStudioから最初の制作を始めましょう。</p></div>`}
-      </section>
+      </section>${restoreDialogMarkup()}
     </main>`;
+  bindProjectRestoreUi();
   root.querySelectorAll("[data-studio]").forEach(card => card.onclick = () => goStudio(card.dataset.studio));
   root.querySelectorAll(".project-card").forEach(card => card.onclick = () => card.dataset.id && goProject(card.dataset.id));
 }
@@ -176,7 +235,7 @@ async function renderProject(id) {
       <section class="editor-card"><div class="section-head"><div><h2>読み方辞書</h2><p>字幕は漢字のまま、音声原稿だけ読みを置き換えます。</p></div><button id="addDictionary">＋ 追加</button></div><div id="dictionaryList" class="dictionary-list"></div></section>
       <section class="editor-card"><div class="section-head"><div><h2>試聴</h2><p>選択範囲があればその部分だけ、なければ全文を読み上げます。</p></div><span id="voiceStatus">待機中</span></div><label>音声<select id="voiceSelect"><option>音声を読み込み中…</option></select></label><div class="voice-controls"><label>速度<div class="range-line"><input id="rate" type="range" min="0.6" max="1.5" value="${project.narration?.rate ?? .92}" step="0.01"><span id="rateValue">${Number(project.narration?.rate ?? .92).toFixed(2)}</span></div></label><label>高さ<div class="range-line"><input id="pitch" type="range" min="0.7" max="1.3" value="${project.narration?.pitch ?? .95}" step="0.01"><span id="pitchValue">${Number(project.narration?.pitch ?? .95).toFixed(2)}</span></div></label></div><div class="tool-row"><button class="primary" id="preview">▶ 部分試聴</button><button id="pause">⏸ 一時停止</button><button class="danger" id="stop">■ 停止</button></div></section>
       <section class="editor-card compact"><label>目標尺<input id="duration" type="number" min="5" max="28800" value="${project.targetDurationSec}"><span>秒</span></label><p id="saveState">保存済み</p></section>
-      <section class="actions"><button id="exportJson">JSONを書き出す</button><button class="danger" id="delete">削除</button><button class="primary" id="nextScenes">次へ：シーン編集</button></section>
+      <section class="actions"><button id="exportJson">プロジェクトバックアップJSON</button><button class="danger" id="delete">削除</button><button class="primary" id="nextScenes">次へ：シーン編集</button></section>
       <dialog id="dictDialog"><form method="dialog" id="dictForm"><h2>読み方を登録</h2><input type="hidden" name="index"><label>表示語<input name="from" required placeholder="例：本田宗一郎"></label><label>読み<input name="to" required placeholder="例：ほんだ そういちろう"></label><div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" value="default">保存</button></div></form></dialog>
     </main>`;
 
@@ -221,7 +280,7 @@ async function renderProject(id) {
   root.querySelector("#preview").onclick=()=>{const selected=speech.value.slice(speech.selectionStart,speech.selectionEnd).trim(),text=applyDictionary(selected||speech.value||display.value).trim();if(!text)return alert("試聴する文章を入力してください。");synth.cancel();const u=new SpeechSynthesisUtterance(text),select=root.querySelector("#voiceSelect"),list=select._voices||[];u.voice=list[Number(select.value)]||null;u.lang=u.voice?.lang||"ja-JP";u.rate=Number(root.querySelector("#rate").value);u.pitch=Number(root.querySelector("#pitch").value);u.onstart=()=>setStatus("読み上げ中");u.onend=()=>setStatus("完了");u.onerror=()=>setStatus("エラー");synth.speak(u);};
   root.querySelector("#pause").onclick=()=>{if(synth.paused){synth.resume();setStatus("読み上げ中");}else{synth.pause();setStatus("一時停止中");}};
   root.querySelector("#stop").onclick=()=>{synth.cancel();setStatus("停止しました");};
-  root.querySelector("#exportJson").onclick=()=>downloadJson(`${safeName(project.title)}.json`,{...project,pronunciationDictionary:loadDictionary()});
+  root.querySelector("#exportJson").onclick=()=>downloadProjectBackup(project);
   root.querySelector("#delete").onclick=async()=>{if(confirm("このプロジェクトを削除しますか？")){await deleteProject(project.id);goStudio(studioForGenre(project.genre));}};
 }
 
@@ -299,7 +358,7 @@ async function renderScenes(id) {
         <div class="tool-row"><a class="button-link primary" href="./voice-lab.html?project=${encodeURIComponent(project.id)}&return=scenes">✦ シーン別ナレーションを作成</a></div>
       </section>
       <section class="editor-card compact"><div><b>合計時間</b><p id="totalDuration">0秒</p></div><p id="saveState">保存済み</p></section>
-      <section class="actions"><button id="backScript">← 台本へ</button><button id="exportJson">JSONを書き出す</button><button class="primary" id="nextBgm">次へ：字幕・BGM</button></section>
+      <section class="actions"><button id="backScript">← 台本へ</button><button id="exportJson">プロジェクトバックアップJSON</button><button class="primary" id="nextBgm">次へ：字幕・BGM</button></section>
     </main>`;
   attachProjectMenu(project, root.querySelector("#menu"), () => goStudio(studioForGenre(project.genre)));
   const saveState=root.querySelector("#saveState"); let pendingAsset=Promise.resolve();
@@ -346,7 +405,7 @@ async function renderScenes(id) {
   };
   root.querySelector("#undoScenes").onclick=restoreScenes;
   root.querySelector("#addScene").onclick=()=>{snapshotScenes();project.scenes.push({id:crypto.randomUUID?.()||`scene-${Date.now()}`,order:project.scenes.length+1,text:"",speechText:"",durationSec:5,imageData:"",motion:"zoom-in",transition:"fade",subtitleText:"",subtitleEnabled:true,subtitlePhraseSync:true,subtitleStartSec:0,subtitleEndSec:5});save();renderList();};
-  root.querySelector("#exportJson").onclick=()=>downloadJson(`${safeName(project.title)}.json`,project);
+  root.querySelector("#exportJson").onclick=()=>downloadProjectBackup(project);
   renderList();
 }
 
@@ -355,11 +414,12 @@ function ensureProjectSettings(project) {
   project.narration = { voiceURI:"", rate:0.92, pitch:0.94, volume:1, source:"browser", audioData:"", fileName:"", mimeType:"", ...(project.narration || {}) };
   project.bgm = project.bgm || { source:"none", title:"", category:"calm", volume:0.12, ducking:true, fadeInSec:1, fadeOutSec:2, loop:true, license:"", credit:"", audioData:"", fileName:"" };
   project.subtitleStyle = {
-    enabled:true, preset:"standard", fontSize:54, position:"bottom", maxCharsPerLine:16, maxLines:2,
+    enabled:true, preset:"standard", fontSize:54, position:"bottom", positionOffsetPercent:0, maxCharsPerLine:16, maxLines:2,
     textColor:"#ffffff", outlineColor:"#000000", outlineWidth:4,
     backgroundEnabled:false, backgroundColor:"#000000", backgroundOpacity:0.45,
     align:"center", ...(project.subtitleStyle || {})
   };
+  project.subtitleStyle.positionOffsetPercent = normalizeSubtitleOffset(project.subtitleStyle.positionOffsetPercent);
   project.output = project.output || { width:1080, height:1920, fps:30, format:"mp4", quality:"standard", subtitles:true, subtitlePosition:"bottom", bgmEnabled:true };
   project.output.subtitles = project.output.subtitles ?? project.subtitleStyle.enabled;
   project.output.subtitlePosition = project.output.subtitlePosition || project.subtitleStyle.position;
@@ -426,13 +486,13 @@ function buildSrt(project) {
 function attachProjectMenu(project, button, afterDelete) {
   if (!button) return;
   button.onclick = async () => {
-    const choice = prompt("プロジェクトメニュー\n1：名前を変更\n2：複製\n3：JSONを書き出す\n4：削除\n\n番号を入力してください。", "1");
+    const choice = prompt("プロジェクトメニュー\n1：名前を変更\n2：複製\n3：プロジェクトバックアップJSON\n4：削除\n\n番号を入力してください。", "1");
     if (choice === "1") {
       const title = prompt("新しいプロジェクト名", project.title);
       if (title?.trim()) { project.title=title.trim(); project.updatedAt=new Date().toISOString(); await saveProject(project); location.reload(); }
     } else if (choice === "2") {
       const copy=structuredClone(project); copy.id=crypto.randomUUID?.()||`project-${Date.now()}`; copy.title=`${project.title} のコピー`; copy.createdAt=copy.updatedAt=new Date().toISOString(); await saveProject(copy); goProject(copy.id);
-    } else if (choice === "3") downloadJson(`${safeName(project.title)}.json`, project);
+    } else if (choice === "3") downloadProjectBackup(project);
     else if (choice === "4" && confirm("このプロジェクトを削除しますか？")) { await deleteProject(project.id); afterDelete(); }
   };
 }
@@ -457,6 +517,7 @@ async function renderBgm(id) {
       <div class="form-grid subtitle-settings">
         <label>プリセット<select id="subtitlePreset"><option value="standard">標準</option><option value="large">大きく読みやすい</option><option value="minimal">シンプル</option><option value="boxed">背景ボックス</option></select></label>
         <label>表示位置<select id="subtitlePosition"><option value="top">上</option><option value="center">中央</option><option value="bottom">下</option></select></label>
+        <label>上下微調整<div class="range-line"><input id="positionOffset" type="range" min="-15" max="15" step="1" value="${st.positionOffsetPercent}"><span id="positionOffsetValue">${st.positionOffsetPercent>0?'+':''}${st.positionOffsetPercent}%</span></div><button type="button" id="resetPositionOffset" class="small-reset">0に戻す</button><small>マイナスで上、プラスで下へ移動します。</small></label>
         <label>文字サイズ<div class="range-line"><input id="fontSize" type="range" min="32" max="84" step="1" value="${st.fontSize}"><span id="fontSizeValue">${st.fontSize}</span></div></label>
         <label>1行の文字数<input id="maxChars" type="number" min="6" max="30" value="${st.maxCharsPerLine}"></label>
         <label>最大行数<select id="maxLines"><option value="1">1行</option><option value="2">2行</option></select></label>
@@ -474,7 +535,7 @@ async function renderBgm(id) {
 
     <section class="editor-card"><div class="section-head"><div><h2>シーン別字幕</h2><p>文章と表示開始・終了を調整します。長すぎる字幕には警告が出ます。</p></div><span id="subtitleCount">0/${scenes.length}</span></div><div id="subtitleList" class="subtitle-list"></div></section>
 
-    <section class="actions"><button id="backScenes">← シーンへ</button><button id="exportJson">JSONを書き出す</button><button class="primary" id="nextOutput">次へ：出力設定</button></section>
+    <section class="actions"><button id="backScenes">← シーンへ</button><button id="exportJson">プロジェクトバックアップJSON</button><button class="primary" id="nextOutput">次へ：出力設定</button></section>
   </main>`;
   root.querySelector('#source').value=b.source; root.querySelector('#category').value=b.category;
   root.querySelector('#subtitlePreset').value=st.preset||'standard'; root.querySelector('#subtitlePosition').value=st.position; root.querySelector('#maxLines').value=String(st.maxLines);
@@ -483,7 +544,7 @@ async function renderBgm(id) {
   const saveState=root.querySelector('#saveState'); let pendingAsset=Promise.resolve();
   const readGlobalSettings=()=>Object.assign(st,{
     enabled:root.querySelector('#subtitleEnabled').checked,preset:root.querySelector('#subtitlePreset').value,
-    position:root.querySelector('#subtitlePosition').value,fontSize:Number(root.querySelector('#fontSize').value),
+    position:root.querySelector('#subtitlePosition').value,positionOffsetPercent:normalizeSubtitleOffset(root.querySelector('#positionOffset').value),fontSize:Number(root.querySelector('#fontSize').value),
     maxCharsPerLine:Math.max(6,Number(root.querySelector('#maxChars').value)||16),maxLines:Number(root.querySelector('#maxLines').value)||2,
     textColor:root.querySelector('#textColor').value,outlineColor:root.querySelector('#outlineColor').value,
     outlineWidth:Number(root.querySelector('#outlineWidth').value),backgroundEnabled:root.querySelector('#backgroundEnabled').checked,
@@ -503,9 +564,10 @@ async function renderBgm(id) {
   bindSavedNavigation(root.querySelector('#backScenes'),flushSave,()=>goScenes(id));
   bindSavedNavigation(root.querySelector('#nextOutput'),flushSave,()=>goOutput(id));
 
-  const updateLabels=()=>{root.querySelector('#volumeValue').textContent=`${Math.round(Number(root.querySelector('#volume').value)*100)}%`;root.querySelector('#fontSizeValue').textContent=root.querySelector('#fontSize').value;root.querySelector('#outlineWidthValue').textContent=root.querySelector('#outlineWidth').value;root.querySelector('#backgroundOpacityValue').textContent=`${Math.round(Number(root.querySelector('#backgroundOpacity').value)*100)}%`;};
+  const updateLabels=()=>{root.querySelector('#volumeValue').textContent=`${Math.round(Number(root.querySelector('#volume').value)*100)}%`;root.querySelector('#fontSizeValue').textContent=root.querySelector('#fontSize').value;const offset=normalizeSubtitleOffset(root.querySelector('#positionOffset').value);root.querySelector('#positionOffsetValue').textContent=`${offset>0?'+':''}${offset}%`;root.querySelector('#outlineWidthValue').textContent=root.querySelector('#outlineWidth').value;root.querySelector('#backgroundOpacityValue').textContent=`${Math.round(Number(root.querySelector('#backgroundOpacity').value)*100)}%`;};
   ['source','category','bgmTitle','volume','fadeIn','fadeOut','ducking','loop','license','credit'].forEach(k=>root.querySelector('#'+k).oninput=()=>{updateLabels();save();});
-  ['subtitleEnabled','subtitlePosition','fontSize','maxChars','maxLines','textColor','outlineColor','outlineWidth','backgroundEnabled','backgroundColor','backgroundOpacity'].forEach(k=>root.querySelector('#'+k).oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();});
+  ['subtitleEnabled','subtitlePosition','positionOffset','fontSize','maxChars','maxLines','textColor','outlineColor','outlineWidth','backgroundEnabled','backgroundColor','backgroundOpacity'].forEach(k=>root.querySelector('#'+k).oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();});
+  root.querySelector('#resetPositionOffset').onclick=()=>{root.querySelector('#positionOffset').value='0';readGlobalSettings();updateLabels();renderSubtitlePreview();save();};
 
   const presets={
     standard:{fontSize:54,position:'bottom',maxCharsPerLine:16,maxLines:2,outlineWidth:4,backgroundEnabled:false,backgroundOpacity:.45},
@@ -538,7 +600,10 @@ async function renderBgm(id) {
     const background=st.backgroundEnabled?hexToRgba(st.backgroundColor,st.backgroundOpacity):'transparent';
     const stroke=Math.max(0,st.outlineWidth*.28);
     const cardLabel=result.cards.length>1?`<small class="subtitle-card-count">字幕 1/${result.cards.length}（空行で切替）</small>`:'';
-    box.innerHTML=`${scene.imageData?`<img src="${scene.imageData}" alt="">`:`<div class="subtitle-preview-fallback">シーン ${index+1}</div>`}${cardLabel}<div class="subtitle-layer pos-${st.position}">${visible?`<div class="subtitle-render ${result.overflow?'overflow':''}" style="font-size:${Math.max(14,st.fontSize*.32)}px;color:${st.textColor};-webkit-text-stroke:${stroke}px ${st.outlineColor};background:${background}">${result.lines.map(escapeHtml).join('<br>')}</div>`:''}</div>`;
+    const previewFontSize=Math.max(14,st.fontSize*.32),yRatio=resolveSubtitleYRatio(st.position,st.positionOffsetPercent);
+    box.innerHTML=`${scene.imageData?`<img src="${scene.imageData}" alt="">`:`<div class="subtitle-preview-fallback">シーン ${index+1}</div>`}${cardLabel}<div class="subtitle-layer" style="padding:0 6%;align-items:flex-start">${visible?`<div class="subtitle-render ${result.overflow?'overflow':''}" style="position:absolute;left:6%;right:6%;top:${(yRatio*100).toFixed(2)}%;transform:translateY(-50%);width:auto;font-size:${previewFontSize}px;color:${st.textColor};-webkit-text-stroke:${stroke}px ${st.outlineColor};background:${background}">${result.lines.map(escapeHtml).join('<br>')}</div>`:''}</div>`;
+    const rendered=box.querySelector('.subtitle-render');
+    if(rendered&&box.clientHeight){const safeRatio=resolveSubtitleYRatio(st.position,st.positionOffsetPercent,rendered.offsetHeight/box.clientHeight/2);rendered.style.top=`${(safeRatio*100).toFixed(2)}%`;}
   }
   function updateSubtitleCount(){const count=scenes.filter(s=>s.subtitleEnabled!==false&&(s.subtitleText||'').trim()).length;root.querySelector('#subtitleCount').textContent=`${count}/${scenes.length}`;}
   function renderSubtitleEditor(){
@@ -554,7 +619,7 @@ async function renderBgm(id) {
   root.querySelector('#generateSubtitles').onclick=()=>{if(scenes.some(s=>(s.subtitleText||'').trim())&&!confirm('現在の字幕をシーン文章から作り直しますか？'))return;scenes.forEach(s=>{s.subtitleText=s.text||'';s.subtitleEnabled=true;s.subtitleStartSec=0;s.subtitleEndSec=Math.max(1,Number(s.durationSec)||1);});renderSubtitleEditor();renderSubtitlePreview();save();};
   root.querySelector('#clearSubtitles').onclick=()=>{if(!confirm('すべてのシーンの字幕文章を消去しますか？'))return;scenes.forEach(s=>s.subtitleText='');renderSubtitleEditor();renderSubtitlePreview();save();};
   root.querySelector('#exportSrt').onclick=()=>{const srt=buildSrt(project);if(!srt.trim())return alert('書き出せる字幕がありません。');downloadText(`${safeName(project.title)}.srt`,srt,'application/x-subrip;charset=utf-8');};
-  root.querySelector('#exportJson').onclick=()=>downloadJson(`${safeName(project.title)}.json`,project);
+  root.querySelector('#exportJson').onclick=()=>downloadProjectBackup(project);
   updateLabels(); renderSubtitleEditor(); renderSubtitlePreview();
 }
 
@@ -598,7 +663,7 @@ async function renderOutput(id) {
   </section>
 
   <section class="editor-card"><h2>制作データの書き出し</h2><div class="tool-row"><button id="exportSrt">字幕SRT</button><button id="exportPlan">制作プランJSON</button><button class="primary" id="publish">投稿準備へ</button></div></section>
-  <section class="actions"><button id="backBgm">← BGM・字幕へ</button><button id="exportJson">プロジェクトJSON</button><button class="primary" id="publish2">次へ：投稿準備</button></section></main>`;
+  <section class="actions"><button id="backBgm">← BGM・字幕へ</button><button id="exportJson">プロジェクトバックアップJSON</button><button class="primary" id="publish2">次へ：投稿準備</button></section></main>`;
 
   root.querySelector('#resolution').value=`${o.width}x${o.height}`;root.querySelector('#fps').value=String(o.fps);root.querySelector('#quality').value=o.quality;root.querySelector('#subtitlePosition').value=o.subtitlePosition||st.position;
   root.querySelector('#publish').onclick=root.querySelector('#publish2').onclick=()=>goPublish(id);attachProjectMenu(project,root.querySelector('#menu'),()=>goStudio(studioForGenre(project.genre)));
@@ -678,12 +743,12 @@ async function renderOutput(id) {
   verifyInput.onchange=async()=>{const file=verifyInput.files?.[0];if(!file)return;const verifyInfo=root.querySelector('#verifySavedVideoInfo');verifyInfo.textContent='保存後ファイルを検証しています…';const url=URL.createObjectURL(file);try{const meta=await new Promise((resolve,reject)=>{const v=document.createElement('video');v.preload='metadata';v.playsInline=true;v.onloadedmetadata=()=>resolve({width:v.videoWidth,height:v.videoHeight,duration:v.duration});v.onerror=()=>reject(new Error('動画メタデータを読み込めませんでした。'));v.src=url;});let savedHash='';try{if(globalThis.crypto?.subtle){const buf=await file.arrayBuffer();const digest=await crypto.subtle.digest('SHA-256',buf);savedHash=Array.from(new Uint8Array(digest)).map(b=>b.toString(16).padStart(2,'0')).join('');}}catch{}const sameSize=generatedMeta&&file.size===generatedMeta.size;const sameHash=Boolean(generatedHash&&savedHash&&generatedHash===savedHash);const sameResolution=generatedMeta?.width===meta.width&&generatedMeta?.height===meta.height;const verdict=sameHash?'完全一致：保存後も生成Blobと同一ファイルです。':sameSize&&sameResolution?'見た目の主要情報は一致（ハッシュは不一致または取得不可）。':sameResolution?'解像度は一致していますが、ファイル内容またはサイズが変化しています。':'解像度が変化しています。保存・共有経路で変換された可能性があります。';verifyInfo.textContent=`検証結果：${verdict}\n生成 ${generatedMeta?.width||'?'}×${generatedMeta?.height||'?'}・${generatedMeta?Math.round(generatedMeta.size/1024):'?'}KB ／ 保存後 ${meta.width||'?'}×${meta.height||'?'}・${Math.round(file.size/1024)}KB${sameHash?' ／ SHA-256一致':''}`;}catch(error){verifyInfo.textContent=`検証できませんでした：${error.message}`;}finally{URL.revokeObjectURL(url);}};
 
   root.querySelector('#exportSrt').onclick=()=>{const srt=buildSrt(project);if(!srt.trim())return alert('書き出せる字幕がありません。');downloadText(`${safeName(project.title)}.srt`,srt,'application/x-subrip;charset=utf-8');};
-  root.querySelector('#exportPlan').onclick=()=>downloadJson(`${safeName(project.title)}-production-plan.json`,{schemaVersion:3,title:project.title,output:o,scenes,bgm:project.bgm,narration:project.narration,subtitleStyle:st,subtitles:buildSubtitleTimeline(project),scripts:{display:project.displayScript,speech:project.speechScript}});root.querySelector('#exportJson').onclick=()=>downloadJson(`${safeName(project.title)}.json`,project);
+  root.querySelector('#exportPlan').onclick=()=>downloadJson(`${safeName(project.title)}-production-plan.json`,{schemaVersion:3,title:project.title,output:o,scenes,bgm:project.bgm,narration:project.narration,subtitleStyle:st,subtitles:buildSubtitleTimeline(project),scripts:{display:project.displayScript,speech:project.speechScript}});root.querySelector('#exportJson').onclick=()=>downloadProjectBackup(project);
 }
 
 async function renderPublish(id) {
   const project=await getProject(id);if(!project){goHome();return;}ensureProjectSettings(project);const p=project.publish;
-  root.innerHTML=`<main class="shell editor-shell"><header class="editor-head"><button id="back">←</button><div><span>投稿準備</span><h1>${escapeHtml(project.title)}</h1></div><button id="menu">•••</button></header><section class="editor-card"><div class="section-head"><div><h2>YouTube投稿情報</h2><p>タイトル・概要欄・タグをまとめます。</p></div><span id="saveState">保存済み</span></div><label>タイトル<input id="publishTitle" value="${escapeHtml(p.title)}"></label><label>概要欄<textarea id="description" placeholder="動画の概要、出典、クレジットなど">${escapeHtml(p.description)}</textarea></label><label>タグ<input id="tags" value="${escapeHtml(p.tags)}" placeholder="偉人, 名言, Shorts"></label><label>サムネ文字<input id="thumbnailText" value="${escapeHtml(p.thumbnailText)}" placeholder="短く強い言葉"></label><label>公開設定<select id="visibility"><option value="private">非公開</option><option value="unlisted">限定公開</option><option value="public">公開</option></select></label><div class="tool-row"><button id="copyTitle">タイトルをコピー</button><button id="copyDescription">概要欄をコピー</button><button id="copyAll" class="primary">全部コピー</button></div></section><section class="actions"><button id="backOutput">← 出力へ</button><button id="exportJson">JSONを書き出す</button><button class="primary" id="done">Studioへ戻る</button></section></main>`;
+  root.innerHTML=`<main class="shell editor-shell"><header class="editor-head"><button id="back">←</button><div><span>投稿準備</span><h1>${escapeHtml(project.title)}</h1></div><button id="menu">•••</button></header><section class="editor-card"><div class="section-head"><div><h2>YouTube投稿情報</h2><p>タイトル・概要欄・タグをまとめます。</p></div><span id="saveState">保存済み</span></div><label>タイトル<input id="publishTitle" value="${escapeHtml(p.title)}"></label><label>概要欄<textarea id="description" placeholder="動画の概要、出典、クレジットなど">${escapeHtml(p.description)}</textarea></label><label>タグ<input id="tags" value="${escapeHtml(p.tags)}" placeholder="偉人, 名言, Shorts"></label><label>サムネ文字<input id="thumbnailText" value="${escapeHtml(p.thumbnailText)}" placeholder="短く強い言葉"></label><label>公開設定<select id="visibility"><option value="private">非公開</option><option value="unlisted">限定公開</option><option value="public">公開</option></select></label><div class="tool-row"><button id="copyTitle">タイトルをコピー</button><button id="copyDescription">概要欄をコピー</button><button id="copyAll" class="primary">全部コピー</button></div></section><section class="actions"><button id="backOutput">← 出力へ</button><button id="exportJson">投稿情報JSON</button><button class="primary" id="done">Studioへ戻る</button></section></main>`;
   root.querySelector('#visibility').value=p.visibility;attachProjectMenu(project,root.querySelector('#menu'),()=>goStudio(studioForGenre(project.genre)));
   const persist=async()=>{Object.assign(p,{title:root.querySelector('#publishTitle').value,description:root.querySelector('#description').value,tags:root.querySelector('#tags').value,thumbnailText:root.querySelector('#thumbnailText').value,visibility:root.querySelector('#visibility').value});project.updatedAt=new Date().toISOString();await saveProject(project);};
   const {scheduleSave:save,flushSave}=createSaveController({delay:400,persist,setStatus:text=>root.querySelector('#saveState').textContent=text});
