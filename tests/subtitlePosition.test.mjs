@@ -1,6 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeSubtitleOffset, resolveSubtitleYRatio } from '../subtitlePosition.js';
+import { normalizeSubtitleOffset, resolveEffectiveSubtitlePosition, resolveSubtitleYRatio } from '../subtitlePosition.js';
+
+test('scene個別設定がなければ全体設定に追従する',()=>{
+  assert.deepEqual(resolveEffectiveSubtitlePosition({}, {position:'bottom',positionOffsetPercent:-5}), {position:'bottom',offsetPercent:-5,overridden:false});
+  assert.equal(resolveEffectiveSubtitlePosition({}, {position:'top',positionOffsetPercent:4}).position,'top');
+});
+
+test('scene個別設定を優先しoffsetを安全に補正する',()=>{
+  assert.deepEqual(resolveEffectiveSubtitlePosition({subtitlePosition:'top',subtitlePositionOffsetPercent:-5}, {position:'bottom',positionOffsetPercent:8}), {position:'top',offsetPercent:-5,overridden:true});
+  assert.equal(resolveEffectiveSubtitlePosition({subtitlePosition:'bottom',subtitlePositionOffsetPercent:99}, {position:'top'}).offsetPercent,15);
+  assert.deepEqual(resolveEffectiveSubtitlePosition({subtitlePosition:'invalid',subtitlePositionOffsetPercent:12}, {position:'center',positionOffsetPercent:3}), {position:'center',offsetPercent:3,overridden:false});
+});
 
 test('上・中央・下の従来位置を維持する',()=>{
   assert.equal(resolveSubtitleYRatio('top',0),.2);
