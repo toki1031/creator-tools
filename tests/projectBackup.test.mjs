@@ -118,6 +118,7 @@ test('確認画面用の件数を集計する', () => {
   assert.equal(summary.schemaVersion,4);
   assert.equal(summary.sceneCount,2);
   assert.equal(summary.imageCount,1);
+  assert.equal(summary.mediaLibraryCount,0);
   assert.equal(summary.videoCount,1);
   assert.equal(summary.subtitleCount,2);
   assert.equal(summary.sceneNarrationCount,1);
@@ -132,4 +133,51 @@ test('読み方辞書は端末側を優先して追加件数と重複件数を�
   assert.deepEqual(result.dictionary,[{from:'既存',to:'きそん'},{from:'追加',to:'ついか'}]);
   assert.equal(result.added,1);
   assert.equal(result.skipped,1);
+});
+
+
+test('画像素材ライブラリとscene参照をschemaVersion 4のまま復元する', () => {
+  const raw=sample();
+  raw.mediaLibrary=[{id:'asset-a',type:'image',data:image,fileName:'a.png',createdAt:'2026-08-25T00:00:00.000Z'}];
+  raw.scenes[0].imageAssetId='asset-a';
+  raw.scenes[0].imageData='';
+  const normalized=normalizeImportedProject(raw);
+  assert.equal(normalized.project.schemaVersion,4);
+  assert.equal(normalized.project.mediaLibrary.length,1);
+  assert.equal(normalized.project.scenes[0].imageAssetId,'asset-a');
+  const summary=summarizeProjectBackup(normalized.project);
+  assert.equal(summary.imageCount,1);
+  assert.equal(summary.mediaLibraryCount,1);
+  const restored=createRestoredProject(normalized.project);
+  assert.equal(restored.mediaLibrary[0].id,'asset-a');
+  assert.equal(restored.scenes[0].imageAssetId,'asset-a');
+  assert.equal(restored.finalReview,undefined);
+});
+
+test('不正assetと存在しないimageAssetIdを除外しlegacy画像は残す', () => {
+  const raw=sample();
+  raw.mediaLibrary=[
+    {id:'bad-type',type:'video',data:'data:video/mp4;base64,AA=='},
+    {id:'bad-data',type:'image',data:'https://example.com/a.png'}
+  ];
+  raw.scenes[0].imageAssetId='missing';
+  const normalized=normalizeImportedProject(raw);
+  assert.equal(normalized.project.mediaLibrary.length,0);
+  assert.equal(Object.hasOwn(normalized.project.scenes[0],'imageAssetId'),false);
+  assert.equal(normalized.project.scenes[0].imageData,image);
+  assert.ok(normalized.warnings.length>=3);
+});
+
+test('重複した素材IDは安全に再発行する', () => {
+  const raw=sample();
+  raw.mediaLibrary=[
+    {id:'same-asset',type:'image',data:image,fileName:'a.png'},
+    {id:'same-asset',type:'image',data:'data:image/jpeg;base64,Qg==',fileName:'b.jpg'}
+  ];
+  let seq=0;
+  const normalized=normalizeImportedProject(raw,{createId:()=>`asset-new-${++seq}`});
+  assert.equal(normalized.project.mediaLibrary.length,2);
+  assert.equal(normalized.project.mediaLibrary[0].id,'same-asset');
+  assert.notEqual(normalized.project.mediaLibrary[1].id,'same-asset');
+  assert.equal(new Set(normalized.project.mediaLibrary.map(asset=>asset.id)).size,2);
 });

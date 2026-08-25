@@ -1,3 +1,4 @@
+import { resolveSceneImageSource } from './mediaLibrary.js';
 import { resolveEffectiveSubtitlePosition, resolveSubtitleYRatio } from './subtitlePosition.js';
 
 const MIME_CANDIDATES_AUDIO = [
@@ -55,7 +56,7 @@ export function validateVideoProject(project) {
   const errors = [];
   const warnings = [];
   if (!scenes.length) errors.push('シーンがありません。');
-  const imageCount = scenes.filter(scene => scene.imageData).length;
+  const imageCount = scenes.filter(scene => resolveSceneImageSource(project, scene).data).length;
   if (imageCount < scenes.length) warnings.push(`画像未登録のシーンが${scenes.length - imageCount}件あります。背景色で代用します。`);
   if (getProjectDuration(project) <= 0) errors.push('動画の長さが0秒です。');
   if (project.output?.bgmEnabled && project.bgm?.source !== 'none' && !project.bgm?.audioData) warnings.push('BGM設定はありますが、音源ファイルが登録されていません。');
@@ -93,9 +94,10 @@ export async function prepareVideoProject(project, { onStatus = () => {} } = {})
   const imageFailures = [];
   onStatus('シーン画像を準備しています…');
   const images = await Promise.all(scenes.map(async (scene, index) => {
-    if (!scene.imageData) return null;
+    const imageSource = resolveSceneImageSource(project, scene).data;
+    if (!imageSource) return null;
     try {
-      return await loadImageSafely(scene.imageData);
+      return await loadImageSafely(imageSource);
     } catch (error) {
       imageFailures.push({ index, message: error instanceof Error ? error.message : String(error) });
       console.warn(`Scene ${index + 1} image load failed`, error);
