@@ -55,6 +55,29 @@ test('旧projectの不足フィールドと未設定schemaVersionを補完する
   assert.equal(normalized.project.subtitleStyle.positionOffsetPercent,0);
   assert.equal(normalized.project.bgm.source,'none');
   assert.equal(normalized.project.publish.title,'旧版');
+  assert.equal(normalized.project.scenes[0]?.subtitlePosition,undefined);
+});
+
+test('scene個別字幕位置を正規化して復元する',()=>{
+  const raw=sample();
+  raw.scenes[0].subtitlePosition='top';raw.scenes[0].subtitlePositionOffsetPercent=-5;
+  raw.scenes[1].subtitlePosition='bottom';raw.scenes[1].subtitlePositionOffsetPercent=99;
+  const normalized=normalizeImportedProject(raw);
+  assert.equal(normalized.project.schemaVersion,4);
+  assert.deepEqual([normalized.project.scenes[0].subtitlePosition,normalized.project.scenes[0].subtitlePositionOffsetPercent],['top',-5]);
+  assert.deepEqual([normalized.project.scenes[1].subtitlePosition,normalized.project.scenes[1].subtitlePositionOffsetPercent],['bottom',15]);
+  const restored=createRestoredProject(normalized.project);
+  assert.equal(restored.scenes[0].subtitlePosition,'top');
+  assert.equal(restored.finalReview,undefined);
+});
+
+test('不正なscene位置と位置のないoffsetを除去する',()=>{
+  const raw=sample();raw.scenes[0].subtitlePosition='left';raw.scenes[0].subtitlePositionOffsetPercent=8;
+  delete raw.scenes[1].subtitlePosition;raw.scenes[1].subtitlePositionOffsetPercent=-9;
+  const scenes=normalizeImportedProject(raw).project.scenes;
+  assert.equal(Object.hasOwn(scenes[0],'subtitlePosition'),false);
+  assert.equal(Object.hasOwn(scenes[0],'subtitlePositionOffsetPercent'),false);
+  assert.equal(Object.hasOwn(scenes[1],'subtitlePositionOffsetPercent'),false);
 });
 
 test('ID生成器が元IDを返しても既存projectを上書きしない',()=>{

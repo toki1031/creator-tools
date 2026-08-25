@@ -94,6 +94,9 @@ export function normalizeImportedProject(input, { createId } = {}) {
     const subtitleStartSec = Math.min(durationSec, Math.max(0, finiteOr(scene.subtitleStartSec, 0)));
     const subtitleEndSec = Math.min(durationSec, Math.max(subtitleStartSec, finiteOr(scene.subtitleEndSec, durationSec)));
     const narration = isRecord(scene.narration) ? normalizeNarration(scene.narration, warnings, `シーン${index + 1}のナレーション`) : undefined;
+    const subtitlePosition = ['top','center','bottom'].includes(scene.subtitlePosition) ? scene.subtitlePosition : undefined;
+    delete scene.subtitlePosition;
+    delete scene.subtitlePositionOffsetPercent;
     return {
       ...scene, id, order:index + 1, text:stringOr(scene.text), speechText:stringOr(scene.speechText, stringOr(scene.text)),
       durationSec, imageData:cleanDataUrl(scene.imageData, 'image', `シーン${index + 1}の画像`, warnings),
@@ -101,6 +104,7 @@ export function normalizeImportedProject(input, { createId } = {}) {
       motion:stringOr(scene.motion, 'zoom-in'), transition:stringOr(scene.transition, 'fade'),
       subtitleText:stringOr(scene.subtitleText, stringOr(scene.text)), subtitleEnabled:booleanOr(scene.subtitleEnabled, true),
       subtitlePhraseSync:booleanOr(scene.subtitlePhraseSync, true), subtitleStartSec, subtitleEndSec,
+      ...(subtitlePosition ? { subtitlePosition, subtitlePositionOffsetPercent:Math.min(15, Math.max(-15, Math.round(finiteOr(item.subtitlePositionOffsetPercent, 0)))) } : {}),
       ...(narration ? { narration } : {})
     };
   });

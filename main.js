@@ -4,7 +4,7 @@ import { deleteProject, getProject, listProjects, saveProject } from "./db.js";
 import { downloadJson, downloadText } from "./download.js";
 import { getVideoCapabilities, getProjectDuration, validateVideoProject, prepareVideoProject, runVisualPreview, exportProjectVideo, drawProjectFrame } from "./videoRenderer.js";
 import { createRestoredProject, LARGE_BACKUP_WARNING_BYTES, mergePronunciationDictionaries, normalizeImportedProject, parseProjectBackup, summarizeProjectBackup } from "./projectBackup.js";
-import { normalizeSubtitleOffset, resolveSubtitleYRatio } from "./subtitlePosition.js";
+import { normalizeSubtitleOffset, resolveEffectiveSubtitlePosition, resolveSubtitleYRatio } from "./subtitlePosition.js";
 
 const rootElement = document.querySelector("#app");
 if (!rootElement) throw new Error("#app がありません。");
@@ -55,7 +55,8 @@ function bindSavedNavigation(button, flushSave, navigate) {
 const escapeHtml = (value = "") => String(value).replace(/[&<>'"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c] ?? c));
 const finalReviewSignature = project => {
   const scenes=Array.isArray(project?.scenes)?project.scenes:[];
-  return scenes.map((s,i)=>[
+  const style=project?.subtitleStyle||{};
+  return [`subtitle:${style.position||''}:${normalizeSubtitleOffset(style.positionOffsetPercent)}`, ...scenes.map((s,i)=>[
     i,
     String(s.imageData||"").length,
     String(s.videoData||"").length,
@@ -63,8 +64,10 @@ const finalReviewSignature = project => {
     String(s.subtitleText||"").trim(),
     String(s.speechText||"").trim(),
     String(s.narration?.audioData||"").length,
-    Number(s.durationSec||0).toFixed(2)
-  ].join(":")).join("|");
+    Number(s.durationSec||0).toFixed(2),
+    s.subtitlePosition||'',
+    s.subtitlePosition ? normalizeSubtitleOffset(s.subtitlePositionOffsetPercent) : ''
+  ].join(":"))].join("|");
 };
 
 const formatDate = (iso) => new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
@@ -314,7 +317,7 @@ function reconcileScenes(oldScenes, freshScenes) {
       const end=Math.min(duration,Math.max(start,Number(old.subtitleEndSec)||duration));
       return {...scene,...old,id:old.id||scene.id,text:scene.text,speechText:old.speechText??scene.speechText,durationSec:duration,subtitleText:old.subtitleText??scene.text,subtitleEnabled:old.subtitleEnabled??true,subtitlePhraseSync:old.subtitlePhraseSync??true,subtitleStartSec:start,subtitleEndSec:end};
     }
-    return {...scene,id:old.id||scene.id,imageData:old.imageData||"",videoData:old.videoData||"",motion:old.motion||scene.motion,transition:old.transition||scene.transition,subtitleText:scene.text,subtitleEnabled:true,subtitlePhraseSync:true,subtitleStartSec:0,subtitleEndSec:scene.durationSec};
+    return {...scene,id:old.id||scene.id,imageData:old.imageData||"",videoData:old.videoData||"",motion:old.motion||scene.motion,transition:old.transition||scene.transition,...(old.subtitlePosition ? {subtitlePosition:old.subtitlePosition,subtitlePositionOffsetPercent:normalizeSubtitleOffset(old.subtitlePositionOffsetPercent)} : {}),subtitleText:scene.text,subtitleEnabled:true,subtitlePhraseSync:true,subtitleStartSec:0,subtitleEndSec:scene.durationSec};
   });
 }
 
@@ -600,15 +603,18 @@ async function renderBgm(id) {
     const background=st.backgroundEnabled?hexToRgba(st.backgroundColor,st.backgroundOpacity):'transparent';
     const stroke=Math.max(0,st.outlineWidth*.28);
     const cardLabel=result.cards.length>1?`<small class="subtitle-card-count">字幕 1/${result.cards.length}（空行で切替）</small>`:'';
-    const previewFontSize=Math.max(14,st.fontSize*.32),yRatio=resolveSubtitleYRatio(st.position,st.positionOffsetPercent);
+    const previewFontSize=Math.max(14,st.fontSize*.32),effectivePosition=resolveEffectiveSubtitlePosition(scene,st,project.output?.subtitlePosition),yRatio=resolveSubtitleYRatio(effectivePosition.position,effectivePosition.offsetPercent);
     box.innerHTML=`${scene.imageData?`<img src="${scene.imageData}" alt="">`:`<div class="subtitle-preview-fallback">シーン ${index+1}</div>`}${cardLabel}<div class="subtitle-layer" style="padding:0 6%;align-items:flex-start">${visible?`<div class="subtitle-render ${result.overflow?'overflow':''}" style="position:absolute;left:6%;right:6%;top:${(yRatio*100).toFixed(2)}%;transform:translateY(-50%);width:auto;font-size:${previewFontSize}px;color:${st.textColor};-webkit-text-stroke:${stroke}px ${st.outlineColor};background:${background}">${result.lines.map(escapeHtml).join('<br>')}</div>`:''}</div>`;
     const rendered=box.querySelector('.subtitle-render');
-    if(rendered&&box.clientHeight){const safeRatio=resolveSubtitleYRatio(st.position,st.positionOffsetPercent,rendered.offsetHeight/box.clientHeight/2);rendered.style.top=`${(safeRatio*100).toFixed(2)}%`;}
+    if(rendered&&box.clientHeight){const safeRatio=resolveSubtitleYRatio(effectivePosition.position,effectivePosition.offsetPercent,rendered.offsetHeight/box.clientHeight/2);rendered.style.top=`${(safeRatio*100).toFixed(2)}%`;}
   }
   function updateSubtitleCount(){const count=scenes.filter(s=>s.subtitleEnabled!==false&&(s.subtitleText||'').trim()).length;root.querySelector('#subtitleCount').textContent=`${count}/${scenes.length}`;}
   function renderSubtitleEditor(){
     readGlobalSettings(); const list=root.querySelector('#subtitleList'); updateSubtitleCount();
-    list.innerHTML=scenes.length?scenes.map((scene,i)=>{const duration=Math.max(1,Number(scene.durationSec)||1);scene.subtitleStartSec=Math.min(duration,Math.max(0,Number(scene.subtitleStartSec)||0));scene.subtitleEndSec=Math.min(duration,Math.max(scene.subtitleStartSec,Number(scene.subtitleEndSec)||duration));const formatted=formatSubtitleLines(scene.subtitleText||'',st.maxCharsPerLine,st.maxLines);const limit=st.maxCharsPerLine*st.maxLines;return `<article class="subtitle-item" data-index="${i}"><div class="subtitle-item-head"><div><b>シーン ${i+1}</b><small>${duration}秒</small></div><label class="switch-line"><input data-sub-enabled="${i}" type="checkbox" ${scene.subtitleEnabled!==false?'checked':''}>表示</label></div><textarea data-sub-text="${i}" placeholder="字幕文章">${escapeHtml(scene.subtitleText||'')}</textarea><div class="subtitle-meta"><span data-sub-count="${i}" class="${formatted.overflow?'warning':''}">${formatted.chars}文字／目安${limit}文字${formatted.overflow?'・長すぎます':''}</span></div><div class="subtitle-time-grid"><label>開始（シーン内）<input data-sub-start="${i}" type="number" min="0" max="${duration}" step="0.1" value="${scene.subtitleStartSec}">秒</label><label>終了（シーン内）<input data-sub-end="${i}" type="number" min="0" max="${duration}" step="0.1" value="${scene.subtitleEndSec}">秒</label><button data-preview="${i}">プレビュー</button></div></article>`}).join(''):'<div class="dictionary-empty">シーン編集でシーンを作成してください。</div>';
+    list.innerHTML=scenes.length?scenes.map((scene,i)=>{const duration=Math.max(1,Number(scene.durationSec)||1);scene.subtitleStartSec=Math.min(duration,Math.max(0,Number(scene.subtitleStartSec)||0));scene.subtitleEndSec=Math.min(duration,Math.max(scene.subtitleStartSec,Number(scene.subtitleEndSec)||duration));const formatted=formatSubtitleLines(scene.subtitleText||'',st.maxCharsPerLine,st.maxLines);const limit=st.maxCharsPerLine*st.maxLines;return `<article class="subtitle-item" data-index="${i}"><div class="subtitle-item-head"><div><b>シーン ${i+1}</b><small>${duration}秒</small></div><label class="switch-line"><input data-sub-enabled="${i}" type="checkbox" ${scene.subtitleEnabled!==false?'checked':''}>表示</label></div><textarea data-sub-text="${i}" placeholder="字幕文章">${escapeHtml(scene.subtitleText||'')}</textarea><div class="subtitle-meta"><span data-sub-count="${i}" class="${formatted.overflow?'warning':''}">${formatted.chars}文字／目安${limit}文字${formatted.overflow?'・長すぎます':''}</span></div><div class="scene-subtitle-position"><label>字幕位置<select data-sub-position="${i}"><option value="">全体設定を使う</option><option value="top" ${scene.subtitlePosition==='top'?'selected':''}>上</option><option value="center" ${scene.subtitlePosition==='center'?'selected':''}>中央</option><option value="bottom" ${scene.subtitlePosition==='bottom'?'selected':''}>下</option></select></label><div data-sub-offset-wrap="${i}" class="scene-subtitle-offset" ${scene.subtitlePosition?'':'hidden'}><label>上下微調整<div class="range-line"><input data-sub-offset="${i}" type="range" min="-15" max="15" step="1" value="${normalizeSubtitleOffset(scene.subtitlePositionOffsetPercent)}"><span data-sub-offset-value="${i}">${normalizeSubtitleOffset(scene.subtitlePositionOffsetPercent)>0?'+':''}${normalizeSubtitleOffset(scene.subtitlePositionOffsetPercent)}%</span></div></label><button type="button" data-sub-offset-reset="${i}" class="small-reset">0に戻す</button></div><small data-sub-effective="${i}">${scene.subtitlePosition?'個別設定':'全体設定'}：${({top:'上',center:'中央',bottom:'下'})[resolveEffectiveSubtitlePosition(scene,st,project.output?.subtitlePosition).position]} / ${resolveEffectiveSubtitlePosition(scene,st,project.output?.subtitlePosition).offsetPercent>0?'+':''}${resolveEffectiveSubtitlePosition(scene,st,project.output?.subtitlePosition).offsetPercent}%</small></div><div class="subtitle-time-grid"><label>開始（シーン内）<input data-sub-start="${i}" type="number" min="0" max="${duration}" step="0.1" value="${scene.subtitleStartSec}">秒</label><label>終了（シーン内）<input data-sub-end="${i}" type="number" min="0" max="${duration}" step="0.1" value="${scene.subtitleEndSec}">秒</label><button data-preview="${i}">プレビュー</button></div></article>`}).join(''):'<div class="dictionary-empty">シーン編集でシーンを作成してください。</div>';
+    list.querySelectorAll('[data-sub-position]').forEach(el=>el.onchange=()=>{const i=Number(el.dataset.subPosition),scene=scenes[i];if(el.value){scene.subtitlePosition=el.value;scene.subtitlePositionOffsetPercent=0;}else{delete scene.subtitlePosition;delete scene.subtitlePositionOffsetPercent;}renderSubtitleEditor();renderSubtitlePreview();save();});
+    list.querySelectorAll('[data-sub-offset]').forEach(el=>el.oninput=()=>{const i=Number(el.dataset.subOffset);scenes[i].subtitlePositionOffsetPercent=normalizeSubtitleOffset(el.value);list.querySelector(`[data-sub-offset-value="${i}"]`).textContent=`${scenes[i].subtitlePositionOffsetPercent>0?'+':''}${scenes[i].subtitlePositionOffsetPercent}%`;const effective=resolveEffectiveSubtitlePosition(scenes[i],st,project.output?.subtitlePosition);list.querySelector(`[data-sub-effective="${i}"]`).textContent=`個別設定：${({top:'上',center:'中央',bottom:'下'})[effective.position]} / ${effective.offsetPercent>0?'+':''}${effective.offsetPercent}%`;if(Number(root.querySelector('#previewScene').value)===i)renderSubtitlePreview();save();});
+    list.querySelectorAll('[data-sub-offset-reset]').forEach(el=>el.onclick=()=>{const i=Number(el.dataset.subOffsetReset);scenes[i].subtitlePositionOffsetPercent=0;renderSubtitleEditor();if(Number(root.querySelector('#previewScene').value)===i)renderSubtitlePreview();save();});
     list.querySelectorAll('[data-sub-text]').forEach(el=>el.oninput=()=>{const i=Number(el.dataset.subText);scenes[i].subtitleText=el.value;const f=formatSubtitleLines(el.value,st.maxCharsPerLine,st.maxLines);const count=list.querySelector(`[data-sub-count="${i}"]`);count.textContent=`${f.chars}文字／目安${st.maxCharsPerLine*st.maxLines}文字${f.overflow?'・長すぎます':''}`;count.classList.toggle('warning',f.overflow);updateSubtitleCount();if(Number(root.querySelector('#previewScene').value)===i)renderSubtitlePreview();save();});
     list.querySelectorAll('[data-sub-enabled]').forEach(el=>el.onchange=()=>{scenes[Number(el.dataset.subEnabled)].subtitleEnabled=el.checked;updateSubtitleCount();renderSubtitlePreview();save();});
     list.querySelectorAll('[data-sub-start]').forEach(el=>el.oninput=()=>{const i=Number(el.dataset.subStart),duration=Math.max(1,Number(scenes[i].durationSec)||1);scenes[i].subtitleStartSec=Math.min(duration,Math.max(0,Number(el.value)||0));if(scenes[i].subtitleEndSec<scenes[i].subtitleStartSec)scenes[i].subtitleEndSec=scenes[i].subtitleStartSec;save();});
