@@ -4,6 +4,7 @@ import { deleteProject, getProject, listProjects, saveProject } from "./db.js";
 import { downloadJson, downloadText } from "./download.js";
 import { getVideoCapabilities, getProjectDuration, validateVideoProject, prepareVideoProject, runVisualPreview, exportProjectVideo, drawProjectFrame } from "./videoRenderer.js";
 import { createRestoredProject, LARGE_BACKUP_WARNING_BYTES, mergePronunciationDictionaries, normalizeImportedProject, parseProjectBackup, summarizeProjectBackup } from "./projectBackup.js";
+import { addImageAsset, assetUsageCount, ensureMediaLibrary, promoteLegacySceneImage, removeUnusedAsset, resolveSceneImageSource } from "./mediaLibrary.js";
 import { normalizeSubtitleOffset, resolveEffectiveSubtitlePosition, resolveSubtitleYRatio } from "./subtitlePosition.js";
 
 const rootElement = document.querySelector("#app");
@@ -56,18 +57,23 @@ const escapeHtml = (value = "") => String(value).replace(/[&<>'"]/g, c => ({"&":
 const finalReviewSignature = project => {
   const scenes=Array.isArray(project?.scenes)?project.scenes:[];
   const style=project?.subtitleStyle||{};
-  return [`subtitle:${style.position||''}:${normalizeSubtitleOffset(style.positionOffsetPercent)}`, ...scenes.map((s,i)=>[
-    i,
-    String(s.imageData||"").length,
-    String(s.videoData||"").length,
-    String(s.text||"").trim(),
-    String(s.subtitleText||"").trim(),
-    String(s.speechText||"").trim(),
-    String(s.narration?.audioData||"").length,
-    Number(s.durationSec||0).toFixed(2),
-    s.subtitlePosition||'',
-    s.subtitlePosition ? normalizeSubtitleOffset(s.subtitlePositionOffsetPercent) : ''
-  ].join(":"))].join("|");
+  return [`subtitle:${style.position||''}:${normalizeSubtitleOffset(style.positionOffsetPercent)}`, ...scenes.map((s,i)=>{
+    const image=resolveSceneImageSource(project,s);
+    return [
+      i,
+      image.source,
+      image.assetId,
+      String(image.data||"").length,
+      String(s.videoData||"").length,
+      String(s.text||"").trim(),
+      String(s.subtitleText||"").trim(),
+      String(s.speechText||"").trim(),
+      String(s.narration?.audioData||"").length,
+      Number(s.durationSec||0).toFixed(2),
+      s.subtitlePosition||'',
+      s.subtitlePosition ? normalizeSubtitleOffset(s.subtitlePositionOffsetPercent) : ''
+    ].join(":");
+  })].join("|");
 };
 
 const formatDate = (iso) => new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
@@ -125,7 +131,7 @@ function bindProjectRestoreUi() {
       const dictionaryOption=root.querySelector('#restoreDictionaryOption');dictionaryOption.hidden=!summary.dictionaryCount;root.querySelector('#restoreDictionary').checked=false;
       const changes=[...normalized.fixes,...normalized.warnings];
       root.querySelector('#restoreSummary').innerHTML=`
-        <dl><div><dt>ファイル</dt><dd>${escapeHtml(file.name)}（${formatFileSize(file.size)}）</dd></div><div><dt>元プロジェクト</dt><dd>${escapeHtml(summary.originalTitle)}</dd></div><div><dt>schemaVersion</dt><dd>${escapeHtml(String(summary.schemaVersion))}</dd></div><div><dt>シーン</dt><dd>${summary.sceneCount}件</dd></div><div><dt>画像／動画</dt><dd>${summary.imageCount}件／${summary.videoCount}件</dd></div><div><dt>字幕あり</dt><dd>${summary.subtitleCount}件</dd></div><div><dt>シーン音声</dt><dd>${summary.sceneNarrationCount}件</dd></div><div><dt>全体音声／BGM</dt><dd>${summary.hasNarration?'あり':'なし'}／${summary.hasBgm?'あり':'なし'}</dd></div><div><dt>AI保存データ</dt><dd>${summary.hasAiData?'あり':'なし'}</dd></div><div><dt>読み方辞書</dt><dd>${summary.dictionaryCount}件</dd></div></dl>
+        <dl><div><dt>ファイル</dt><dd>${escapeHtml(file.name)}（${formatFileSize(file.size)}）</dd></div><div><dt>元プロジェクト</dt><dd>${escapeHtml(summary.originalTitle)}</dd></div><div><dt>schemaVersion</dt><dd>${escapeHtml(String(summary.schemaVersion))}</dd></div><div><dt>シーン</dt><dd>${summary.sceneCount}件</dd></div><div><dt>画像／動画</dt><dd>${summary.imageCount}件／${summary.videoCount}件</dd></div><div><dt>画像素材ライブラリ</dt><dd>${summary.mediaLibraryCount||0}件</dd></div><div><dt>字幕あり</dt><dd>${summary.subtitleCount}件</dd></div><div><dt>シーン音声</dt><dd>${summary.sceneNarrationCount}件</dd></div><div><dt>全体音声／BGM</dt><dd>${summary.hasNarration?'あり':'なし'}／${summary.hasBgm?'あり':'なし'}</dd></div><div><dt>AI保存データ</dt><dd>${summary.hasAiData?'あり':'なし'}</dd></div><div><dt>読み方辞書</dt><dd>${summary.dictionaryCount}件</dd></div></dl>
         <div class="restore-warnings"><b>補完・修正・警告</b>${changes.length?`<ul>${changes.map(item=>`<li>${escapeHtml(item)}</li>`).join('')}</ul>`:'<p>特別な修正はありません。</p>'}</div>`;
       dialog.showModal();
     }catch(error){candidate=null;alert(error instanceof Error?error.message:'バックアップを読み込めませんでした。');}
@@ -317,7 +323,7 @@ function reconcileScenes(oldScenes, freshScenes) {
       const end=Math.min(duration,Math.max(start,Number(old.subtitleEndSec)||duration));
       return {...scene,...old,id:old.id||scene.id,text:scene.text,speechText:old.speechText??scene.speechText,durationSec:duration,subtitleText:old.subtitleText??scene.text,subtitleEnabled:old.subtitleEnabled??true,subtitlePhraseSync:old.subtitlePhraseSync??true,subtitleStartSec:start,subtitleEndSec:end};
     }
-    return {...scene,id:old.id||scene.id,imageData:old.imageData||"",videoData:old.videoData||"",motion:old.motion||scene.motion,transition:old.transition||scene.transition,...(old.subtitlePosition ? {subtitlePosition:old.subtitlePosition,subtitlePositionOffsetPercent:normalizeSubtitleOffset(old.subtitlePositionOffsetPercent)} : {}),subtitleText:scene.text,subtitleEnabled:true,subtitlePhraseSync:true,subtitleStartSec:0,subtitleEndSec:scene.durationSec};
+    return {...scene,id:old.id||scene.id,...(old.imageAssetId ? {imageAssetId:old.imageAssetId} : {}),imageData:old.imageData||"",videoData:old.videoData||"",motion:old.motion||scene.motion,transition:old.transition||scene.transition,...(old.subtitlePosition ? {subtitlePosition:old.subtitlePosition,subtitlePositionOffsetPercent:normalizeSubtitleOffset(old.subtitlePositionOffsetPercent)} : {}),subtitleText:scene.text,subtitleEnabled:true,subtitlePhraseSync:true,subtitleStartSec:0,subtitleEndSec:scene.durationSec};
   });
 }
 
@@ -350,12 +356,18 @@ async function renderScenes(id) {
   const project=await getProject(id);
   if(!project){goHome();return;}
   if(!Array.isArray(project.scenes)) project.scenes=[];
+  ensureMediaLibrary(project);
   root.innerHTML=`
     <main class="shell editor-shell">
       <header class="editor-head"><button id="back">←</button><div><span>${labelPlatform(project.platform)}</span><h1>${escapeHtml(project.title)}</h1></div><button id="menu">•••</button></header>
       <nav class="steps"><button id="stepAi">0 AIスタッフ</button><button id="stepScript">1 台本</button><button class="active">2 シーン・ナレーション</button><button id="stepBgm">3 字幕・BGM</button><button id="stepOutput">4 出力</button></nav>
       <section class="editor-card"><div class="section-head"><div><h2>シーン編集</h2><p>台本を場面に分け、画像・表示秒数・演出を設定します。</p></div><span id="sceneCount">${project.scenes.length}シーン</span></div><div class="tool-row"><button class="primary" id="autoSplit">台本から自動分割</button><button id="addScene">＋ 空のシーン</button><button id="undoScenes" disabled>↶ 1つ前に戻す</button></div><p class="muted">再分割時は既存の画像・動画をできるだけ保持します。文章が変わったシーンのナレーションは誤読防止のため再生成対象になります。</p></section>
       <section id="sceneList" class="scene-list"></section>
+      <dialog id="mediaLibraryDialog" class="media-library-dialog">
+        <div class="section-head"><div><h2>画像素材ライブラリ</h2><p id="mediaLibraryTarget">このシーンで使う画像を選びます。</p></div></div>
+        <div id="mediaLibraryGrid" class="media-library-grid"></div>
+        <div class="dialog-actions"><button type="button" id="closeMediaLibrary">閉じる</button></div>
+      </dialog>
       <section class="editor-card">
         <div class="section-head"><div><h2>次にナレーション</h2><p>シーンの文章・画像・順番を確定してから、各シーンの音声を生成します。音声実尺に合わせてシーン尺と字幕タイミングを自動同期します。</p></div><span>${project.scenes.filter(s=>s.narration?.audioData).length}/${project.scenes.length} 音声済み</span></div>
         <div class="tool-row"><a class="button-link primary" href="./voice-lab.html?project=${encodeURIComponent(project.id)}&return=scenes">✦ シーン別ナレーションを作成</a></div>
@@ -379,28 +391,62 @@ async function renderScenes(id) {
   const snapshotScenes=()=>{sceneUndoSnapshot=cloneScenes(project.scenes||[]);const b=root.querySelector("#undoScenes");if(b)b.disabled=false;};
   const restoreScenes=()=>{if(!sceneUndoSnapshot)return;const current=cloneScenes(project.scenes||[]);project.scenes=cloneScenes(sceneUndoSnapshot);sceneUndoSnapshot=current;save();renderList();};
   const total=()=>project.scenes.reduce((sum,s)=>sum+(Number(s.durationSec)||0),0);
+  let libraryTargetIndex=null;
+  const mediaLibraryDialog=root.querySelector("#mediaLibraryDialog");
+  const renderMediaLibrary=()=>{
+    const library=ensureMediaLibrary(project);
+    const grid=root.querySelector("#mediaLibraryGrid");
+    const target=libraryTargetIndex==null?null:project.scenes[libraryTargetIndex];
+    root.querySelector("#mediaLibraryTarget").textContent=target?`シーン ${libraryTargetIndex+1} で使う画像を選びます。`:"シーンから「素材から選ぶ」を押してください。";
+    grid.innerHTML=library.length?library.map(asset=>{
+      const usage=assetUsageCount(project,asset.id);
+      return `<article class="media-asset-card"><img src="${asset.data}" alt=""><div><b>${escapeHtml(asset.fileName||"画像素材")}</b><small>${usage?`シーン${usage}件で使用中`:"未使用"}</small></div><div class="media-asset-actions"><button type="button" data-use-asset="${escapeHtml(asset.id)}" ${target?"":"disabled"}>このシーンで使う</button><button type="button" class="danger" data-delete-asset="${escapeHtml(asset.id)}" ${usage?"disabled":""}>未使用なら削除</button></div></article>`;
+    }).join(""):`<div class="dictionary-empty">まだ画像素材がありません。シーンで画像をアップロードすると、ここに保存されます。</div>`;
+    grid.querySelectorAll("[data-use-asset]").forEach(button=>button.onclick=()=>{
+      const scene=project.scenes[libraryTargetIndex];
+      if(!scene)return;
+      const assetId=button.dataset.useAsset;
+      promoteLegacySceneImage(project,scene,{fileName:`シーン ${libraryTargetIndex+1} の旧画像`});
+      scene.imageAssetId=assetId;
+      delete scene.imageData;
+      save();mediaLibraryDialog.close();renderList();
+    });
+    grid.querySelectorAll("[data-delete-asset]").forEach(button=>button.onclick=()=>{
+      const assetId=button.dataset.deleteAsset;
+      if(assetUsageCount(project,assetId)>0){alert("この素材はシーンで使用中のため削除できません。");return;}
+      if(!confirm("この未使用画像を素材ライブラリから削除しますか？"))return;
+      if(removeUnusedAsset(project,assetId)){save();renderMediaLibrary();}
+    });
+  };
+  const openMediaLibrary=index=>{libraryTargetIndex=index;renderMediaLibrary();mediaLibraryDialog.showModal();};
+  root.querySelector("#closeMediaLibrary").onclick=()=>mediaLibraryDialog.close();
   const renderList=()=>{
     root.querySelector("#sceneCount").textContent=`${project.scenes.length}シーン`;
     root.querySelector("#totalDuration").textContent=`${total()}秒`;
-    root.querySelector("#sceneList").innerHTML=project.scenes.length?project.scenes.map((s,i)=>`
+    root.querySelector("#sceneList").innerHTML=project.scenes.length?project.scenes.map((s,i)=>{
+      const image=resolveSceneImageSource(project,s).data;
+      return `
       <article class="scene-card" data-index="${i}">
-        <div class="scene-preview">${s.imageData?`<img src="${s.imageData}" alt="">`:`<span>画像未登録</span>`}</div>
+        <div class="scene-preview">${image?`<img src="${image}" alt="">`:`<span>画像未登録</span>`}</div>
         <div class="scene-body"><div class="scene-title"><b>シーン ${i+1}</b><div><button data-up="${i}" ${i===0?"disabled":""}>↑</button><button data-down="${i}" ${i===project.scenes.length-1?"disabled":""}>↓</button><button class="danger" data-remove="${i}">削除</button></div></div>
         <textarea data-text="${i}" placeholder="このシーンの字幕・内容">${escapeHtml(s.text||"")}</textarea>
         <p class="${s.narration?.audioData?'ok':'muted'}">${s.narration?.audioData?`✓ シーン音声 ${Number(s.narration.durationSec||0).toFixed(2)}秒／字幕フレーズ同期 ON`:'− シーン音声 未生成'}</p>
-        <div class="scene-settings"><label>画像<input data-image="${i}" type="file" accept="image/*"></label><label>秒数<input data-duration="${i}" type="number" min="1" max="3600" value="${Number(s.durationSec)||5}"></label><label>動き<select data-motion="${i}"><option value="none" ${s.motion==="none"?"selected":""}>なし</option><option value="zoom-in" ${s.motion==="zoom-in"?"selected":""}>ズームイン</option><option value="zoom-out" ${s.motion==="zoom-out"?"selected":""}>ズームアウト</option><option value="pan-left" ${s.motion==="pan-left"?"selected":""}>左へパン</option><option value="pan-right" ${s.motion==="pan-right"?"selected":""}>右へパン</option></select></label></div></div>
-      </article>`).join(""):`<div class="empty"><div>🖼️</div><h3>シーンがありません</h3><p>「台本から自動分割」または「空のシーン」を押してください。</p></div>`;
+        <div class="scene-settings"><div class="scene-image-control"><label>画像<input data-image="${i}" type="file" accept="image/*"></label><button type="button" data-library="${i}">素材から選ぶ</button></div><label>秒数<input data-duration="${i}" type="number" min="1" max="3600" value="${Number(s.durationSec)||5}"></label><label>動き<select data-motion="${i}"><option value="none" ${s.motion==="none"?"selected":""}>なし</option><option value="zoom-in" ${s.motion==="zoom-in"?"selected":""}>ズームイン</option><option value="zoom-out" ${s.motion==="zoom-out"?"selected":""}>ズームアウト</option><option value="pan-left" ${s.motion==="pan-left"?"selected":""}>左へパン</option><option value="pan-right" ${s.motion==="pan-right"?"selected":""}>右へパン</option></select></label></div></div>
+      </article>`;
+    }).join(""):`<div class="empty"><div>🖼️</div><h3>シーンがありません</h3><p>「台本から自動分割」または「空のシーン」を押してください。</p></div>`;
     root.querySelectorAll("[data-text]").forEach(el=>el.oninput=()=>{updateSceneText(project.scenes[Number(el.dataset.text)],el.value);save();});
     root.querySelectorAll("[data-duration]").forEach(el=>el.oninput=()=>{updateSceneDuration(project.scenes[Number(el.dataset.duration)],el.value);root.querySelector("#totalDuration").textContent=`${total()}秒`;save();});
     root.querySelectorAll("[data-motion]").forEach(el=>el.onchange=()=>{project.scenes[Number(el.dataset.motion)].motion=el.value;save();});
-    root.querySelectorAll("[data-image]").forEach(el=>el.onchange=async()=>{const file=el.files?.[0];if(!file)return;if(file.size>3_000_000&&!confirm("画像が大きいため保存容量を圧迫する可能性があります。続けますか？"))return;const scene=project.scenes[Number(el.dataset.image)];pendingAsset=fileToDataUrl(file).then(data=>{scene.imageData=data;});save();await pendingAsset;renderList();});
-    root.querySelectorAll("[data-remove]").forEach(el=>el.onclick=()=>{if(!confirm("このシーンを削除しますか？ 削除後も「1つ前に戻す」で復元できます。"))return;snapshotScenes();project.scenes.splice(Number(el.dataset.remove),1);save();renderList();});
+    root.querySelectorAll("[data-image]").forEach(el=>el.onchange=async()=>{const file=el.files?.[0];if(!file)return;if(file.size>3_000_000&&!confirm("画像が大きいため保存容量を圧迫する可能性があります。続けますか？"))return;const scene=project.scenes[Number(el.dataset.image)];pendingAsset=fileToDataUrl(file).then(data=>{promoteLegacySceneImage(project,scene,{fileName:`シーン ${Number(el.dataset.image)+1} の旧画像`});const asset=addImageAsset(project,{data,fileName:file.name});scene.imageAssetId=asset.id;delete scene.imageData;});save();await pendingAsset;renderList();});
+    root.querySelectorAll("[data-library]").forEach(el=>el.onclick=()=>openMediaLibrary(Number(el.dataset.library)));
+    root.querySelectorAll("[data-remove]").forEach(el=>el.onclick=()=>{if(!confirm("このシーンを削除しますか？ 削除後も「1つ前に戻す」で復元できます。"))return;const index=Number(el.dataset.remove);promoteLegacySceneImage(project,project.scenes[index],{fileName:`シーン ${index+1} の旧画像`});snapshotScenes();project.scenes.splice(index,1);save();renderList();});
     root.querySelectorAll("[data-up]").forEach(el=>el.onclick=()=>{const i=Number(el.dataset.up);[project.scenes[i-1],project.scenes[i]]=[project.scenes[i],project.scenes[i-1]];save();renderList();});
     root.querySelectorAll("[data-down]").forEach(el=>el.onclick=()=>{const i=Number(el.dataset.down);[project.scenes[i+1],project.scenes[i]]=[project.scenes[i],project.scenes[i+1]];save();renderList();});
   };
   root.querySelector("#autoSplit").onclick=()=>{
     const oldScenes=project.scenes||[];
     if(oldScenes.length&&!confirm("台本を再分割します。\n\n現在の画像・動画・演出は、同じ順番のシーンへできるだけ保持します。\n文章が変わったシーンのナレーションは再生成対象になります。\n\n続けますか？"))return;
+    oldScenes.forEach((scene,index)=>promoteLegacySceneImage(project,scene,{fileName:`シーン ${index+1} の旧画像`}));
     const fresh=splitIntoScenes(project.displayScript||project.speechScript,project.targetDurationSec);
     snapshotScenes();
     project.scenes=reconcileScenes(oldScenes,fresh);
@@ -414,6 +460,7 @@ async function renderScenes(id) {
 
 
 function ensureProjectSettings(project) {
+  ensureMediaLibrary(project);
   project.narration = { voiceURI:"", rate:0.92, pitch:0.94, volume:1, source:"browser", audioData:"", fileName:"", mimeType:"", ...(project.narration || {}) };
   project.bgm = project.bgm || { source:"none", title:"", category:"calm", volume:0.12, ducking:true, fadeInSec:1, fadeOutSec:2, loop:true, license:"", credit:"", audioData:"", fileName:"" };
   project.subtitleStyle = {

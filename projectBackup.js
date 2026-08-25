@@ -1,3 +1,5 @@
+import { findMediaAsset, isImageDataUrl, normalizeMediaLibrary, resolveSceneImageSource } from './mediaLibrary.js';
+
 export const CURRENT_PROJECT_SCHEMA_VERSION = 4;
 export const LARGE_BACKUP_WARNING_BYTES = 25 * 1024 * 1024;
 
@@ -78,6 +80,10 @@ export function normalizeImportedProject(input, { createId } = {}) {
   const source = safeClone(input);
   const pronunciationDictionary = normalizeDictionary(input.pronunciationDictionary);
   delete source.pronunciationDictionary;
+  const normalizedMedia = normalizeMediaLibrary(source.mediaLibrary, { createId });
+  source.mediaLibrary = normalizedMedia.assets;
+  warnings.push(...normalizedMedia.warnings);
+  fixes.push(...normalizedMedia.fixes);
   const scenes = Array.isArray(source.scenes) ? source.scenes : [];
   if (!Array.isArray(input.scenes)) fixes.push('シーン配列を空の状態で補完');
   const usedSceneIds = new Set();
@@ -95,8 +101,12 @@ export function normalizeImportedProject(input, { createId } = {}) {
     const subtitleEndSec = Math.min(durationSec, Math.max(subtitleStartSec, finiteOr(scene.subtitleEndSec, durationSec)));
     const narration = isRecord(scene.narration) ? normalizeNarration(scene.narration, warnings, `シーン${index + 1}のナレーション`) : undefined;
     const subtitlePosition = ['top','center','bottom'].includes(scene.subtitlePosition) ? scene.subtitlePosition : undefined;
+    const requestedImageAssetId = typeof scene.imageAssetId === 'string' ? scene.imageAssetId.trim() : '';
+    const imageAssetId = requestedImageAssetId && findMediaAsset(source, requestedImageAssetId) ? requestedImageAssetId : '';
+    if (requestedImageAssetId && !imageAssetId) warnings.push(`シーン${index + 1}の画像素材参照を無効なIDとして除外しました。`);
     delete scene.subtitlePosition;
     delete scene.subtitlePositionOffsetPercent;
+    delete scene.imageAssetId;
     return {
       ...scene, id, order:index + 1, text:stringOr(scene.text), speechText:stringOr(scene.speechText, stringOr(scene.text)),
       durationSec, imageData:cleanDataUrl(scene.imageData, 'image', `シーン${index + 1}の画像`, warnings),
@@ -104,6 +114,7 @@ export function normalizeImportedProject(input, { createId } = {}) {
       motion:stringOr(scene.motion, 'zoom-in'), transition:stringOr(scene.transition, 'fade'),
       subtitleText:stringOr(scene.subtitleText, stringOr(scene.text)), subtitleEnabled:booleanOr(scene.subtitleEnabled, true),
       subtitlePhraseSync:booleanOr(scene.subtitlePhraseSync, true), subtitleStartSec, subtitleEndSec,
+      ...(imageAssetId ? { imageAssetId } : {}),
       ...(subtitlePosition ? { subtitlePosition, subtitlePositionOffsetPercent:Math.min(15, Math.max(-15, Math.round(finiteOr(item.subtitlePositionOffsetPercent, 0)))) } : {}),
       ...(narration ? { narration } : {})
     };
@@ -175,7 +186,8 @@ export function summarizeProjectBackup(project, pronunciationDictionary = [], so
   const scenes = Array.isArray(project.scenes) ? project.scenes : [];
   return {
     originalTitle:stringOr(project.title), schemaVersion:sourceSchemaVersion, sceneCount:scenes.length,
-    imageCount:scenes.filter(scene => scene.imageData).length, videoCount:scenes.filter(scene => scene.videoData).length,
+    imageCount:scenes.filter(scene => resolveSceneImageSource(project, scene).data).length, videoCount:scenes.filter(scene => scene.videoData).length,
+    mediaLibraryCount:(Array.isArray(project.mediaLibrary) ? project.mediaLibrary : []).filter(asset => asset?.type === 'image' && isImageDataUrl(asset?.data)).length,
     subtitleCount:scenes.filter(scene => stringOr(scene.subtitleText).trim()).length,
     sceneNarrationCount:scenes.filter(scene => scene.narration?.audioData).length,
     hasNarration:Boolean(project.narration?.audioData), hasBgm:Boolean(project.bgm?.audioData),
