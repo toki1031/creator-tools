@@ -181,3 +181,16 @@ test('重複した素材IDは安全に再発行する', () => {
   assert.notEqual(normalized.project.mediaLibrary[1].id,'same-asset');
   assert.equal(new Set(normalized.project.mediaLibrary.map(asset=>asset.id)).size,2);
 });
+
+
+test('画像素材の変更したfileNameをschemaVersion 4のまま復元する', () => {
+  const raw=sample();
+  raw.mediaLibrary=[{id:'asset-a',type:'image',data:image,fileName:'本田宗一郎 肖像',createdAt:'2026-08-25T00:00:00.000Z',updatedAt:'2026-08-28T00:00:00.000Z'}];
+  raw.scenes[0].imageAssetId='asset-a';
+  const normalized=normalizeImportedProject(raw);
+  assert.equal(normalized.project.schemaVersion,4);
+  assert.equal(normalized.project.mediaLibrary[0].fileName,'本田宗一郎 肖像');
+  const restored=createRestoredProject(normalized.project);
+  assert.equal(restored.mediaLibrary[0].fileName,'本田宗一郎 肖像');
+  assert.equal(restored.scenes[0].imageAssetId,'asset-a');
+});

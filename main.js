@@ -4,7 +4,7 @@ import { deleteProject, getProject, listProjects, saveProject } from "./db.js";
 import { downloadJson, downloadText } from "./download.js";
 import { getVideoCapabilities, getProjectDuration, validateVideoProject, prepareVideoProject, runVisualPreview, exportProjectVideo, drawProjectFrame } from "./videoRenderer.js";
 import { createRestoredProject, LARGE_BACKUP_WARNING_BYTES, mergePronunciationDictionaries, normalizeImportedProject, parseProjectBackup, summarizeProjectBackup } from "./projectBackup.js";
-import { addImageAsset, assetUsageCount, ensureMediaLibrary, promoteLegacySceneImage, removeUnusedAsset, resolveSceneImageSource } from "./mediaLibrary.js";
+import { addImageAsset, assetUsageCount, assetUsageScenes, ensureMediaLibrary, estimateAssetBytes, promoteLegacySceneImage, removeAllUnusedAssets, removeUnusedAsset, renameMediaAsset, resolveSceneImageSource, summarizeMediaLibrary } from "./mediaLibrary.js";
 import { normalizeSubtitleOffset, resolveEffectiveSubtitlePosition, resolveSubtitleYRatio } from "./subtitlePosition.js";
 
 const rootElement = document.querySelector("#app");
@@ -105,6 +105,7 @@ function restoreDialogMarkup() {
     </form></dialog>`;
 }
 function formatFileSize(bytes) { return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.ceil(bytes / 1024))} KB`; }
+function formatApproxBytes(bytes) { const value=Math.max(0,Number(bytes)||0); if(value>=1024*1024)return `約 ${(value/1024/1024).toFixed(1)} MB`; if(value>=1024)return `約 ${(value/1024).toFixed(0)} KB`; return `約 ${Math.round(value)} B`; }
 async function readFileText(file) {
   if (typeof file.text === 'function') return await file.text();
   return await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result));reader.onerror=()=>reject(reader.error||new Error('ファイルを読み込めませんでした。'));reader.readAsText(file);});
@@ -361,12 +362,16 @@ async function renderScenes(id) {
     <main class="shell editor-shell">
       <header class="editor-head"><button id="back">←</button><div><span>${labelPlatform(project.platform)}</span><h1>${escapeHtml(project.title)}</h1></div><button id="menu">•••</button></header>
       <nav class="steps"><button id="stepAi">0 AIスタッフ</button><button id="stepScript">1 台本</button><button class="active">2 シーン・ナレーション</button><button id="stepBgm">3 字幕・BGM</button><button id="stepOutput">4 出力</button></nav>
-      <section class="editor-card"><div class="section-head"><div><h2>シーン編集</h2><p>台本を場面に分け、画像・表示秒数・演出を設定します。</p></div><span id="sceneCount">${project.scenes.length}シーン</span></div><div class="tool-row"><button class="primary" id="autoSplit">台本から自動分割</button><button id="addScene">＋ 空のシーン</button><button id="undoScenes" disabled>↶ 1つ前に戻す</button></div><p class="muted">再分割時は既存の画像・動画をできるだけ保持します。文章が変わったシーンのナレーションは誤読防止のため再生成対象になります。</p></section>
+      <section class="editor-card"><div class="section-head"><div><h2>シーン編集</h2><p>台本を場面に分け、画像・表示秒数・演出を設定します。</p></div><span id="sceneCount">${project.scenes.length}シーン</span></div><div class="tool-row"><button class="primary" id="autoSplit">台本から自動分割</button><button id="addScene">＋ 空のシーン</button><button id="manageMediaLibrary">画像素材ライブラリ</button><button id="undoScenes" disabled>↶ 1つ前に戻す</button></div><p class="muted">再分割時は既存の画像・動画をできるだけ保持します。文章が変わったシーンのナレーションは誤読防止のため再生成対象になります。</p></section>
       <section id="sceneList" class="scene-list"></section>
       <dialog id="mediaLibraryDialog" class="media-library-dialog">
         <div class="section-head"><div><h2>画像素材ライブラリ</h2><p id="mediaLibraryTarget">このシーンで使う画像を選びます。</p></div></div>
+        <div id="mediaLibrarySummary" class="media-library-summary"></div>
+        <div id="mediaLibraryFilters" class="media-library-filters" aria-label="素材表示フィルター">
+          <button type="button" data-library-filter="all">すべて</button><button type="button" data-library-filter="used">使用中</button><button type="button" data-library-filter="unused">未使用</button>
+        </div>
         <div id="mediaLibraryGrid" class="media-library-grid"></div>
-        <div class="dialog-actions"><button type="button" id="closeMediaLibrary">閉じる</button></div>
+        <div class="dialog-actions"><button type="button" id="deleteUnusedAssets" class="danger">未使用素材をまとめて削除</button><button type="button" id="closeMediaLibrary">閉じる</button></div>
       </dialog>
       <section class="editor-card">
         <div class="section-head"><div><h2>次にナレーション</h2><p>シーンの文章・画像・順番を確定してから、各シーンの音声を生成します。音声実尺に合わせてシーン尺と字幕タイミングを自動同期します。</p></div><span>${project.scenes.filter(s=>s.narration?.audioData).length}/${project.scenes.length} 音声済み</span></div>
@@ -392,16 +397,27 @@ async function renderScenes(id) {
   const restoreScenes=()=>{if(!sceneUndoSnapshot)return;const current=cloneScenes(project.scenes||[]);project.scenes=cloneScenes(sceneUndoSnapshot);sceneUndoSnapshot=current;save();renderList();};
   const total=()=>project.scenes.reduce((sum,s)=>sum+(Number(s.durationSec)||0),0);
   let libraryTargetIndex=null;
+  let libraryMode="manage";
+  let libraryFilter="all";
   const mediaLibraryDialog=root.querySelector("#mediaLibraryDialog");
   const renderMediaLibrary=()=>{
     const library=ensureMediaLibrary(project);
     const grid=root.querySelector("#mediaLibraryGrid");
-    const target=libraryTargetIndex==null?null:project.scenes[libraryTargetIndex];
-    root.querySelector("#mediaLibraryTarget").textContent=target?`シーン ${libraryTargetIndex+1} で使う画像を選びます。`:"シーンから「素材から選ぶ」を押してください。";
-    grid.innerHTML=library.length?library.map(asset=>{
-      const usage=assetUsageCount(project,asset.id);
-      return `<article class="media-asset-card"><img src="${asset.data}" alt=""><div><b>${escapeHtml(asset.fileName||"画像素材")}</b><small>${usage?`シーン${usage}件で使用中`:"未使用"}</small></div><div class="media-asset-actions"><button type="button" data-use-asset="${escapeHtml(asset.id)}" ${target?"":"disabled"}>このシーンで使う</button><button type="button" class="danger" data-delete-asset="${escapeHtml(asset.id)}" ${usage?"disabled":""}>未使用なら削除</button></div></article>`;
-    }).join(""):`<div class="dictionary-empty">まだ画像素材がありません。シーンで画像をアップロードすると、ここに保存されます。</div>`;
+    const target=libraryMode==="select"&&libraryTargetIndex!=null?project.scenes[libraryTargetIndex]:null;
+    const summary=summarizeMediaLibrary(project);
+    root.querySelector("#mediaLibraryTarget").textContent=target?`シーン ${libraryTargetIndex+1} で使う画像を選びます。`:"プロジェクトに保存されている画像素材を確認・整理します。";
+    root.querySelector("#mediaLibrarySummary").innerHTML=`<span>画像素材 <b>${summary.totalCount}</b>件</span><span>使用中 <b>${summary.usedCount}</b>件</span><span>未使用 <b>${summary.unusedCount}</b>件</span><span>推定容量 <b>${formatApproxBytes(summary.estimatedBytes)}</b></span>`;
+    root.querySelectorAll("[data-library-filter]").forEach(button=>button.classList.toggle("active",button.dataset.libraryFilter===libraryFilter));
+    const filtered=library.filter(asset=>{const used=assetUsageCount(project,asset.id)>0;return libraryFilter==="used"?used:libraryFilter==="unused"?!used:true;});
+    grid.innerHTML=filtered.length?filtered.map(asset=>{
+      const usageScenes=assetUsageScenes(project,asset.id);
+      const usage=usageScenes.length;
+      const usageText=usage?`シーン${usageScenes.map(item=>item.number).join("・")}で使用中`:"未使用";
+      const name=asset.fileName||"画像素材";
+      const nameMarkup=libraryMode==="manage"?`<label class="media-asset-name">素材名<input data-rename-asset="${escapeHtml(asset.id)}" value="${escapeHtml(name)}" maxlength="120"></label>`:`<b>${escapeHtml(name)}</b>`;
+      const useButton=target?`<button type="button" data-use-asset="${escapeHtml(asset.id)}">このシーンで使う</button>`:"";
+      return `<article class="media-asset-card"><img src="${asset.data}" alt=""><div class="media-asset-info">${nameMarkup}<small>${usageText}</small><small>${formatApproxBytes(estimateAssetBytes(asset))}</small></div><div class="media-asset-actions">${useButton}<button type="button" class="danger" data-delete-asset="${escapeHtml(asset.id)}" ${usage?"disabled":""}>未使用なら削除</button></div></article>`;
+    }).join(""):`<div class="dictionary-empty">${library.length?"この条件に合う画像素材はありません。":"まだ画像素材がありません。シーンで画像をアップロードすると、ここに保存されます。"}</div>`;
     grid.querySelectorAll("[data-use-asset]").forEach(button=>button.onclick=()=>{
       const scene=project.scenes[libraryTargetIndex];
       if(!scene)return;
@@ -411,14 +427,32 @@ async function renderScenes(id) {
       delete scene.imageData;
       save();mediaLibraryDialog.close();renderList();
     });
+    grid.querySelectorAll("[data-rename-asset]").forEach(input=>input.onchange=()=>{
+      const name=input.value.trim();
+      if(!name){alert("素材名を入力してください。");renderMediaLibrary();return;}
+      if(renameMediaAsset(project,input.dataset.renameAsset,name)){save();renderMediaLibrary();}
+    });
     grid.querySelectorAll("[data-delete-asset]").forEach(button=>button.onclick=()=>{
       const assetId=button.dataset.deleteAsset;
       if(assetUsageCount(project,assetId)>0){alert("この素材はシーンで使用中のため削除できません。");return;}
       if(!confirm("この未使用画像を素材ライブラリから削除しますか？"))return;
       if(removeUnusedAsset(project,assetId)){save();renderMediaLibrary();}
     });
+    const bulk=root.querySelector("#deleteUnusedAssets");
+    bulk.hidden=libraryMode!=="manage";
+    bulk.disabled=summary.unusedCount===0;
+    bulk.textContent=summary.unusedCount?`未使用素材をまとめて削除（${summary.unusedCount}件）`:"未使用素材はありません";
+    bulk.onclick=()=>{
+      const current=summarizeMediaLibrary(project);
+      if(!current.unusedCount)return;
+      if(!confirm(`未使用の画像素材${current.unusedCount}件を削除しますか？\n使用中の素材は削除されません。`))return;
+      const removed=removeAllUnusedAssets(project);
+      if(removed){save();renderMediaLibrary();}
+    };
   };
-  const openMediaLibrary=index=>{libraryTargetIndex=index;renderMediaLibrary();mediaLibraryDialog.showModal();};
+  const openMediaLibrary=index=>{libraryTargetIndex=Number.isInteger(index)?index:null;libraryMode=libraryTargetIndex==null?"manage":"select";libraryFilter="all";renderMediaLibrary();mediaLibraryDialog.showModal();};
+  root.querySelectorAll("[data-library-filter]").forEach(button=>button.onclick=()=>{libraryFilter=button.dataset.libraryFilter||"all";renderMediaLibrary();});
+  root.querySelector("#manageMediaLibrary").onclick=()=>openMediaLibrary(null);
   root.querySelector("#closeMediaLibrary").onclick=()=>mediaLibraryDialog.close();
   const renderList=()=>{
     root.querySelector("#sceneCount").textContent=`${project.scenes.length}シーン`;

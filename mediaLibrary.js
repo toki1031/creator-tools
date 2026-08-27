@@ -98,10 +98,56 @@ export function promoteLegacySceneImage(project, scene, { fileName = '旧シー�
   return asset;
 }
 
-export function assetUsageCount(project, assetId) {
+export function assetUsageScenes(project, assetId) {
   const id = typeof assetId === 'string' ? assetId.trim() : '';
-  if (!id) return 0;
-  return (Array.isArray(project?.scenes) ? project.scenes : []).filter(scene => scene?.imageAssetId === id).length;
+  if (!id) return [];
+  return (Array.isArray(project?.scenes) ? project.scenes : []).flatMap((scene, index) =>
+    scene?.imageAssetId === id ? [{ id:stringOr(scene.id), index, number:index + 1 }] : []
+  );
+}
+
+export function assetUsageCount(project, assetId) {
+  return assetUsageScenes(project, assetId).length;
+}
+
+export function estimateAssetBytes(asset) {
+  const data = asset?.data;
+  if (!isImageDataUrl(data)) return 0;
+  const comma = data.indexOf(',');
+  if (comma < 0) return 0;
+  const header = data.slice(0, comma).toLowerCase();
+  const body = data.slice(comma + 1);
+  if (header.includes(';base64')) {
+    const padding = (body.match(/=*$/)?.[0] || '').length;
+    return Math.max(0, Math.floor(body.length * 3 / 4) - padding);
+  }
+  try { return new TextEncoder().encode(decodeURIComponent(body)).length; }
+  catch { return body.length; }
+}
+
+export function summarizeMediaLibrary(project) {
+  const library = ensureMediaLibrary(project).filter(asset => asset?.type === 'image' && isImageDataUrl(asset?.data));
+  let usedCount = 0;
+  let estimatedBytes = 0;
+  library.forEach(asset => {
+    if (assetUsageCount(project, asset.id) > 0) usedCount += 1;
+    estimatedBytes += estimateAssetBytes(asset);
+  });
+  return {
+    totalCount:library.length,
+    usedCount,
+    unusedCount:library.length - usedCount,
+    estimatedBytes
+  };
+}
+
+export function renameMediaAsset(project, assetId, fileName, { now = () => new Date().toISOString() } = {}) {
+  const asset = findMediaAsset(project, assetId);
+  const name = stringOr(fileName).trim();
+  if (!asset || !name) return null;
+  asset.fileName = name;
+  asset.updatedAt = now();
+  return asset;
 }
 
 export function removeUnusedAsset(project, assetId) {
@@ -111,4 +157,11 @@ export function removeUnusedAsset(project, assetId) {
   if (index < 0) return false;
   library.splice(index, 1);
   return true;
+}
+
+export function removeAllUnusedAssets(project) {
+  const library = ensureMediaLibrary(project);
+  const before = library.length;
+  project.mediaLibrary = library.filter(asset => assetUsageCount(project, asset?.id) > 0);
+  return before - project.mediaLibrary.length;
 }

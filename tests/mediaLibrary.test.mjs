@@ -3,11 +3,16 @@ import assert from 'node:assert/strict';
 import {
   addImageAsset,
   assetUsageCount,
+  assetUsageScenes,
   ensureMediaLibrary,
+  estimateAssetBytes,
   normalizeMediaLibrary,
   promoteLegacySceneImage,
+  removeAllUnusedAssets,
   removeUnusedAsset,
-  resolveSceneImageSource
+  renameMediaAsset,
+  resolveSceneImageSource,
+  summarizeMediaLibrary
 } from '../mediaLibrary.js';
 
 const imageA = 'data:image/png;base64,QQ==';
@@ -81,4 +86,36 @@ test('normalizeMediaLibraryは不正asset除外と重複ID再発行を行う', (
   assert.equal(result.assets[1].id,'asset-new-1');
   assert.equal(result.warnings.length,1);
   assert.equal(result.fixes.length,1);
+});
+
+
+test('素材使用sceneとlibrary概要を集計する', () => {
+  const project={
+    mediaLibrary:[{id:'asset-a',type:'image',data:imageA},{id:'asset-b',type:'image',data:imageB}],
+    scenes:[{id:'s1',imageAssetId:'asset-a'},{id:'s2'},{id:'s3',imageAssetId:'asset-a'}]
+  };
+  assert.deepEqual(assetUsageScenes(project,'asset-a').map(item=>item.number),[1,3]);
+  const summary=summarizeMediaLibrary(project);
+  assert.deepEqual({totalCount:summary.totalCount,usedCount:summary.usedCount,unusedCount:summary.unusedCount},{totalCount:2,usedCount:1,unusedCount:1});
+  assert.equal(summary.estimatedBytes,2);
+  assert.equal(estimateAssetBytes(project.mediaLibrary[0]),1);
+});
+
+test('素材名変更はidと画像dataを変えずupdatedAtだけ更新する', () => {
+  const project={mediaLibrary:[{id:'asset-a',type:'image',data:imageA,fileName:'before.png',updatedAt:'old'}]};
+  const asset=renameMediaAsset(project,'asset-a','本田宗一郎 肖像',{now:()=> '2026-08-28T00:00:00.000Z'});
+  assert.equal(asset.id,'asset-a');
+  assert.equal(asset.data,imageA);
+  assert.equal(asset.fileName,'本田宗一郎 肖像');
+  assert.equal(asset.updatedAt,'2026-08-28T00:00:00.000Z');
+  assert.equal(renameMediaAsset(project,'asset-a','   '),null);
+});
+
+test('未使用素材の一括削除は使用中assetを残す', () => {
+  const project={
+    mediaLibrary:[{id:'asset-a',type:'image',data:imageA},{id:'asset-b',type:'image',data:imageB}],
+    scenes:[{imageAssetId:'asset-a'}]
+  };
+  assert.equal(removeAllUnusedAssets(project),1);
+  assert.deepEqual(project.mediaLibrary.map(asset=>asset.id),['asset-a']);
 });
