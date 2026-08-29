@@ -3,7 +3,7 @@ import { createProject } from "./projectFactory.js";
 import { deleteProject, getProject, listProjects, saveProject } from "./db.js";
 import { downloadJson, downloadText } from "./download.js";
 import { getVideoCapabilities, getProjectDuration, validateVideoProject, prepareVideoProject, runVisualPreview, exportProjectVideo, drawProjectFrame } from "./videoRenderer.js";
-import { createRestoredProject, LARGE_BACKUP_WARNING_BYTES, mergePronunciationDictionaries, normalizeImportedProject, parseProjectBackup, summarizeProjectBackup } from "./projectBackup.js";
+import { createProjectBackupPayload, createRestoredProject, LARGE_BACKUP_WARNING_BYTES, mergePronunciationDictionaries, normalizeImportedProject, parseProjectBackup, summarizeProjectBackup } from "./projectBackup.js";
 import { addImageAsset, assetUsageCount, assetUsageScenes, ensureMediaLibrary, estimateAssetBytes, promoteLegacySceneImage, removeAllUnusedAssets, removeUnusedAsset, renameMediaAsset, resolveSceneImageSource, summarizeMediaLibrary } from "./mediaLibrary.js";
 import { normalizeSubtitleOffset, resolveEffectiveSubtitlePosition, resolveSubtitleYRatio } from "./subtitlePosition.js";
 
@@ -76,7 +76,7 @@ const finalReviewSignature = project => {
   })].join("|");
 };
 
-const formatDate = (iso) => new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
+const formatDate = (iso) => { const date=new Date(iso); return Number.isNaN(date.getTime()) ? "日時不明" : new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(date); };
 const STUDIO = {
   "great-person": { icon:"🎓", title:"偉人Studio", desc:"調査・台本・ナレーション・画像・Shortsを一つの流れで制作", genre:"great-person", platform:"youtube-shorts", status:"利用可能" },
   "bgm": { icon:"🎵", title:"BGM Studio", desc:"音源・背景・ループ・長時間動画・投稿情報をまとめて制作", genre:"bgm", platform:"youtube-shorts", status:"基盤公開" },
@@ -92,8 +92,7 @@ function loadDictionary() {
   } catch { return []; }
 }
 function saveDictionary(entries) { localStorage.setItem(DICT_KEY, JSON.stringify(entries)); }
-function projectBackupValue(project) { return { ...project, pronunciationDictionary:loadDictionary() }; }
-function downloadProjectBackup(project) { downloadJson(`${safeName(project.title)}.json`, projectBackupValue(project)); }
+function downloadProjectBackup(project) { downloadJson(`${safeName(project.title)}.json`, createProjectBackupPayload(project, loadDictionary())); }
 function restoreDialogMarkup() {
   return `<input id="restoreFile" type="file" accept=".json,application/json" hidden>
     <dialog id="restoreDialog"><form method="dialog" id="restoreForm">

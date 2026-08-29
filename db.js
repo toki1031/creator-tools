@@ -2,6 +2,11 @@ const DB_NAME = "creator-os";
 const DB_VERSION = 1;
 const PROJECTS = "projects";
 
+export function sortProjectsByUpdatedAt(projects) {
+  const items = Array.isArray(projects) ? projects : [];
+  return [...items].sort((a, b) => String(b?.updatedAt || "").localeCompare(String(a?.updatedAt || "")));
+}
+
 function openDb() {
   return new Promise((resolve, reject) => {
     if (!('indexedDB' in globalThis)) return reject(new Error('このブラウザでは端末保存を利用できません。'));
@@ -23,7 +28,7 @@ export async function listProjects() {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(PROJECTS, "readonly");
     const request = tx.objectStore(PROJECTS).getAll();
-    request.onsuccess = () => resolve(request.result.sort((a,b) => b.updatedAt.localeCompare(a.updatedAt)));
+    request.onsuccess = () => resolve(sortProjectsByUpdatedAt(request.result));
     request.onerror = () => reject(request.error);
     tx.oncomplete = () => db.close();
   });
