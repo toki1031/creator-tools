@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createRestoredProject, mergePronunciationDictionaries, normalizeImportedProject, parseProjectBackup, summarizeProjectBackup } from '../projectBackup.js';
+import { createProjectBackupPayload, createRestoredProject, mergePronunciationDictionaries, normalizeImportedProject, parseProjectBackup, summarizeProjectBackup } from '../projectBackup.js';
 
 const image = 'data:image/png;base64,AA==';
 const video = 'data:video/mp4;base64,AA==';
@@ -193,4 +193,47 @@ test('画像素材の変更したfileNameをschemaVersion 4のまま復元する
   const restored=createRestoredProject(normalized.project);
   assert.equal(restored.mediaLibrary[0].fileName,'本田宗一郎 肖像');
   assert.equal(restored.scenes[0].imageAssetId,'asset-a');
+});
+
+
+test('実際のバックアップpayloadをJSON化して主要制作データを復元できる', () => {
+  const raw=sample();
+  raw.mediaLibrary=[{id:'asset-a',type:'image',data:image,fileName:'肖像.png',createdAt:'2026-08-28T00:00:00.000Z',updatedAt:'2026-08-28T01:00:00.000Z'}];
+  raw.scenes[0].imageAssetId='asset-a';
+  raw.scenes[0].imageData='';
+  raw.scenes[0].subtitlePosition='top';
+  raw.scenes[0].subtitlePositionOffsetPercent=-4;
+  raw.bgm={...raw.bgm,title:'BGM',license:'CC0',credit:'不要',loop:true,ducking:true};
+  raw.output={width:1080,height:1920,fps:30,format:'mp4',quality:'standard',subtitles:true,subtitlePosition:'bottom',bgmEnabled:true};
+  raw.publish={title:'投稿タイトル',description:'概要',tags:'a,b',thumbnailText:'表紙',visibility:'private'};
+  const before=structuredClone(raw);
+  const payload=createProjectBackupPayload(raw,[{from:'本田',to:'ほんだ'},{from:'',to:'除外'}]);
+  assert.deepEqual(raw,before,'書き出しで編集中projectを変更しない');
+  const parsed=parseProjectBackup(JSON.stringify(payload));
+  const normalized=normalizeImportedProject(parsed,{createId:()=> 'generated'});
+  const restored=createRestoredProject(normalized.project,{title:'別端末復元',createId:()=> 'restored-project',now:()=> '2026-08-29T00:00:00.000Z'});
+
+  assert.equal(restored.title,'別端末復元');
+  assert.notEqual(restored.id,raw.id);
+  assert.equal(restored.schemaVersion,4);
+  assert.equal(restored.displayScript,raw.displayScript);
+  assert.equal(restored.speechScript,raw.speechScript);
+  assert.equal(restored.mediaLibrary[0].data,image);
+  assert.equal(restored.mediaLibrary[0].fileName,'肖像.png');
+  assert.equal(restored.scenes[0].imageAssetId,'asset-a');
+  assert.equal(restored.scenes[0].videoData,video);
+  assert.equal(restored.scenes[0].narration.audioData,audio);
+  assert.equal(restored.scenes[0].subtitleText,'一行目\n二行目');
+  assert.equal(restored.scenes[0].subtitlePosition,'top');
+  assert.equal(restored.scenes[0].subtitlePositionOffsetPercent,-4);
+  assert.equal(restored.bgm.audioData,audio);
+  assert.equal(restored.bgm.license,'CC0');
+  assert.equal(restored.output.width,1080);
+  assert.equal(restored.output.height,1920);
+  assert.equal(restored.output.fps,30);
+  assert.equal(restored.publish.description,'概要');
+  assert.equal(restored.aiWorkspace.editor.result,'結果');
+  assert.equal(restored.promptLibrary[0].id,'prompt');
+  assert.equal(restored.finalReview,undefined);
+  assert.deepEqual(normalized.pronunciationDictionary,[{from:'本田',to:'ほんだ'}]);
 });

@@ -182,6 +182,13 @@ export function createRestoredProject(normalizedProject, { title, createId, now 
   return project;
 }
 
+export function createProjectBackupPayload(project, pronunciationDictionary = []) {
+  if (!isRecord(project)) throw new Error('バックアップ対象のプロジェクトがありません。');
+  const payload = safeClone(project);
+  payload.pronunciationDictionary = normalizeDictionary(pronunciationDictionary);
+  return payload;
+}
+
 export function summarizeProjectBackup(project, pronunciationDictionary = [], sourceSchemaVersion = project.schemaVersion ?? '未設定') {
   const scenes = Array.isArray(project.scenes) ? project.scenes : [];
   return {
