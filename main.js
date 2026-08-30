@@ -8,6 +8,7 @@ import { addImageAsset, assetUsageCount, assetUsageScenes, ensureMediaLibrary, e
 import { normalizeSubtitleOffset, resolveEffectiveSubtitlePosition, resolveSubtitleYRatio } from "./subtitlePosition.js";
 import { assessMvpVideoResult, describeVideoExportFailure, isMvpShortsProject, validateMvpShortsOutput } from "./videoMvp.js";
 import { createGenerationStartController, projectExpectsVideoAudio } from "./videoGenerationStart.js";
+import { applyDictionaryEntries, splitIntoScenes, splitSubtitleCards } from "./qualityLogic.js";
 
 const rootElement = document.querySelector("#app");
 if (!rootElement) throw new Error("#app がありません。");
@@ -180,7 +181,7 @@ function bindProjectRestoreUi() {
   };
 }
 function applyDictionary(text, entries = loadDictionary()) {
-  return [...entries].sort((a,b) => b.from.length - a.from.length).reduce((result, item) => result.split(item.from).join(item.to), text);
+  return applyDictionaryEntries(text, entries);
 }
 function naturalize(text, style) {
   let result = text.trim().replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n");
@@ -324,12 +325,6 @@ async function renderProject(id) {
   root.querySelector("#delete").onclick=async()=>{if(confirm("このプロジェクトを削除しますか？")){await deleteProject(project.id);goStudio(studioForGenre(project.genre));}};
 }
 
-function splitIntoScenes(text, targetDuration=60) {
-  const blocks = text.trim().split(/\n{2,}|(?<=[。！？])\s*/).map(x=>x.trim()).filter(Boolean);
-  if (!blocks.length) return [];
-  const per = Math.max(2, Math.round(targetDuration / blocks.length));
-  return blocks.map((text,index)=>({id:crypto.randomUUID?.()||`scene-${Date.now()}-${index}`,order:index+1,text,speechText:text,durationSec:per,imageData:"",motion:"zoom-in",transition:"fade"}));
-}
 
 function reconcileScenes(oldScenes, freshScenes) {
   const used = new Set();
@@ -550,9 +545,6 @@ function ensureProjectSettings(project) {
 }
 
 function countChars(value="") { return Array.from(String(value).replace(/\s/g, "")).length; }
-function splitSubtitleCards(value="") {
-  return String(value||"").replace(/\r\n?/g,"\n").trim().split(/\n\s*\n+/).map(card=>card.trim()).filter(Boolean);
-}
 function formatSubtitleLines(value, maxChars=16, maxLines=2) {
   const normalized = String(value || "").trim();
   if (!normalized) return { lines:[], cards:[], overflow:false, chars:0 };
