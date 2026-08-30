@@ -1,0 +1,268 @@
+name: Issue 5 bootstrap safe
+
+on:
+  push:
+    branches:
+      - issue5-quality-gates
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap:
+    if: ${{ !contains(github.event.head_commit.message, '[issue5-bootstrap]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: issue5-quality-gates
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Extract production logic and add tests
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          def replace_once(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected exactly 1 match, found {count}')
+              return text.replace(old, new, 1)
+
+          main_path = Path('main.js')
+          main = main_path.read_text()
+          import_anchor = 'import { createGenerationStartController, projectExpectsVideoAudio } from "./videoGenerationStart.js";\n'
+          main = replace_once(
+              main,
+              import_anchor,
+              import_anchor + 'import { applyDictionaryEntries, splitIntoScenes, splitSubtitleCards } from "./qualityLogic.js";\n',
+              'main import'
+          )
+          main = replace_once(
+              main,
+              '''function applyDictionary(text, entries = loadDictionary()) {
+            return [...entries].sort((a,b) => b.from.length - a.from.length).reduce((result, item) => result.split(item.from).join(item.to), text);
+          }
+          ''',
+              '''function applyDictionary(text, entries = loadDictionary()) {
+            return applyDictionaryEntries(text, entries);
+          }
+          ''',
+              'applyDictionary delegation'
+          )
+          main = replace_once(
+              main,
+              '''function splitIntoScenes(text, targetDuration=60) {
+            const blocks = text.trim().split(/\\n{2,}|(?<=[。！？])\\s*/).map(x=>x.trim()).filter(Boolean);
+            if (!blocks.length) return [];
+            const per = Math.max(2, Math.round(targetDuration / blocks.length));
+            return blocks.map((text,index)=>({id:crypto.randomUUID?.()||`scene-${Date.now()}-${index}`,order:index+1,text,speechText:text,durationSec:per,imageData:"",motion:"zoom-in",transition:"fade"}));
+          }
+          ''',
+              '',
+              'splitIntoScenes extraction'
+          )
+          main = replace_once(
+              main,
+              '''function splitSubtitleCards(value="") {
+            return String(value||"").replace(/\\r\\n?/g,"\\n").trim().split(/\\n\\s*\\n+/).map(card=>card.trim()).filter(Boolean);
+          }
+          ''',
+              '',
+              'splitSubtitleCards extraction'
+          )
+          main_path.write_text(main)
+
+          video_path = Path('videoRenderer.js')
+          video = video_path.read_text()
+          video_import_anchor = "import { resolveEffectiveSubtitlePosition, resolveSubtitleYRatio } from './subtitlePosition.js';\n"
+          video = replace_once(
+              video,
+              video_import_anchor,
+              video_import_anchor + "import { calculateBgmLoopCount, splitSubtitlePhrases } from './qualityLogic.js';\n",
+              'video import'
+          )
+          start_marker = '\nfunction splitSubtitlePhrases(text, maxChars = 13) {'
+          end_marker = '\nfunction activeSubtitlePhrase'
+          start = video.find(start_marker)
+          end = video.find(end_marker, start + 1)
+          if start < 0 or end < 0:
+              raise SystemExit('splitSubtitlePhrases extraction markers not found')
+          video = video[:start] + '\n' + video[end:]
+          video = replace_once(
+              video,
+              'source.loop = project.bgm?.loop !== false;',
+              'source.loop = calculateBgmLoopCount(getProjectDuration(project), buffer.duration, project.bgm?.loop !== false) > 1;',
+              'BGM loop plan'
+          )
+          video_path.write_text(video)
+
+          Path('qualityLogic.js').write_text(r'''export function applyDictionaryEntries(text, entries = []) {
+            return [...entries]
+              .filter(item => item && item.from && item.to)
+              .sort((a, b) => b.from.length - a.from.length)
+              .reduce((result, item) => result.split(item.from).join(item.to), String(text ?? ''));
+          }
+
+          export function splitIntoScenes(text, targetDuration = 60) {
+            const blocks = String(text ?? '').trim().split(/\n{2,}|(?<=[。！？])\s*/).map(x => x.trim()).filter(Boolean);
+            if (!blocks.length) return [];
+            const per = Math.max(2, Math.round(targetDuration / blocks.length));
+            return blocks.map((sceneText, index) => ({
+              id: globalThis.crypto?.randomUUID?.() || `scene-${Date.now()}-${index}`,
+              order: index + 1,
+              text: sceneText,
+              speechText: sceneText,
+              durationSec: per,
+              imageData: '',
+              motion: 'zoom-in',
+              transition: 'fade'
+            }));
+          }
+
+          export function splitSubtitleCards(value = '') {
+            return String(value || '').replace(/\r\n?/g, '\n').trim().split(/\n\s*\n+/).map(card => card.trim()).filter(Boolean);
+          }
+
+          export function splitSubtitlePhrases(text, maxChars = 13) {
+            const raw = String(text || '').replace(/\r\n?/g, '\n').trim();
+            if (!raw) return [];
+            const manualBlocks = raw.split(/\n\s*\n+/).map(v => v.trim()).filter(Boolean);
+            const hasManualBreak = /\n/.test(raw);
+
+            const naturalSplit = value => {
+              const normalized = String(value || '').replace(/[ \t]+/g, ' ').trim();
+              if (!normalized) return [];
+              const len = value => Array.from(value).length;
+              const hardLimit = Math.max(maxChars + 6, Math.round(maxChars * 1.45));
+              const minUseful = Math.max(4, Math.round(maxChars * .38));
+              const particles = /^(?:は|が|を|に|へ|で|と|の|も|や|から|まで|より|って|ので|のに|なら|では|には|とは)/;
+              const conjunctions = /^(?:しかし|でも|だから|そして|そこで|すると|つまり|一方|また|さらに|ただ|ところが|けれど|けれども|ですが|なので)/;
+              const clauses = normalized.match(/[^。！？!?]+[。！？!?]?/g) || [normalized];
+              const commaUnits = [];
+              for (const clauseRaw of clauses) {
+                const clause = clauseRaw.trim();
+                if (!clause) continue;
+                const units = clause.match(/[^、，,]+[、，,]?/g) || [clause];
+                commaUnits.push(...units.map(x => x.trim()).filter(Boolean));
+              }
+              const semantic = [];
+              for (const unit of commaUnits) {
+                if (!semantic.length) { semantic.push(unit); continue; }
+                const prev = semantic[semantic.length - 1];
+                const combined = prev + unit;
+                if (len(combined) <= hardLimit && (len(prev) < minUseful || len(unit) < minUseful || conjunctions.test(unit))) semantic[semantic.length - 1] = combined;
+                else semantic.push(unit);
+              }
+              const splitLong = value => {
+                if (len(value) <= hardLimit) return [value];
+                const chars = Array.from(value);
+                const candidates = [];
+                const boundaryRe = /(?:から|まで|より|ので|のに|けれども|けれど|ですが|なので|なら|では|には|とは|って|は|が|を|に|へ|で|と|の|も|や)$/;
+                for (let i = minUseful; i < chars.length - minUseful; i++) {
+                  const left = chars.slice(0, i).join('');
+                  const right = chars.slice(i).join('');
+                  if (boundaryRe.test(left) && !particles.test(right)) candidates.push(i);
+                }
+                const target = Math.min(maxChars, Math.round(chars.length / 2));
+                let cut = candidates.length
+                  ? candidates.reduce((best, i) => Math.abs(i - target) < Math.abs(best - target) ? i : best, candidates[0])
+                  : Math.min(maxChars, chars.length - minUseful);
+                while (cut < chars.length - minUseful && particles.test(chars.slice(cut).join(''))) cut++;
+                return [chars.slice(0, cut).join(''), ...splitLong(chars.slice(cut).join(''))];
+              };
+              const phrases = semantic.flatMap(splitLong).map(x => x.trim()).filter(Boolean);
+              const merged = [];
+              for (const phrase of phrases) {
+                if (merged.length && len(phrase) <= 3 && len(merged[merged.length - 1] + phrase) <= hardLimit) merged[merged.length - 1] += phrase;
+                else merged.push(phrase);
+              }
+              if (merged.length > 1 && len(merged[merged.length - 1]) <= 3) merged[merged.length - 2] += merged.pop();
+              return merged;
+            };
+
+            if (manualBlocks.length > 1) return manualBlocks.flatMap(block => block.includes('\n') ? [block] : naturalSplit(block));
+            if (hasManualBreak) return [raw];
+            return naturalSplit(raw);
+          }
+
+          export function calculateBgmLoopCount(videoDurationSec, bgmDurationSec, loopEnabled = true) {
+            const videoDuration = Math.max(0, Number(videoDurationSec) || 0);
+            const bgmDuration = Math.max(0, Number(bgmDurationSec) || 0);
+            if (!videoDuration || !bgmDuration) return 0;
+            if (!loopEnabled) return 1;
+            return Math.max(1, Math.ceil(videoDuration / bgmDuration));
+          }
+          ''')
+
+          Path('tests/qualityLogic.test.mjs').write_text(r'''import test from 'node:test';
+          import assert from 'node:assert/strict';
+          import { applyDictionaryEntries, calculateBgmLoopCount, splitIntoScenes, splitSubtitleCards, splitSubtitlePhrases } from '../qualityLogic.js';
+
+          test('読み辞書は長い語を優先して本文を実際に置換する', () => {
+            const entries = [{ from: '北斎', to: 'ほくさい' }, { from: '葛飾北斎', to: 'かつしかほくさい' }];
+            assert.equal(applyDictionaryEntries('葛飾北斎と北斎', entries), 'かつしかほくさいとほくさい');
+          });
+          test('字幕カードは空行で分割し、1回改行は同じカード内に残す', () => {
+            assert.deepEqual(splitSubtitleCards('一行目\n二行目\n\n次のカード'), ['一行目\n二行目', '次のカード']);
+          });
+          test('字幕フレーズは手動改行と空行の意味を維持する', () => {
+            assert.deepEqual(splitSubtitlePhrases('一行目\n二行目', 13), ['一行目\n二行目']);
+            assert.deepEqual(splitSubtitlePhrases('カード1\n\nカード2', 13), ['カード1', 'カード2']);
+          });
+          test('シーン分割は目標尺から均等なシーン時間を割り当てる', () => {
+            const scenes = splitIntoScenes('第一文です。第二文です。第三文です。', 60);
+            assert.equal(scenes.length, 3);
+            assert.deepEqual(scenes.map(scene => scene.durationSec), [20, 20, 20]);
+            assert.deepEqual(scenes.map(scene => scene.order), [1, 2, 3]);
+          });
+          test('BGMループ回数を動画尺と音源尺から計算する', () => {
+            assert.equal(calculateBgmLoopCount(58, 4, true), 15);
+            assert.equal(calculateBgmLoopCount(10, 12, true), 1);
+            assert.equal(calculateBgmLoopCount(58, 4, false), 1);
+            assert.equal(calculateBgmLoopCount(58, 0, true), 0);
+          });
+          ''')
+
+          video_test = Path('tests/videoMvp.test.mjs')
+          video_test_text = video_test.read_text()
+          marker = "test('画像素材ライブラリ参照も動画validationの画像件数へ反映する'"
+          if marker not in video_test_text:
+              video_test_text += r'''
+
+          test('画像素材ライブラリ参照も動画validationの画像件数へ反映する',()=>{
+            const p=make();p.scenes[0].imageData='';p.scenes[0].imageAssetId='asset-1';p.mediaLibrary=[{id:'asset-1',type:'image',data:'data:image/png;base64,AA==',fileName:'scene.png'}];
+            const r=validateVideoProject(p);assert.equal(r.imageCount,1);assert.equal(r.warnings.some(x=>x.includes('画像未登録')),false);
+          });
+          test('動画ファイルをBGMへ登録した主要validationエラーを検出する',()=>{
+            const p=make();p.bgm={source:'upload',audioData:'data:video/mp4;base64,AA==',fileName:'clip.mp4'};const r=validateVideoProject(p);assert.equal(r.bgmInvalid,true);assert.ok(r.errors.some(x=>x.includes('動画ファイル')));
+          });
+          test('シーンなしは動画validationで明示的に失敗する',()=>{
+            const p=make();p.scenes=[];const r=validateVideoProject(p);assert.ok(r.errors.some(x=>x.includes('シーンがありません')));assert.ok(r.errors.some(x=>x.includes('0秒')));
+          });
+          '''
+          video_test.write_text(video_test_text)
+
+          Path('docs/QUALITY_GATES.md').write_text('''# Creator OS Quality Gates\n\nCreator OSの主要ロジック変更では、PRをマージする前に以下をすべて成功させます。\n\n## ローカル実行\n\n```bash\nnpm install\nnpm test\nnpm run build\n```\n\n`npm test` は `node --test tests/*.test.mjs` を実行します。\n\n## 現在の回帰テスト範囲\n\n- JSONバックアップ／復元・schema正規化・読み辞書マージ\n- 読み辞書による実際の本文置換（長い語を優先）\n- 字幕位置計算\n- 字幕カード／字幕フレーズ分割（1回改行と空行の意味）\n- 台本からのシーン分割と時間配分\n- BGMループ回数計算\n- 画像素材ライブラリ\n- IndexedDB一覧の安全な並び替え\n- 動画プロジェクトvalidation・MVP Shorts条件\n- 動画生成開始時のAudioContext順序とキャンセル\n\n## CI\n\nGitHub Actionsの `Quality Gates` をmainへのpushとPull Requestで実行します。Node.js 22で `npm install` → `npm test` → `npm run build` を実行し、失敗した場合は原因を確認してからマージします。\n\n## 実機QAとの役割分担\n\n自動テストは純粋ロジックやデータ変換の回帰検知を担当します。iPhone SafariのMediaRecorder、Web Audio、メモリ挙動、実MP4の再生・保存は実機QAで確認します。\n''')
+
+          Path('README.md').write_text('''# Creator OS\n\nCreator OSは、台本・シーン・画像・字幕・ナレーション・BGM・動画出力を一つの制作フローで扱うブラウザアプリです。現行MVPではiPhone Safariを優先し、YouTube Shortsの制作・保存・MP4書き出しを検証しています。\n\n## 開発\n\n```bash\nnpm install\nnpm run dev\n```\n\n## Quality Gate\n\n主要ロジックを変更した場合は、マージ前に次を実行します。\n\n```bash\nnpm test\nnpm run build\n```\n\nテストは読み辞書、字幕分割、シーン時間配分、BGMループ計算、保存・復元、画像素材ライブラリ、動画MVP validationなどを対象にしています。GitHub Pull Requestでも `Quality Gates` workflowで同じテストとproduction buildを自動実行します。詳細は `docs/QUALITY_GATES.md` を参照してください。\n\n## 実機QA\n\nMediaRecorder / Web Audio / iPhone Safariのメモリや実MP4品質は自動テストだけでは保証しません。実機QAと生成ファイル解析を併用します。\n''')
+          PY
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Run regression tests
+        run: npm test
+      - name: Production build
+        run: npm run build
+      - name: Diff check
+        run: git diff --check
+      - name: Commit validated source changes only
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add main.js videoRenderer.js qualityLogic.js tests/qualityLogic.test.mjs tests/videoMvp.test.mjs docs/QUALITY_GATES.md README.md
+          git commit -m "Add MVP quality gates [issue5-bootstrap]"
+          git push origin HEAD:issue5-quality-gates
