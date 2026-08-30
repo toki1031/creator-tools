@@ -12,3 +12,15 @@ test('生成結果をMVP判定する',()=>{const p=make();const ok=assessMvpVide
 test('メモリ失敗時に次操作を返す',()=>{const t=describeVideoExportFailure(new Error('Out of memory'),{durationSec:60,width:1080,height:1920,fps:30});assert.match(t,/メモリ/);assert.match(t,/先頭10秒/);});
 
 test('期待したBGMやシーン音声が準備できない場合は検出する',()=>{const p=make();p.bgm={source:'upload',audioData:'data:audio/wav;base64,AA=='};p.scenes[0].narration={audioData:'data:audio/wav;base64,AA=='};const errors=validatePreparedAudioForExport(p,{audioArrayBuffer:null,audioFetchError:'read failed',sceneNarrations:[{error:'decode failed'}]});assert.equal(errors.length,2);assert.match(errors[0],/BGM/);assert.match(errors[1],/シーン別ナレーション/);});
+
+
+test('画像素材ライブラリ参照も動画validationの画像件数へ反映する',()=>{
+  const p=make();p.scenes[0].imageData='';p.scenes[0].imageAssetId='asset-1';p.mediaLibrary=[{id:'asset-1',type:'image',data:'data:image/png;base64,AA==',fileName:'scene.png'}];
+  const r=validateVideoProject(p);assert.equal(r.imageCount,1);assert.equal(r.warnings.some(x=>x.includes('画像未登録')),false);
+});
+test('動画ファイルをBGMへ登録した主要validationエラーを検出する',()=>{
+  const p=make();p.bgm={source:'upload',audioData:'data:video/mp4;base64,AA==',fileName:'clip.mp4'};const r=validateVideoProject(p);assert.equal(r.bgmInvalid,true);assert.ok(r.errors.some(x=>x.includes('動画ファイル')));
+});
+test('シーンなしは動画validationで明示的に失敗する',()=>{
+  const p=make();p.scenes=[];const r=validateVideoProject(p);assert.ok(r.errors.some(x=>x.includes('シーンがありません')));assert.ok(r.errors.some(x=>x.includes('0秒')));
+});
