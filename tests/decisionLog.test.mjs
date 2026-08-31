@@ -7,6 +7,7 @@ import {
   moveSceneWithDecision,
   normalizeDecisionRecord,
   normalizeLearningState,
+  recordSceneDurationChange,
   recordSceneOrderChange,
   snapshotSceneOrder
 } from '../decisionLog.js';
@@ -115,4 +116,53 @@ test('normalizeDecisionRecord rejects records without type or project id', () =>
   assert.equal(normalizeDecisionRecord({ projectId: 'p1' }), null);
   assert.equal(normalizeDecisionRecord({ decisionType: 'scene-order' }), null);
   assert.equal(normalizeDecisionRecord(null), null);
+});
+
+
+test('scene-duration stores one committed duration decision with editing context', () => {
+  const project = {
+    id: 'p-duration',
+    targetDurationSec: 60,
+    learning: { decisions: [] },
+    scenes: [
+      { id: 's1', text: 'intro', durationSec: 8, imageAssetId: 'asset-1', subtitleText: 'subtitle', narration: { audioData: 'audio' } },
+      { id: 's2', text: 'next', durationSec: 5 }
+    ]
+  };
+  const record = recordSceneDurationChange(project, {
+    sceneId: 's1',
+    beforeDurationSec: 5,
+    afterDurationSec: 8,
+    sceneIndex: 0,
+    totalDurationBefore: 10
+  }, {
+    createId: () => 'decision-duration',
+    now: () => '2026-08-31T13:30:00.000Z'
+  });
+
+  assert.equal(record.id, 'decision-duration');
+  assert.equal(record.decisionType, 'scene-duration');
+  assert.equal(record.sceneId, 's1');
+  assert.deepEqual(record.proposal, { durationSec: 5 });
+  assert.deepEqual(record.finalDecision, { durationSec: 8 });
+  assert.equal(record.humanAction.type, 'set-duration');
+  assert.equal(record.context.sceneIndex, 0);
+  assert.equal(record.context.sceneNumber, 1);
+  assert.equal(record.context.sceneText, 'intro');
+  assert.equal(record.context.targetDurationSec, 60);
+  assert.equal(record.context.projectTotalDurationSecBefore, 10);
+  assert.equal(record.source.version, '0.2');
+  assert.equal(project.learning.decisions.length, 1);
+  assert.equal(project.scenes[0].imageAssetId, 'asset-1');
+  assert.equal(project.scenes[0].subtitleText, 'subtitle');
+  assert.equal(project.scenes[0].narration.audioData, 'audio');
+});
+
+test('scene-duration ignores same or invalid values and does not create noise', () => {
+  const project = { id: 'p-duration', targetDurationSec: 60, learning: { decisions: [] }, scenes: [{ id: 's1', text: 'intro', durationSec: 5 }] };
+  assert.equal(recordSceneDurationChange(project, { sceneId: 's1', beforeDurationSec: 5, afterDurationSec: 5, sceneIndex: 0 }), null);
+  assert.equal(recordSceneDurationChange(project, { sceneId: 's1', beforeDurationSec: 0, afterDurationSec: 5, sceneIndex: 0 }), null);
+  assert.equal(recordSceneDurationChange(project, { sceneId: 's1', beforeDurationSec: 5, afterDurationSec: Number.NaN, sceneIndex: 0 }), null);
+  assert.equal(recordSceneDurationChange(project, { sceneId: '', beforeDurationSec: 5, afterDurationSec: 8, sceneIndex: 0 }), null);
+  assert.equal(project.learning.decisions.length, 0);
 });

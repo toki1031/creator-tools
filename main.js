@@ -9,7 +9,7 @@ import { normalizeSubtitleOffset, resolveEffectiveSubtitlePosition, resolveSubti
 import { assessMvpVideoResult, describeVideoExportFailure, isMvpShortsProject, validateMvpShortsOutput } from "./videoMvp.js";
 import { createGenerationStartController, projectExpectsVideoAudio } from "./videoGenerationStart.js";
 import { applyDictionaryEntries, splitIntoScenes, splitSubtitleCards } from "./qualityLogic.js";
-import { ensureLearningState, moveSceneWithDecision } from "./decisionLog.js";
+import { ensureLearningState, moveSceneWithDecision, recordSceneDurationChange } from "./decisionLog.js";
 
 const rootElement = document.querySelector("#app");
 if (!rootElement) throw new Error("#app がありません。");
@@ -495,7 +495,20 @@ async function renderScenes(id) {
       </article>`;
     }).join(""):`<div class="empty"><div>🖼️</div><h3>シーンがありません</h3><p>「台本から自動分割」または「空のシーン」を押してください。</p></div>`;
     root.querySelectorAll("[data-text]").forEach(el=>el.oninput=()=>{updateSceneText(project.scenes[Number(el.dataset.text)],el.value);save();});
-    root.querySelectorAll("[data-duration]").forEach(el=>el.oninput=()=>{updateSceneDuration(project.scenes[Number(el.dataset.duration)],el.value);root.querySelector("#totalDuration").textContent=`${total()}秒`;save();});
+    root.querySelectorAll("[data-duration]").forEach(el=>{
+      const index=Number(el.dataset.duration);
+      el.onfocus=()=>{el.dataset.durationBefore=String(Math.max(1,Number(project.scenes[index]?.durationSec)||1));};
+      el.oninput=()=>{updateSceneDuration(project.scenes[index],el.value);root.querySelector("#totalDuration").textContent=`${total()}秒`;save();};
+      el.onblur=()=>{
+        const scene=project.scenes[index];if(!scene)return;
+        const before=Number(el.dataset.durationBefore),raw=Number(el.value),after=Math.max(1,Number(scene.durationSec)||1);
+        if(Number.isFinite(raw)&&raw>=1&&Number.isFinite(before)&&before>=1){
+          const currentTotal=total();
+          recordSceneDurationChange(project,{sceneId:scene.id,beforeDurationSec:before,afterDurationSec:after,sceneIndex:index,totalDurationBefore:currentTotal-after+before});
+        }
+        el.dataset.durationBefore=String(after);save();
+      };
+    });
     root.querySelectorAll("[data-motion]").forEach(el=>el.onchange=()=>{project.scenes[Number(el.dataset.motion)].motion=el.value;save();});
     root.querySelectorAll("[data-image]").forEach(el=>el.onchange=async()=>{const file=el.files?.[0];if(!file)return;if(file.size>3_000_000&&!confirm("画像が大きいため保存容量を圧迫する可能性があります。続けますか？"))return;const scene=project.scenes[Number(el.dataset.image)];pendingAsset=fileToDataUrl(file).then(data=>{promoteLegacySceneImage(project,scene,{fileName:`シーン ${Number(el.dataset.image)+1} の旧画像`});const asset=addImageAsset(project,{data,fileName:file.name});scene.imageAssetId=asset.id;delete scene.imageData;});save();await pendingAsset;renderList();});
     root.querySelectorAll("[data-library]").forEach(el=>el.onclick=()=>openMediaLibrary(Number(el.dataset.library)));
