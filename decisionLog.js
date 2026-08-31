@@ -112,3 +112,18 @@ export function recordSceneOrderChange(project, { sceneId, direction, before, af
     rights: {}
   }, options);
 }
+
+export function moveSceneWithDecision(project, index, direction, options = {}) {
+  ensureLearningState(project);
+  const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+  const from = Number(index);
+  const delta = direction === 'up' ? -1 : direction === 'down' ? 1 : 0;
+  const to = from + delta;
+  if (!Number.isInteger(from) || !delta || from < 0 || from >= scenes.length || to < 0 || to >= scenes.length) return null;
+  const movedScene = scenes[from];
+  if (!movedScene?.id) return null;
+  const before = snapshotSceneOrder(project);
+  [scenes[from], scenes[to]] = [scenes[to], scenes[from]];
+  const after = snapshotSceneOrder(project);
+  return recordSceneOrderChange(project, { sceneId: movedScene.id, direction, before, after }, options);
+}
