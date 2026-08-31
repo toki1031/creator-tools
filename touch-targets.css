@@ -1,0 +1,6 @@
+/* Mobile touch-target fixes verified during Issue #8 QA. */
+.scene-title button {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 8px 10px;
+}
