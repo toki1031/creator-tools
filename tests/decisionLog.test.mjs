@@ -4,6 +4,7 @@ import { createProject } from '../projectFactory.js';
 import {
   appendDecision,
   ensureLearningState,
+  moveSceneWithDecision,
   normalizeDecisionRecord,
   normalizeLearningState,
   recordSceneOrderChange,
@@ -76,6 +77,38 @@ test('recordSceneOrderChange stores before and after order only when order chang
   assert.deepEqual(record.proposal.map(item => item.sceneId), ['s1', 's2']);
   assert.deepEqual(record.finalDecision.map(item => item.sceneId), ['s2', 's1']);
   assert.equal(project.learning.decisions.length, 1);
+});
+
+test('moveSceneWithDecision reorders one scene and stores exactly one decision', () => {
+  const project = {
+    id: 'p1',
+    learning: { decisions: [] },
+    scenes: [
+      { id: 's1', text: 'one', imageAssetId: 'a1', subtitleText: 'sub1', narration: { audioData: 'data:audio/wav;base64,AA==' } },
+      { id: 's2', text: 'two', imageAssetId: 'a2', subtitleText: 'sub2', narration: { audioData: 'data:audio/wav;base64,BB==' } }
+    ]
+  };
+  const record = moveSceneWithDecision(project, 1, 'up', {
+    createId: () => 'decision-up',
+    now: () => '2026-08-31T00:00:00.000Z'
+  });
+  assert.equal(record.id, 'decision-up');
+  assert.equal(record.sceneId, 's2');
+  assert.equal(record.humanAction.direction, 'up');
+  assert.deepEqual(project.scenes.map(scene => scene.id), ['s2', 's1']);
+  assert.equal(project.scenes[0].imageAssetId, 'a2');
+  assert.equal(project.scenes[0].subtitleText, 'sub2');
+  assert.equal(project.scenes[0].narration.audioData, 'data:audio/wav;base64,BB==');
+  assert.equal(project.learning.decisions.length, 1);
+});
+
+test('moveSceneWithDecision ignores invalid or non-moving operations', () => {
+  const project = { id: 'p1', scenes: [{ id: 's1', text: 'one' }, { id: 's2', text: 'two' }] };
+  assert.equal(moveSceneWithDecision(project, 0, 'up'), null);
+  assert.equal(moveSceneWithDecision(project, 1, 'down'), null);
+  assert.equal(moveSceneWithDecision(project, 0, 'sideways'), null);
+  assert.deepEqual(project.scenes.map(scene => scene.id), ['s1', 's2']);
+  assert.equal(project.learning.decisions.length, 0);
 });
 
 test('normalizeDecisionRecord rejects records without type or project id', () => {
