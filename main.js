@@ -9,6 +9,7 @@ import { normalizeSubtitleOffset, resolveEffectiveSubtitlePosition, resolveSubti
 import { assessMvpVideoResult, describeVideoExportFailure, isMvpShortsProject, validateMvpShortsOutput } from "./videoMvp.js";
 import { createGenerationStartController, projectExpectsVideoAudio } from "./videoGenerationStart.js";
 import { applyDictionaryEntries, splitIntoScenes, splitSubtitleCards } from "./qualityLogic.js";
+import { ensureLearningState, moveSceneWithDecision } from "./decisionLog.js";
 
 const rootElement = document.querySelector("#app");
 if (!rootElement) throw new Error("#app がありません。");
@@ -499,8 +500,8 @@ async function renderScenes(id) {
     root.querySelectorAll("[data-image]").forEach(el=>el.onchange=async()=>{const file=el.files?.[0];if(!file)return;if(file.size>3_000_000&&!confirm("画像が大きいため保存容量を圧迫する可能性があります。続けますか？"))return;const scene=project.scenes[Number(el.dataset.image)];pendingAsset=fileToDataUrl(file).then(data=>{promoteLegacySceneImage(project,scene,{fileName:`シーン ${Number(el.dataset.image)+1} の旧画像`});const asset=addImageAsset(project,{data,fileName:file.name});scene.imageAssetId=asset.id;delete scene.imageData;});save();await pendingAsset;renderList();});
     root.querySelectorAll("[data-library]").forEach(el=>el.onclick=()=>openMediaLibrary(Number(el.dataset.library)));
     root.querySelectorAll("[data-remove]").forEach(el=>el.onclick=()=>{if(!confirm("このシーンを削除しますか？ 削除後も「1つ前に戻す」で復元できます。"))return;const index=Number(el.dataset.remove);promoteLegacySceneImage(project,project.scenes[index],{fileName:`シーン ${index+1} の旧画像`});snapshotScenes();project.scenes.splice(index,1);save();renderList();});
-    root.querySelectorAll("[data-up]").forEach(el=>el.onclick=()=>{const i=Number(el.dataset.up);[project.scenes[i-1],project.scenes[i]]=[project.scenes[i],project.scenes[i-1]];save();renderList();});
-    root.querySelectorAll("[data-down]").forEach(el=>el.onclick=()=>{const i=Number(el.dataset.down);[project.scenes[i+1],project.scenes[i]]=[project.scenes[i],project.scenes[i+1]];save();renderList();});
+    root.querySelectorAll("[data-up]").forEach(el=>el.onclick=()=>{const record=moveSceneWithDecision(project,Number(el.dataset.up),"up");if(!record)return;save();renderList();});
+    root.querySelectorAll("[data-down]").forEach(el=>el.onclick=()=>{const record=moveSceneWithDecision(project,Number(el.dataset.down),"down");if(!record)return;save();renderList();});
   };
   root.querySelector("#autoSplit").onclick=()=>{
     const oldScenes=project.scenes||[];
@@ -520,6 +521,7 @@ async function renderScenes(id) {
 
 function ensureProjectSettings(project) {
   ensureMediaLibrary(project);
+  ensureLearningState(project);
   project.narration = { voiceURI:"", rate:0.92, pitch:0.94, volume:1, source:"browser", audioData:"", fileName:"", mimeType:"", ...(project.narration || {}) };
   project.bgm = project.bgm || { source:"none", title:"", category:"calm", volume:0.12, ducking:true, fadeInSec:1, fadeOutSec:2, loop:true, license:"", credit:"", audioData:"", fileName:"" };
   project.subtitleStyle = {

@@ -1,4 +1,5 @@
 import { findMediaAsset, isImageDataUrl, normalizeMediaLibrary, resolveSceneImageSource } from './mediaLibrary.js';
+import { normalizeLearningState } from './decisionLog.js';
 
 export const CURRENT_PROJECT_SCHEMA_VERSION = 4;
 export const LARGE_BACKUP_WARNING_BYTES = 25 * 1024 * 1024;
@@ -154,6 +155,7 @@ export function normalizeImportedProject(input, { createId } = {}) {
   source.aiWorkspace = isRecord(source.aiWorkspace) ? source.aiWorkspace : {};
   source.promptProfile = isRecord(source.promptProfile) ? source.promptProfile : {};
   source.promptLibrary = Array.isArray(source.promptLibrary) ? source.promptLibrary : [];
+  source.learning = normalizeLearningState(source.learning);
   source.displayScript = stringOr(source.displayScript);
   source.speechScript = stringOr(source.speechScript, source.displayScript);
   source.targetDurationSec = Math.max(5, finiteOr(source.targetDurationSec, 60));
@@ -185,6 +187,7 @@ export function createRestoredProject(normalizedProject, { title, createId, now 
 export function createProjectBackupPayload(project, pronunciationDictionary = []) {
   if (!isRecord(project)) throw new Error('バックアップ対象のプロジェクトがありません。');
   const payload = safeClone(project);
+  payload.learning = normalizeLearningState(payload.learning);
   payload.pronunciationDictionary = normalizeDictionary(pronunciationDictionary);
   return payload;
 }
