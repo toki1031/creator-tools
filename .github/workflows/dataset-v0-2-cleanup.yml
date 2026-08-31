@@ -1,0 +1,27 @@
+name: Dataset v0.2 cleanup temporary
+
+on:
+  push:
+    branches:
+      - dataset-capture-v0-2-duration
+    paths:
+      - '.github/workflows/dataset-v0-2-cleanup.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Remove generated files from branch
+        run: rm -rf node_modules dist .github/workflows/dataset-v0-2-cleanup.yml
+      - name: Commit cleanup
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Remove generated files from Dataset v0.2 branch"
+          git push
