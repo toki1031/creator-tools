@@ -1,0 +1,244 @@
+name: Dataset v0.3 integration temporary
+on:
+  push:
+    branches: [dataset-capture-v0-3-subtitles]
+permissions:
+  contents: write
+jobs:
+  integrate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dataset-capture-v0-3-subtitles
+      - name: Apply Dataset v0.3 changes
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          decision = Path('decisionLog.js')
+          text = decision.read_text()
+          if 'recordSubtitleContentChange' not in text:
+              marker = '\nexport function moveSceneWithDecision(project, index, direction, options = {}) {'
+              if marker not in text:
+                  raise SystemExit('decisionLog insertion marker not found')
+              helper = r'''
+
+function normalizeSubtitleDecisionText(value = '') {
+  return String(value ?? '').replace(/\r\n?/g, '\n');
+}
+
+function summarizeSubtitleDecisionText(value = '') {
+  const text = normalizeSubtitleDecisionText(value);
+  const trimmed = text.trim();
+  const cards = trimmed
+    ? trimmed.split(/\n\s*\n+/).map(card => card.trim()).filter(Boolean)
+    : [];
+  const forcedLineBreakCount = cards.reduce((sum, card) => sum + Math.max(0, card.split('\n').length - 1), 0);
+  return { text, cardCount: cards.length, forcedLineBreakCount, cards };
+}
+
+function subtitleContentSignature(value = '') {
+  return normalizeSubtitleDecisionText(value).replace(/\s+/g, '');
+}
+
+function subtitleBreakLayout(value = '') {
+  const raw = normalizeSubtitleDecisionText(value).trim();
+  if (!raw) return { forced: [], cards: [] };
+  const blocks = raw.split(/\n\s*\n+/);
+  const forced = [];
+  const cards = [];
+  let offset = 0;
+  blocks.forEach((block, blockIndex) => {
+    const lines = block.split('\n');
+    lines.forEach((line, lineIndex) => {
+      offset += Array.from(line.replace(/\s+/g, '')).length;
+      if (lineIndex < lines.length - 1) forced.push(offset);
+    });
+    if (blockIndex < blocks.length - 1) cards.push(offset);
+  });
+  return { forced, cards };
+}
+
+export function recordSubtitleContentChange(project, {
+  sceneId,
+  beforeText,
+  afterText,
+  sceneIndex,
+  maxCharsPerLine,
+  maxLines
+}, options = {}) {
+  if (!sceneId) return null;
+  const before = summarizeSubtitleDecisionText(beforeText);
+  const after = summarizeSubtitleDecisionText(afterText);
+  if (before.text === after.text) return null;
+
+  const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+  const requestedIndex = Number(sceneIndex);
+  const resolvedIndex = Number.isInteger(requestedIndex) && requestedIndex >= 0 && requestedIndex < scenes.length
+    ? requestedIndex
+    : scenes.findIndex(scene => String(scene?.id || '') === String(sceneId));
+  const scene = resolvedIndex >= 0 ? scenes[resolvedIndex] : scenes.find(item => String(item?.id || '') === String(sceneId));
+  const beforeLayout = subtitleBreakLayout(before.text);
+  const afterLayout = subtitleBreakLayout(after.text);
+  const changeKinds = [];
+  if (subtitleContentSignature(before.text) !== subtitleContentSignature(after.text)) changeKinds.push('text');
+  if (JSON.stringify(beforeLayout.forced) !== JSON.stringify(afterLayout.forced)) changeKinds.push('forced-line-break');
+  if (JSON.stringify(beforeLayout.cards) !== JSON.stringify(afterLayout.cards)) changeKinds.push('card-split');
+  if (!changeKinds.length) return null;
+
+  const charsPerLine = Number(maxCharsPerLine);
+  const lineLimit = Number(maxLines);
+  return appendDecision(project, {
+    decisionType: 'subtitle-content',
+    sceneId: String(sceneId),
+    context: {
+      screen: 'subtitle-editor',
+      sceneIndex: resolvedIndex,
+      sceneNumber: resolvedIndex >= 0 ? resolvedIndex + 1 : null,
+      sceneText: stringOr(scene?.text),
+      durationSec: Number.isFinite(Number(scene?.durationSec)) ? Number(scene.durationSec) : null,
+      maxCharsPerLine: Number.isFinite(charsPerLine) ? charsPerLine : null,
+      maxLines: Number.isFinite(lineLimit) ? lineLimit : null
+    },
+    proposal: before,
+    alternatives: [],
+    humanAction: { type: 'edit-subtitle', changeKinds },
+    finalDecision: after,
+    reasonCode: '',
+    reasonNote: '',
+    source: { type: 'system', feature: 'subtitle-editor', version: '0.3' },
+    assetIds: [],
+    rights: {}
+  }, options);
+}
+'''
+              text = text.replace(marker, helper + marker)
+              decision.write_text(text)
+
+          main = Path('main.js')
+          text = main.read_text()
+          old_import = 'import { ensureLearningState, moveSceneWithDecision, recordSceneDurationChange } from "./decisionLog.js";'
+          new_import = 'import { ensureLearningState, moveSceneWithDecision, recordSceneDurationChange, recordSubtitleContentChange } from "./decisionLog.js";'
+          if old_import in text:
+              text = text.replace(old_import, new_import, 1)
+          elif new_import not in text:
+              raise SystemExit('main.js decisionLog import marker not found')
+
+          pattern = re.compile(r"    list\.querySelectorAll\('\[data-sub-text\]'\)\.forEach\(el=>el\.oninput=.*?\n    list\.querySelectorAll\('\[data-sub-enabled\]'\)", re.S)
+          replacement = r'''    const subtitleBeforeByElement=new WeakMap();
+    list.querySelectorAll('[data-sub-text]').forEach(el=>{
+      el.onfocus=()=>{const i=Number(el.dataset.subText);subtitleBeforeByElement.set(el,String(scenes[i]?.subtitleText??''));};
+      el.oninput=()=>{const i=Number(el.dataset.subText);scenes[i].subtitleText=el.value;const f=formatSubtitleLines(el.value,st.maxCharsPerLine,st.maxLines);const count=list.querySelector(`[data-sub-count="${i}"]`);count.textContent=`${f.chars}文字／目安${st.maxCharsPerLine*st.maxLines}文字${f.overflow?'・長すぎます':''}`;count.classList.toggle('warning',f.overflow);updateSubtitleCount();if(Number(root.querySelector('#previewScene').value)===i)renderSubtitlePreview();save();};
+      el.onblur=()=>{const i=Number(el.dataset.subText),scene=scenes[i];if(!scene)return;const before=subtitleBeforeByElement.has(el)?subtitleBeforeByElement.get(el):String(scene.subtitleText??'');subtitleBeforeByElement.delete(el);const record=recordSubtitleContentChange(project,{sceneId:scene.id,beforeText:before,afterText:String(scene.subtitleText??''),sceneIndex:i,maxCharsPerLine:st.maxCharsPerLine,maxLines:st.maxLines});if(record)save();};
+    });
+    list.querySelectorAll('[data-sub-enabled]')'''
+          if 'subtitleBeforeByElement' not in text:
+              text, count = pattern.subn(replacement, text, count=1)
+              if count != 1:
+                  raise SystemExit(f'main.js subtitle handler replacement count={count}')
+          main.write_text(text)
+
+          tests = Path('tests/decisionLog.test.mjs')
+          text = tests.read_text()
+          if 'recordSubtitleContentChange,' not in text:
+              text = text.replace('  recordSceneOrderChange,\n', '  recordSceneOrderChange,\n  recordSubtitleContentChange,\n', 1)
+          if "subtitle-content stores one committed edit" not in text:
+              text += r'''
+
+test('subtitle-content stores one committed edit with text, forced break and card split structure', () => {
+  const project = {
+    id: 'p-subtitle',
+    learning: { decisions: [] },
+    scenes: [{
+      id: 's1', text: 'scene body', durationSec: 12,
+      subtitleText: 'これは字幕テストです。', imageAssetId: 'asset-1', narration: { audioData: 'audio' }
+    }]
+  };
+  const finalText = 'これは字幕テストです。\nここは同じカードです。\n\nここから次のカードです。';
+  project.scenes[0].subtitleText = finalText;
+  const record = recordSubtitleContentChange(project, {
+    sceneId: 's1',
+    beforeText: 'これは字幕テストです。',
+    afterText: finalText,
+    sceneIndex: 0,
+    maxCharsPerLine: 16,
+    maxLines: 2
+  }, {
+    createId: () => 'decision-subtitle',
+    now: () => '2026-09-01T16:00:00.000Z'
+  });
+
+  assert.equal(record.id, 'decision-subtitle');
+  assert.equal(record.decisionType, 'subtitle-content');
+  assert.equal(record.sceneId, 's1');
+  assert.equal(record.proposal.text, 'これは字幕テストです。');
+  assert.equal(record.proposal.cardCount, 1);
+  assert.equal(record.proposal.forcedLineBreakCount, 0);
+  assert.equal(record.finalDecision.text, finalText);
+  assert.equal(record.finalDecision.cardCount, 2);
+  assert.equal(record.finalDecision.forcedLineBreakCount, 1);
+  assert.deepEqual(record.finalDecision.cards, ['これは字幕テストです。\nここは同じカードです。', 'ここから次のカードです。']);
+  assert.equal(record.humanAction.type, 'edit-subtitle');
+  assert.ok(record.humanAction.changeKinds.includes('text'));
+  assert.ok(record.humanAction.changeKinds.includes('forced-line-break'));
+  assert.ok(record.humanAction.changeKinds.includes('card-split'));
+  assert.equal(record.context.screen, 'subtitle-editor');
+  assert.equal(record.context.sceneText, 'scene body');
+  assert.equal(record.context.durationSec, 12);
+  assert.equal(record.context.maxCharsPerLine, 16);
+  assert.equal(record.context.maxLines, 2);
+  assert.equal(record.source.version, '0.3');
+  assert.equal(project.learning.decisions.length, 1);
+  assert.equal(project.scenes[0].text, 'scene body');
+  assert.equal(project.scenes[0].durationSec, 12);
+  assert.equal(project.scenes[0].imageAssetId, 'asset-1');
+  assert.equal(project.scenes[0].narration.audioData, 'audio');
+});
+
+test('subtitle-content distinguishes a forced line break without treating it as text change', () => {
+  const project = { id: 'p-subtitle', learning: { decisions: [] }, scenes: [{ id: 's1', text: 'ABCD', subtitleText: 'AB\nCD', durationSec: 5 }] };
+  const record = recordSubtitleContentChange(project, {
+    sceneId: 's1', beforeText: 'ABCD', afterText: 'AB\nCD', sceneIndex: 0
+  });
+  assert.deepEqual(record.humanAction.changeKinds, ['forced-line-break']);
+  assert.equal(record.finalDecision.cardCount, 1);
+  assert.equal(record.finalDecision.forcedLineBreakCount, 1);
+});
+
+test('subtitle-content distinguishes card split and normalizes CRLF without duplicate noise', () => {
+  const project = { id: 'p-subtitle', learning: { decisions: [] }, scenes: [{ id: 's1', text: 'line', subtitleText: '前半\n\n後半', durationSec: 5 }] };
+  const record = recordSubtitleContentChange(project, {
+    sceneId: 's1', beforeText: '前半\n後半', afterText: '前半\n\n後半', sceneIndex: 0
+  });
+  assert.ok(record.humanAction.changeKinds.includes('forced-line-break'));
+  assert.ok(record.humanAction.changeKinds.includes('card-split'));
+  assert.equal(record.finalDecision.cardCount, 2);
+  assert.equal(record.finalDecision.forcedLineBreakCount, 0);
+
+  const unchanged = recordSubtitleContentChange(project, {
+    sceneId: 's1', beforeText: '前半\r\n\r\n後半', afterText: '前半\n\n後半', sceneIndex: 0
+  });
+  assert.equal(unchanged, null);
+  assert.equal(project.learning.decisions.length, 1);
+});
+'''
+              tests.write_text(text)
+
+          docs = Path('docs/DATASET_CAPTURE_V0_3.md')
+          docs.write_text('''# Dataset Capture v0.3 — Subtitle Content Decisions\n\n## Purpose\nCapture one meaningful subtitle editing decision per focus-to-blur edit session. Key-by-key input is never stored as DecisionRecord.\n\n## Decision type\n`subtitle-content`\n\n## Capture boundary\n- focus: remember committed `subtitleText` before editing\n- input: preserve existing preview, warning and autosave behavior only\n- blur: compare before/final and append at most one DecisionRecord\n- unchanged normalized text: no record\n- bulk regenerate/clear, restore and automatic scene operations: out of scope\n\n## Stored structure\nBoth `proposal` and `finalDecision` keep:\n- normalized raw text (LF newlines)\n- `cardCount`\n- `forcedLineBreakCount`\n- `cards` (blank-line separated, single newlines retained inside a card)\n\n`humanAction.changeKinds` can contain:\n- `text`\n- `forced-line-break`\n- `card-split`\n\n## Compatibility\n- schemaVersion remains 4\n- IndexedDB DB_VERSION remains 1\n- no new IndexedDB store\n- no external Dataset upload\n- no external AI API call\n- existing subtitle editor input/preview/autosave remains the source of truth\n''')
+
+          workflow = Path('.github/workflows/dataset-v0-3-integrate.yml')
+          if workflow.exists():
+              workflow.unlink()
+          PY
+      - name: Commit implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "Capture committed subtitle content decisions"
+          git push origin HEAD:dataset-capture-v0-3-subtitles
