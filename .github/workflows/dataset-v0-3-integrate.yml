@@ -6,17 +6,26 @@ permissions:
   contents: write
 jobs:
   integrate:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: dataset-capture-v0-3-subtitles
       - name: Apply Dataset v0.3 changes
+        env:
+          HELPER_B64: CmZ1bmN0aW9uIG5vcm1hbGl6ZVN1YnRpdGxlRGVjaXNpb25UZXh0KHZhbHVlID0gJycpIHsKICByZXR1cm4gU3RyaW5nKHZhbHVlID8/ICcnKS5yZXBsYWNlKC9cclxuPy9nLCAnXG4nKTsKfQoKZnVuY3Rpb24gc3VtbWFyaXplU3VidGl0bGVEZWNpc2lvblRleHQodmFsdWUgPSAnJykgewogIGNvbnN0IHRleHQgPSBub3JtYWxpemVTdWJ0aXRsZURlY2lzaW9uVGV4dCh2YWx1ZSk7CiAgY29uc3QgdHJpbW1lZCA9IHRleHQudHJpbSgpOwogIGNvbnN0IGNhcmRzID0gdHJpbW1lZAogICAgPyB0cmltbWVkLnNwbGl0KC9cblxzKlxuKy8pLm1hcChjYXJkID0+IGNhcmQudHJpbSgpKS5maWx0ZXIoQm9vbGVhbikKICAgIDogW107CiAgY29uc3QgZm9yY2VkTGluZUJyZWFrQ291bnQgPSBjYXJkcy5yZWR1Y2UoKHN1bSwgY2FyZCkgPT4gc3VtICsgTWF0aC5tYXgoMCwgY2FyZC5zcGxpdCgnXG4nKS5sZW5ndGggLSAxKSwgMCk7CiAgcmV0dXJuIHsgdGV4dCwgY2FyZENvdW50OiBjYXJkcy5sZW5ndGgsIGZvcmNlZExpbmVCcmVha0NvdW50LCBjYXJkcyB9Owp9CgpmdW5jdGlvbiBzdWJ0aXRsZUNvbnRlbnRTaWduYXR1cmUodmFsdWUgPSAnJykgewogIHJldHVybiBub3JtYWxpemVTdWJ0aXRsZURlY2lzaW9uVGV4dCh2YWx1ZSkucmVwbGFjZSgvXHMrL2csICcnKTsKfQoKZnVuY3Rpb24gc3VidGl0bGVCcmVha0xheW91dCh2YWx1ZSA9ICcnKSB7CiAgY29uc3QgcmF3ID0gbm9ybWFsaXplU3VidGl0bGVEZWNpc2lvblRleHQodmFsdWUpLnRyaW0oKTsKICBpZiAoIXJhdykgcmV0dXJuIHsgZm9yY2VkOiBbXSwgY2FyZHM6IFtdIH07CiAgY29uc3QgYmxvY2tzID0gcmF3LnNwbGl0KC9cblxzKlxuKy8pOwogIGNvbnN0IGZvcmNlZCA9IFtdOwogIGNvbnN0IGNhcmRzID0gW107CiAgbGV0IG9mZnNldCA9IDA7CiAgYmxvY2tzLmZvckVhY2goKGJsb2NrLCBibG9ja0luZGV4KSA9PiB7CiAgICBjb25zdCBsaW5lcyA9IGJsb2NrLnNwbGl0KCdcbicpOwogICAgbGluZXMuZm9yRWFjaCgobGluZSwgbGluZUluZGV4KSA9PiB7CiAgICAgIG9mZnNldCArPSBBcnJheS5mcm9tKGxpbmUucmVwbGFjZSgvXHMrL2csICcnKSkubGVuZ3RoOwogICAgICBpZiAobGluZUluZGV4IDwgbGluZXMubGVuZ3RoIC0gMSkgZm9yY2VkLnB1c2gob2Zmc2V0KTsKICAgIH0pOwogICAgaWYgKGJsb2NrSW5kZXggPCBibG9ja3MubGVuZ3RoIC0gMSkgY2FyZHMucHVzaChvZmZzZXQpOwogIH0pOwogIHJldHVybiB7IGZvcmNlZCwgY2FyZHMgfTsKfQoKZXhwb3J0IGZ1bmN0aW9uIHJlY29yZFN1YnRpdGxlQ29udGVudENoYW5nZShwcm9qZWN0LCB7CiAgc2NlbmVJZCwKICBiZWZvcmVUZXh0LAogIGFmdGVyVGV4dCwKICBzY2VuZUluZGV4LAogIG1heENoYXJzUGVyTGluZSwKICBtYXhMaW5lcwp9LCBvcHRpb25zID0ge30pIHsKICBpZiAoIXNjZW5lSWQpIHJldHVybiBudWxsOwogIGNvbnN0IGJlZm9yZSA9IHN1bW1hcml6ZVN1YnRpdGxlRGVjaXNpb25UZXh0KGJlZm9yZVRleHQpOwogIGNvbnN0IGFmdGVyID0gc3VtbWFyaXplU3VidGl0bGVEZWNpc2lvblRleHQoYWZ0ZXJUZXh0KTsKICBpZiAoYmVmb3JlLnRleHQgPT09IGFmdGVyLnRleHQpIHJldHVybiBudWxsOwoKICBjb25zdCBzY2VuZXMgPSBBcnJheS5pc0FycmF5KHByb2plY3Q/LnNjZW5lcykgPyBwcm9qZWN0LnNjZW5lcyA6IFtdOwogIGNvbnN0IHJlcXVlc3RlZEluZGV4ID0gTnVtYmVyKHNjZW5lSW5kZXgpOwogIGNvbnN0IHJlc29sdmVkSW5kZXggPSBOdW1iZXIuaXNJbnRlZ2VyKHJlcXVlc3RlZEluZGV4KSAmJiByZXF1ZXN0ZWRJbmRleCA+PSAwICYmIHJlcXVlc3RlZEluZGV4IDwgc2NlbmVzLmxlbmd0aAogICAgPyByZXF1ZXN0ZWRJbmRleAogICAgOiBzY2VuZXMuZmluZEluZGV4KHNjZW5lID0+IFN0cmluZyhzY2VuZT8uaWQgfHwgJycpID09PSBTdHJpbmcoc2NlbmVJZCkpOwogIGNvbnN0IHNjZW5lID0gcmVzb2x2ZWRJbmRleCA+PSAwID8gc2NlbmVzW3Jlc29sdmVkSW5kZXhdIDogc2NlbmVzLmZpbmQoaXRlbSA9PiBTdHJpbmcoaXRlbT8uaWQgfHwgJycpID09PSBTdHJpbmcoc2NlbmVJZCkpOwogIGNvbnN0IGJlZm9yZUxheW91dCA9IHN1YnRpdGxlQnJlYWtMYXlvdXQoYmVmb3JlLnRleHQpOwogIGNvbnN0IGFmdGVyTGF5b3V0ID0gc3VidGl0bGVCcmVha0xheW91dChhZnRlci50ZXh0KTsKICBjb25zdCBjaGFuZ2VLaW5kcyA9IFtdOwogIGlmIChzdWJ0aXRsZUNvbnRlbnRTaWduYXR1cmUoYmVmb3JlLnRleHQpICE9PSBzdWJ0aXRsZUNvbnRlbnRTaWduYXR1cmUoYWZ0ZXIudGV4dCkpIGNoYW5nZUtpbmRzLnB1c2goJ3RleHQnKTsKICBpZiAoSlNPTi5zdHJpbmdpZnkoYmVmb3JlTGF5b3V0LmZvcmNlZCkgIT09IEpTT04uc3RyaW5naWZ5KGFmdGVyTGF5b3V0LmZvcmNlZCkpIGNoYW5nZUtpbmRzLnB1c2goJ2ZvcmNlZC1saW5lLWJyZWFrJyk7CiAgaWYgKEpTT04uc3RyaW5naWZ5KGJlZm9yZUxheW91dC5jYXJkcykgIT09IEpTT04uc3RyaW5naWZ5KGFmdGVyTGF5b3V0LmNhcmRzKSkgY2hhbmdlS2luZHMucHVzaCgnY2FyZC1zcGxpdCcpOwogIGlmICghY2hhbmdlS2luZHMubGVuZ3RoKSByZXR1cm4gbnVsbDsKCiAgY29uc3QgY2hhcnNQZXJMaW5lID0gTnVtYmVyKG1heENoYXJzUGVyTGluZSk7CiAgY29uc3QgbGluZUxpbWl0ID0gTnVtYmVyKG1heExpbmVzKTsKICByZXR1cm4gYXBwZW5kRGVjaXNpb24ocHJvamVjdCwgewogICAgZGVjaXNpb25UeXBlOiAnc3VidGl0bGUtY29udGVudCcsCiAgICBzY2VuZUlkOiBTdHJpbmcoc2NlbmVJZCksCiAgICBjb250ZXh0OiB7CiAgICAgIHNjcmVlbjogJ3N1YnRpdGxlLWVkaXRvcicsCiAgICAgIHNjZW5lSW5kZXg6IHJlc29sdmVkSW5kZXgsCiAgICAgIHNjZW5lTnVtYmVyOiByZXNvbHZlZEluZGV4ID49IDAgPyByZXNvbHZlZEluZGV4ICsgMSA6IG51bGwsCiAgICAgIHNjZW5lVGV4dDogc3RyaW5nT3Ioc2NlbmU/LnRleHQpLAogICAgICBkdXJhdGlvblNlYzogTnVtYmVyLmlzRmluaXRlKE51bWJlcihzY2VuZT8uZHVyYXRpb25TZWMpKSA/IE51bWJlcihzY2VuZS5kdXJhdGlvblNlYykgOiBudWxsLAogICAgICBtYXhDaGFyc1BlckxpbmU6IE51bWJlci5pc0Zpbml0ZShjaGFyc1BlckxpbmUpID8gY2hhcnNQZXJMaW5lIDogbnVsbCwKICAgICAgbWF4TGluZXM6IE51bWJlci5pc0Zpbml0ZShsaW5lTGltaXQpID8gbGluZUxpbWl0IDogbnVsbAogICAgfSwKICAgIHByb3Bvc2FsOiBiZWZvcmUsCiAgICBhbHRlcm5hdGl2ZXM6IFtdLAogICAgaHVtYW5BY3Rpb246IHsgdHlwZTogJ2VkaXQtc3VidGl0bGUnLCBjaGFuZ2VLaW5kcyB9LAogICAgZmluYWxEZWNpc2lvbjogYWZ0ZXIsCiAgICByZWFzb25Db2RlOiAnJywKICAgIHJlYXNvbk5vdGU6ICcnLAogICAgc291cmNlOiB7IHR5cGU6ICdzeXN0ZW0nLCBmZWF0dXJlOiAnc3VidGl0bGUtZWRpdG9yJywgdmVyc2lvbjogJzAuMycgfSwKICAgIGFzc2V0SWRzOiBbXSwKICAgIHJpZ2h0czoge30KICB9LCBvcHRpb25zKTsKfQo=
+          REPL_B64: ICAgIGNvbnN0IHN1YnRpdGxlQmVmb3JlQnlFbGVtZW50PW5ldyBXZWFrTWFwKCk7CiAgICBsaXN0LnF1ZXJ5U2VsZWN0b3JBbGwoJ1tkYXRhLXN1Yi10ZXh0XScpLmZvckVhY2goZWw9PnsKICAgICAgZWwub25mb2N1cz0oKT0+e2NvbnN0IGk9TnVtYmVyKGVsLmRhdGFzZXQuc3ViVGV4dCk7c3VidGl0bGVCZWZvcmVCeUVsZW1lbnQuc2V0KGVsLFN0cmluZyhzY2VuZXNbaV0/LnN1YnRpdGxlVGV4dD8/JycpKTt9OwogICAgICBlbC5vbmlucHV0PSgpPT57Y29uc3QgaT1OdW1iZXIoZWwuZGF0YXNldC5zdWJUZXh0KTtzY2VuZXNbaV0uc3VidGl0bGVUZXh0PWVsLnZhbHVlO2NvbnN0IGY9Zm9ybWF0U3VidGl0bGVMaW5lcyhlbC52YWx1ZSxzdC5tYXhDaGFyc1BlckxpbmUsc3QubWF4TGluZXMpO2NvbnN0IGNvdW50PWxpc3QucXVlcnlTZWxlY3RvcihgW2RhdGEtc3ViLWNvdW50PSIke2l9Il1gKTtjb3VudC50ZXh0Q29udGVudD1gJHtmLmNoYXJzfeaWh+Wtl++8j+ebruWuiSR7c3QubWF4Q2hhcnNQZXJMaW5lKnN0Lm1heExpbmVzfeaWh+WtlyR7Zi5vdmVyZmxvdz8n44O76ZW344GZ44GO44G+44GZJzonJ31gO2NvdW50LmNsYXNzTGlzdC50b2dnbGUoJ3dhcm5pbmcnLGYub3ZlcmZsb3cpO3VwZGF0ZVN1YnRpdGxlQ291bnQoKTtpZihOdW1iZXIocm9vdC5xdWVyeVNlbGVjdG9yKCcjcHJldmlld1NjZW5lJykudmFsdWUpPT09aSlyZW5kZXJTdWJ0aXRsZVByZXZpZXcoKTtzYXZlKCk7fTsKICAgICAgZWwub25ibHVyPSgpPT57Y29uc3QgaT1OdW1iZXIoZWwuZGF0YXNldC5zdWJUZXh0KSxzY2VuZT1zY2VuZXNbaV07aWYoIXNjZW5lKXJldHVybjtjb25zdCBiZWZvcmU9c3VidGl0bGVCZWZvcmVCeUVsZW1lbnQuaGFzKGVsKT9zdWJ0aXRsZUJlZm9yZUJ5RWxlbWVudC5nZXQoZWwpOlN0cmluZyhzY2VuZS5zdWJ0aXRsZVRleHQ/PycnKTtzdWJ0aXRsZUJlZm9yZUJ5RWxlbWVudC5kZWxldGUoZWwpO2NvbnN0IHJlY29yZD1yZWNvcmRTdWJ0aXRsZUNvbnRlbnRDaGFuZ2UocHJvamVjdCx7c2NlbmVJZDpzY2VuZS5pZCxiZWZvcmVUZXh0OmJlZm9yZSxhZnRlclRleHQ6U3RyaW5nKHNjZW5lLnN1YnRpdGxlVGV4dD8/JycpLHNjZW5lSW5kZXg6aSxtYXhDaGFyc1BlckxpbmU6c3QubWF4Q2hhcnNQZXJMaW5lLG1heExpbmVzOnN0Lm1heExpbmVzfSk7aWYocmVjb3JkKXNhdmUoKTt9OwogICAgfSk7CiAgICBsaXN0LnF1ZXJ5U2VsZWN0b3JBbGwoJ1tkYXRhLXN1Yi1lbmFibGVkXScp
+          TESTS_B64: CnRlc3QoJ3N1YnRpdGxlLWNvbnRlbnQgc3RvcmVzIG9uZSBjb21taXR0ZWQgZWRpdCB3aXRoIHRleHQsIGZvcmNlZCBicmVhayBhbmQgY2FyZCBzcGxpdCBzdHJ1Y3R1cmUnLCAoKSA9PiB7CiAgY29uc3QgcHJvamVjdCA9IHsKICAgIGlkOiAncC1zdWJ0aXRsZScsCiAgICBsZWFybmluZzogeyBkZWNpc2lvbnM6IFtdIH0sCiAgICBzY2VuZXM6IFt7CiAgICAgIGlkOiAnczEnLCB0ZXh0OiAnc2NlbmUgYm9keScsIGR1cmF0aW9uU2VjOiAxMiwKICAgICAgc3VidGl0bGVUZXh0OiAn44GT44KM44Gv5a2X5bmV44OG44K544OI44Gn44GZ44CCJywgaW1hZ2VBc3NldElkOiAnYXNzZXQtMScsIG5hcnJhdGlvbjogeyBhdWRpb0RhdGE6ICdhdWRpbycgfQogICAgfV0KICB9OwogIGNvbnN0IGZpbmFsVGV4dCA9ICfjgZPjgozjga/lrZfluZXjg4bjgrnjg4jjgafjgZnjgIJcbuOBk+OBk+OBr+WQjOOBmOOCq+ODvOODieOBp+OBmeOAglxuXG7jgZPjgZPjgYvjgonmrKHjga7jgqvjg7zjg4njgafjgZnjgIInOwogIHByb2plY3Quc2NlbmVzWzBdLnN1YnRpdGxlVGV4dCA9IGZpbmFsVGV4dDsKICBjb25zdCByZWNvcmQgPSByZWNvcmRTdWJ0aXRsZUNvbnRlbnRDaGFuZ2UocHJvamVjdCwgewogICAgc2NlbmVJZDogJ3MxJywKICAgIGJlZm9yZVRleHQ6ICfjgZPjgozjga/lrZfluZXjg4bjgrnjg4jjgafjgZnjgIInLAogICAgYWZ0ZXJUZXh0OiBmaW5hbFRleHQsCiAgICBzY2VuZUluZGV4OiAwLAogICAgbWF4Q2hhcnNQZXJMaW5lOiAxNiwKICAgIG1heExpbmVzOiAyCiAgfSwgewogICAgY3JlYXRlSWQ6ICgpID0+ICdkZWNpc2lvbi1zdWJ0aXRsZScsCiAgICBub3c6ICgpID0+ICcyMDI2LTA5LTAxVDE2OjAwOjAwLjAwMFonCiAgfSk7CgogIGFzc2VydC5lcXVhbChyZWNvcmQuaWQsICdkZWNpc2lvbi1zdWJ0aXRsZScpOwogIGFzc2VydC5lcXVhbChyZWNvcmQuZGVjaXNpb25UeXBlLCAnc3VidGl0bGUtY29udGVudCcpOwogIGFzc2VydC5lcXVhbChyZWNvcmQuc2NlbmVJZCwgJ3MxJyk7CiAgYXNzZXJ0LmVxdWFsKHJlY29yZC5wcm9wb3NhbC50ZXh0LCAn44GT44KM44Gv5a2X5bmV44OG44K544OI44Gn44GZ44CCJyk7CiAgYXNzZXJ0LmVxdWFsKHJlY29yZC5wcm9wb3NhbC5jYXJkQ291bnQsIDEpOwogIGFzc2VydC5lcXVhbChyZWNvcmQucHJvcG9zYWwuZm9yY2VkTGluZUJyZWFrQ291bnQsIDApOwogIGFzc2VydC5lcXVhbChyZWNvcmQuZmluYWxEZWNpc2lvbi50ZXh0LCBmaW5hbFRleHQpOwogIGFzc2VydC5lcXVhbChyZWNvcmQuZmluYWxEZWNpc2lvbi5jYXJkQ291bnQsIDIpOwogIGFzc2VydC5lcXVhbChyZWNvcmQuZmluYWxEZWNpc2lvbi5mb3JjZWRMaW5lQnJlYWtDb3VudCwgMSk7CiAgYXNzZXJ0LmRlZXBFcXVhbChyZWNvcmQuZmluYWxEZWNpc2lvbi5jYXJkcywgWyfjgZPjgozjga/lrZfluZXjg4bjgrnjg4jjgafjgZnjgIJcbuOBk+OBk+OBr+WQjOOBmOOCq+ODvOODieOBp+OBmeOAgicsICfjgZPjgZPjgYvjgonmrKHjga7jgqvjg7zjg4njgafjgZnjgIInXSk7CiAgYXNzZXJ0LmVxdWFsKHJlY29yZC5odW1hbkFjdGlvbi50eXBlLCAnZWRpdC1zdWJ0aXRsZScpOwogIGFzc2VydC5vayhyZWNvcmQuaHVtYW5BY3Rpb24uY2hhbmdlS2luZHMuaW5jbHVkZXMoJ3RleHQnKSk7CiAgYXNzZXJ0Lm9rKHJlY29yZC5odW1hbkFjdGlvbi5jaGFuZ2VLaW5kcy5pbmNsdWRlcygnZm9yY2VkLWxpbmUtYnJlYWsnKSk7CiAgYXNzZXJ0Lm9rKHJlY29yZC5odW1hbkFjdGlvbi5jaGFuZ2VLaW5kcy5pbmNsdWRlcygnY2FyZC1zcGxpdCcpKTsKICBhc3NlcnQuZXF1YWwocmVjb3JkLmNvbnRleHQuc2NyZWVuLCAnc3VidGl0bGUtZWRpdG9yJyk7CiAgYXNzZXJ0LmVxdWFsKHJlY29yZC5jb250ZXh0LnNjZW5lVGV4dCwgJ3NjZW5lIGJvZHknKTsKICBhc3NlcnQuZXF1YWwocmVjb3JkLmNvbnRleHQuZHVyYXRpb25TZWMsIDEyKTsKICBhc3NlcnQuZXF1YWwocmVjb3JkLmNvbnRleHQubWF4Q2hhcnNQZXJMaW5lLCAxNik7CiAgYXNzZXJ0LmVxdWFsKHJlY29yZC5jb250ZXh0Lm1heExpbmVzLCAyKTsKICBhc3NlcnQuZXF1YWwocmVjb3JkLnNvdXJjZS52ZXJzaW9uLCAnMC4zJyk7CiAgYXNzZXJ0LmVxdWFsKHByb2plY3QubGVhcm5pbmcuZGVjaXNpb25zLmxlbmd0aCwgMSk7CiAgYXNzZXJ0LmVxdWFsKHByb2plY3Quc2NlbmVzWzBdLnRleHQsICdzY2VuZSBib2R5Jyk7CiAgYXNzZXJ0LmVxdWFsKHByb2plY3Quc2NlbmVzWzBdLmR1cmF0aW9uU2VjLCAxMik7CiAgYXNzZXJ0LmVxdWFsKHByb2plY3Quc2NlbmVzWzBdLmltYWdlQXNzZXRJZCwgJ2Fzc2V0LTEnKTsKICBhc3NlcnQuZXF1YWwocHJvamVjdC5zY2VuZXNbMF0ubmFycmF0aW9uLmF1ZGlvRGF0YSwgJ2F1ZGlvJyk7Cn0pOwoKdGVzdCgnc3VidGl0bGUtY29udGVudCBkaXN0aW5ndWlzaGVzIGEgZm9yY2VkIGxpbmUgYnJlYWsgd2l0aG91dCB0cmVhdGluZyBpdCBhcyB0ZXh0IGNoYW5nZScsICgpID0+IHsKICBjb25zdCBwcm9qZWN0ID0geyBpZDogJ3Atc3VidGl0bGUnLCBsZWFybmluZzogeyBkZWNpc2lvbnM6IFtdIH0sIHNjZW5lczogW3sgaWQ6ICdzMScsIHRleHQ6ICdBQkNEJywgc3VidGl0bGVUZXh0OiAnQUJcbkNEJywgZHVyYXRpb25TZWM6IDUgfV0gfTsKICBjb25zdCByZWNvcmQgPSByZWNvcmRTdWJ0aXRsZUNvbnRlbnRDaGFuZ2UocHJvamVjdCwgewogICAgc2NlbmVJZDogJ3MxJywgYmVmb3JlVGV4dDogJ0FCQ0QnLCBhZnRlclRleHQ6ICdBQlxuQ0QnLCBzY2VuZUluZGV4OiAwCiAgfSk7CiAgYXNzZXJ0LmRlZXBFcXVhbChyZWNvcmQuaHVtYW5BY3Rpb24uY2hhbmdlS2luZHMsIFsnZm9yY2VkLWxpbmUtYnJlYWsnXSk7CiAgYXNzZXJ0LmVxdWFsKHJlY29yZC5maW5hbERlY2lzaW9uLmNhcmRDb3VudCwgMSk7CiAgYXNzZXJ0LmVxdWFsKHJlY29yZC5maW5hbERlY2lzaW9uLmZvcmNlZExpbmVCcmVha0NvdW50LCAxKTsKfSk7Cgp0ZXN0KCdzdWJ0aXRsZS1jb250ZW50IGRpc3Rpbmd1aXNoZXMgY2FyZCBzcGxpdCBhbmQgbm9ybWFsaXplcyBDUkxGIHdpdGhvdXQgZHVwbGljYXRlIG5vaXNlJywgKCkgPT4gewogIGNvbnN0IHByb2plY3QgPSB7IGlkOiAncC1zdWJ0aXRsZScsIGxlYXJuaW5nOiB7IGRlY2lzaW9uczogW10gfSwgc2NlbmVzOiBbeyBpZDogJ3MxJywgdGV4dDogJ2xpbmUnLCBzdWJ0aXRsZVRleHQ6ICfliY3ljYpcblxu5b6M5Y2KJywgZHVyYXRpb25TZWM6IDUgfV0gfTsKICBjb25zdCByZWNvcmQgPSByZWNvcmRTdWJ0aXRsZUNvbnRlbnRDaGFuZ2UocHJvamVjdCwgewogICAgc2NlbmVJZDogJ3MxJywgYmVmb3JlVGV4dDogJ+WJjeWNilxu5b6M5Y2KJywgYWZ0ZXJUZXh0OiAn5YmN5Y2KXG5cbuW+jOWNiicsIHNjZW5lSW5kZXg6IDAKICB9KTsKICBhc3NlcnQub2socmVjb3JkLmh1bWFuQWN0aW9uLmNoYW5nZUtpbmRzLmluY2x1ZGVzKCdmb3JjZWQtbGluZS1icmVhaycpKTsKICBhc3NlcnQub2socmVjb3JkLmh1bWFuQWN0aW9uLmNoYW5nZUtpbmRzLmluY2x1ZGVzKCdjYXJkLXNwbGl0JykpOwogIGFzc2VydC5lcXVhbChyZWNvcmQuZmluYWxEZWNpc2lvbi5jYXJkQ291bnQsIDIpOwogIGFzc2VydC5lcXVhbChyZWNvcmQuZmluYWxEZWNpc2lvbi5mb3JjZWRMaW5lQnJlYWtDb3VudCwgMCk7CgogIGNvbnN0IHVuY2hhbmdlZCA9IHJlY29yZFN1YnRpdGxlQ29udGVudENoYW5nZShwcm9qZWN0LCB7CiAgICBzY2VuZUlkOiAnczEnLCBiZWZvcmVUZXh0OiAn5YmN5Y2KXHJcblxyXG7lvozljYonLCBhZnRlclRleHQ6ICfliY3ljYpcblxu5b6M5Y2KJywgc2NlbmVJbmRleDogMAogIH0pOwogIGFzc2VydC5lcXVhbCh1bmNoYW5nZWQsIG51bGwpOwogIGFzc2VydC5lcXVhbChwcm9qZWN0LmxlYXJuaW5nLmRlY2lzaW9ucy5sZW5ndGgsIDEpOwp9KTsK
+          DOCS_B64: IyBEYXRhc2V0IENhcHR1cmUgdjAuMyDigJQgU3VidGl0bGUgQ29udGVudCBEZWNpc2lvbnMKCiMjIFB1cnBvc2UKQ2FwdHVyZSBvbmUgbWVhbmluZ2Z1bCBzdWJ0aXRsZSBlZGl0aW5nIGRlY2lzaW9uIHBlciBmb2N1cy10by1ibHVyIGVkaXQgc2Vzc2lvbi4gS2V5LWJ5LWtleSBpbnB1dCBpcyBuZXZlciBzdG9yZWQgYXMgRGVjaXNpb25SZWNvcmQuCgojIyBEZWNpc2lvbiB0eXBlCmBzdWJ0aXRsZS1jb250ZW50YAoKIyMgQ2FwdHVyZSBib3VuZGFyeQotIGZvY3VzOiByZW1lbWJlciBjb21taXR0ZWQgYHN1YnRpdGxlVGV4dGAgYmVmb3JlIGVkaXRpbmcKLSBpbnB1dDogcHJlc2VydmUgZXhpc3RpbmcgcHJldmlldywgd2FybmluZyBhbmQgYXV0b3NhdmUgYmVoYXZpb3Igb25seQotIGJsdXI6IGNvbXBhcmUgYmVmb3JlL2ZpbmFsIGFuZCBhcHBlbmQgYXQgbW9zdCBvbmUgRGVjaXNpb25SZWNvcmQKLSB1bmNoYW5nZWQgbm9ybWFsaXplZCB0ZXh0OiBubyByZWNvcmQKLSBidWxrIHJlZ2VuZXJhdGUvY2xlYXIsIHJlc3RvcmUgYW5kIGF1dG9tYXRpYyBzY2VuZSBvcGVyYXRpb25zOiBvdXQgb2Ygc2NvcGUKCiMjIFN0b3JlZCBzdHJ1Y3R1cmUKQm90aCBgcHJvcG9zYWxgIGFuZCBgZmluYWxEZWNpc2lvbmAga2VlcDoKLSBub3JtYWxpemVkIHJhdyB0ZXh0IChMRiBuZXdsaW5lcykKLSBgY2FyZENvdW50YAotIGBmb3JjZWRMaW5lQnJlYWtDb3VudGAKLSBgY2FyZHNgIChibGFuay1saW5lIHNlcGFyYXRlZCwgc2luZ2xlIG5ld2xpbmVzIHJldGFpbmVkIGluc2lkZSBhIGNhcmQpCgpgaHVtYW5BY3Rpb24uY2hhbmdlS2luZHNgIGNhbiBjb250YWluOgotIGB0ZXh0YAotIGBmb3JjZWQtbGluZS1icmVha2AKLSBgY2FyZC1zcGxpdGAKCiMjIENvbXBhdGliaWxpdHkKLSBzY2hlbWFWZXJzaW9uIHJlbWFpbnMgNAotIEluZGV4ZWREQiBEQl9WRVJTSU9OIHJlbWFpbnMgMQotIG5vIG5ldyBJbmRleGVkREIgc3RvcmUKLSBubyBleHRlcm5hbCBEYXRhc2V0IHVwbG9hZAotIG5vIGV4dGVybmFsIEFJIEFQSSBjYWxsCi0gZXhpc3Rpbmcgc3VidGl0bGUgZWRpdG9yIGlucHV0L3ByZXZpZXcvYXV0b3NhdmUgcmVtYWlucyB0aGUgc291cmNlIG9mIHRydXRoCg==
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          import re
+          import base64, os, re
+
+          helper = base64.b64decode(os.environ['HELPER_B64']).decode()
+          replacement = base64.b64decode(os.environ['REPL_B64']).decode()
+          tests_append = base64.b64decode(os.environ['TESTS_B64']).decode()
+          docs = base64.b64decode(os.environ['DOCS_B64']).decode()
 
           decision = Path('decisionLog.js')
           text = decision.read_text()
@@ -24,97 +33,6 @@ jobs:
               marker = '\nexport function moveSceneWithDecision(project, index, direction, options = {}) {'
               if marker not in text:
                   raise SystemExit('decisionLog insertion marker not found')
-              helper = r'''
-
-function normalizeSubtitleDecisionText(value = '') {
-  return String(value ?? '').replace(/\r\n?/g, '\n');
-}
-
-function summarizeSubtitleDecisionText(value = '') {
-  const text = normalizeSubtitleDecisionText(value);
-  const trimmed = text.trim();
-  const cards = trimmed
-    ? trimmed.split(/\n\s*\n+/).map(card => card.trim()).filter(Boolean)
-    : [];
-  const forcedLineBreakCount = cards.reduce((sum, card) => sum + Math.max(0, card.split('\n').length - 1), 0);
-  return { text, cardCount: cards.length, forcedLineBreakCount, cards };
-}
-
-function subtitleContentSignature(value = '') {
-  return normalizeSubtitleDecisionText(value).replace(/\s+/g, '');
-}
-
-function subtitleBreakLayout(value = '') {
-  const raw = normalizeSubtitleDecisionText(value).trim();
-  if (!raw) return { forced: [], cards: [] };
-  const blocks = raw.split(/\n\s*\n+/);
-  const forced = [];
-  const cards = [];
-  let offset = 0;
-  blocks.forEach((block, blockIndex) => {
-    const lines = block.split('\n');
-    lines.forEach((line, lineIndex) => {
-      offset += Array.from(line.replace(/\s+/g, '')).length;
-      if (lineIndex < lines.length - 1) forced.push(offset);
-    });
-    if (blockIndex < blocks.length - 1) cards.push(offset);
-  });
-  return { forced, cards };
-}
-
-export function recordSubtitleContentChange(project, {
-  sceneId,
-  beforeText,
-  afterText,
-  sceneIndex,
-  maxCharsPerLine,
-  maxLines
-}, options = {}) {
-  if (!sceneId) return null;
-  const before = summarizeSubtitleDecisionText(beforeText);
-  const after = summarizeSubtitleDecisionText(afterText);
-  if (before.text === after.text) return null;
-
-  const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
-  const requestedIndex = Number(sceneIndex);
-  const resolvedIndex = Number.isInteger(requestedIndex) && requestedIndex >= 0 && requestedIndex < scenes.length
-    ? requestedIndex
-    : scenes.findIndex(scene => String(scene?.id || '') === String(sceneId));
-  const scene = resolvedIndex >= 0 ? scenes[resolvedIndex] : scenes.find(item => String(item?.id || '') === String(sceneId));
-  const beforeLayout = subtitleBreakLayout(before.text);
-  const afterLayout = subtitleBreakLayout(after.text);
-  const changeKinds = [];
-  if (subtitleContentSignature(before.text) !== subtitleContentSignature(after.text)) changeKinds.push('text');
-  if (JSON.stringify(beforeLayout.forced) !== JSON.stringify(afterLayout.forced)) changeKinds.push('forced-line-break');
-  if (JSON.stringify(beforeLayout.cards) !== JSON.stringify(afterLayout.cards)) changeKinds.push('card-split');
-  if (!changeKinds.length) return null;
-
-  const charsPerLine = Number(maxCharsPerLine);
-  const lineLimit = Number(maxLines);
-  return appendDecision(project, {
-    decisionType: 'subtitle-content',
-    sceneId: String(sceneId),
-    context: {
-      screen: 'subtitle-editor',
-      sceneIndex: resolvedIndex,
-      sceneNumber: resolvedIndex >= 0 ? resolvedIndex + 1 : null,
-      sceneText: stringOr(scene?.text),
-      durationSec: Number.isFinite(Number(scene?.durationSec)) ? Number(scene.durationSec) : null,
-      maxCharsPerLine: Number.isFinite(charsPerLine) ? charsPerLine : null,
-      maxLines: Number.isFinite(lineLimit) ? lineLimit : null
-    },
-    proposal: before,
-    alternatives: [],
-    humanAction: { type: 'edit-subtitle', changeKinds },
-    finalDecision: after,
-    reasonCode: '',
-    reasonNote: '',
-    source: { type: 'system', feature: 'subtitle-editor', version: '0.3' },
-    assetIds: [],
-    rights: {}
-  }, options);
-}
-'''
               text = text.replace(marker, helper + marker)
               decision.write_text(text)
 
@@ -126,17 +44,9 @@ export function recordSubtitleContentChange(project, {
               text = text.replace(old_import, new_import, 1)
           elif new_import not in text:
               raise SystemExit('main.js decisionLog import marker not found')
-
-          pattern = re.compile(r"    list\.querySelectorAll\('\[data-sub-text\]'\)\.forEach\(el=>el\.oninput=.*?\n    list\.querySelectorAll\('\[data-sub-enabled\]'\)", re.S)
-          replacement = r'''    const subtitleBeforeByElement=new WeakMap();
-    list.querySelectorAll('[data-sub-text]').forEach(el=>{
-      el.onfocus=()=>{const i=Number(el.dataset.subText);subtitleBeforeByElement.set(el,String(scenes[i]?.subtitleText??''));};
-      el.oninput=()=>{const i=Number(el.dataset.subText);scenes[i].subtitleText=el.value;const f=formatSubtitleLines(el.value,st.maxCharsPerLine,st.maxLines);const count=list.querySelector(`[data-sub-count="${i}"]`);count.textContent=`${f.chars}文字／目安${st.maxCharsPerLine*st.maxLines}文字${f.overflow?'・長すぎます':''}`;count.classList.toggle('warning',f.overflow);updateSubtitleCount();if(Number(root.querySelector('#previewScene').value)===i)renderSubtitlePreview();save();};
-      el.onblur=()=>{const i=Number(el.dataset.subText),scene=scenes[i];if(!scene)return;const before=subtitleBeforeByElement.has(el)?subtitleBeforeByElement.get(el):String(scene.subtitleText??'');subtitleBeforeByElement.delete(el);const record=recordSubtitleContentChange(project,{sceneId:scene.id,beforeText:before,afterText:String(scene.subtitleText??''),sceneIndex:i,maxCharsPerLine:st.maxCharsPerLine,maxLines:st.maxLines});if(record)save();};
-    });
-    list.querySelectorAll('[data-sub-enabled]')'''
           if 'subtitleBeforeByElement' not in text:
-              text, count = pattern.subn(replacement, text, count=1)
+              pattern = re.compile(r"    list\.querySelectorAll\('\[data-sub-text\]'\)\.forEach\(el=>el\.oninput=.*?\n    list\.querySelectorAll\('\[data-sub-enabled\]'\)", re.S)
+              text, count = pattern.subn(lambda match: replacement, text, count=1)
               if count != 1:
                   raise SystemExit(f'main.js subtitle handler replacement count={count}')
           main.write_text(text)
@@ -146,93 +56,11 @@ export function recordSubtitleContentChange(project, {
           if 'recordSubtitleContentChange,' not in text:
               text = text.replace('  recordSceneOrderChange,\n', '  recordSceneOrderChange,\n  recordSubtitleContentChange,\n', 1)
           if "subtitle-content stores one committed edit" not in text:
-              text += r'''
+              text += tests_append
+          tests.write_text(text)
 
-test('subtitle-content stores one committed edit with text, forced break and card split structure', () => {
-  const project = {
-    id: 'p-subtitle',
-    learning: { decisions: [] },
-    scenes: [{
-      id: 's1', text: 'scene body', durationSec: 12,
-      subtitleText: 'これは字幕テストです。', imageAssetId: 'asset-1', narration: { audioData: 'audio' }
-    }]
-  };
-  const finalText = 'これは字幕テストです。\nここは同じカードです。\n\nここから次のカードです。';
-  project.scenes[0].subtitleText = finalText;
-  const record = recordSubtitleContentChange(project, {
-    sceneId: 's1',
-    beforeText: 'これは字幕テストです。',
-    afterText: finalText,
-    sceneIndex: 0,
-    maxCharsPerLine: 16,
-    maxLines: 2
-  }, {
-    createId: () => 'decision-subtitle',
-    now: () => '2026-09-01T16:00:00.000Z'
-  });
-
-  assert.equal(record.id, 'decision-subtitle');
-  assert.equal(record.decisionType, 'subtitle-content');
-  assert.equal(record.sceneId, 's1');
-  assert.equal(record.proposal.text, 'これは字幕テストです。');
-  assert.equal(record.proposal.cardCount, 1);
-  assert.equal(record.proposal.forcedLineBreakCount, 0);
-  assert.equal(record.finalDecision.text, finalText);
-  assert.equal(record.finalDecision.cardCount, 2);
-  assert.equal(record.finalDecision.forcedLineBreakCount, 1);
-  assert.deepEqual(record.finalDecision.cards, ['これは字幕テストです。\nここは同じカードです。', 'ここから次のカードです。']);
-  assert.equal(record.humanAction.type, 'edit-subtitle');
-  assert.ok(record.humanAction.changeKinds.includes('text'));
-  assert.ok(record.humanAction.changeKinds.includes('forced-line-break'));
-  assert.ok(record.humanAction.changeKinds.includes('card-split'));
-  assert.equal(record.context.screen, 'subtitle-editor');
-  assert.equal(record.context.sceneText, 'scene body');
-  assert.equal(record.context.durationSec, 12);
-  assert.equal(record.context.maxCharsPerLine, 16);
-  assert.equal(record.context.maxLines, 2);
-  assert.equal(record.source.version, '0.3');
-  assert.equal(project.learning.decisions.length, 1);
-  assert.equal(project.scenes[0].text, 'scene body');
-  assert.equal(project.scenes[0].durationSec, 12);
-  assert.equal(project.scenes[0].imageAssetId, 'asset-1');
-  assert.equal(project.scenes[0].narration.audioData, 'audio');
-});
-
-test('subtitle-content distinguishes a forced line break without treating it as text change', () => {
-  const project = { id: 'p-subtitle', learning: { decisions: [] }, scenes: [{ id: 's1', text: 'ABCD', subtitleText: 'AB\nCD', durationSec: 5 }] };
-  const record = recordSubtitleContentChange(project, {
-    sceneId: 's1', beforeText: 'ABCD', afterText: 'AB\nCD', sceneIndex: 0
-  });
-  assert.deepEqual(record.humanAction.changeKinds, ['forced-line-break']);
-  assert.equal(record.finalDecision.cardCount, 1);
-  assert.equal(record.finalDecision.forcedLineBreakCount, 1);
-});
-
-test('subtitle-content distinguishes card split and normalizes CRLF without duplicate noise', () => {
-  const project = { id: 'p-subtitle', learning: { decisions: [] }, scenes: [{ id: 's1', text: 'line', subtitleText: '前半\n\n後半', durationSec: 5 }] };
-  const record = recordSubtitleContentChange(project, {
-    sceneId: 's1', beforeText: '前半\n後半', afterText: '前半\n\n後半', sceneIndex: 0
-  });
-  assert.ok(record.humanAction.changeKinds.includes('forced-line-break'));
-  assert.ok(record.humanAction.changeKinds.includes('card-split'));
-  assert.equal(record.finalDecision.cardCount, 2);
-  assert.equal(record.finalDecision.forcedLineBreakCount, 0);
-
-  const unchanged = recordSubtitleContentChange(project, {
-    sceneId: 's1', beforeText: '前半\r\n\r\n後半', afterText: '前半\n\n後半', sceneIndex: 0
-  });
-  assert.equal(unchanged, null);
-  assert.equal(project.learning.decisions.length, 1);
-});
-'''
-              tests.write_text(text)
-
-          docs = Path('docs/DATASET_CAPTURE_V0_3.md')
-          docs.write_text('''# Dataset Capture v0.3 — Subtitle Content Decisions\n\n## Purpose\nCapture one meaningful subtitle editing decision per focus-to-blur edit session. Key-by-key input is never stored as DecisionRecord.\n\n## Decision type\n`subtitle-content`\n\n## Capture boundary\n- focus: remember committed `subtitleText` before editing\n- input: preserve existing preview, warning and autosave behavior only\n- blur: compare before/final and append at most one DecisionRecord\n- unchanged normalized text: no record\n- bulk regenerate/clear, restore and automatic scene operations: out of scope\n\n## Stored structure\nBoth `proposal` and `finalDecision` keep:\n- normalized raw text (LF newlines)\n- `cardCount`\n- `forcedLineBreakCount`\n- `cards` (blank-line separated, single newlines retained inside a card)\n\n`humanAction.changeKinds` can contain:\n- `text`\n- `forced-line-break`\n- `card-split`\n\n## Compatibility\n- schemaVersion remains 4\n- IndexedDB DB_VERSION remains 1\n- no new IndexedDB store\n- no external Dataset upload\n- no external AI API call\n- existing subtitle editor input/preview/autosave remains the source of truth\n''')
-
-          workflow = Path('.github/workflows/dataset-v0-3-integrate.yml')
-          if workflow.exists():
-              workflow.unlink()
+          Path('docs/DATASET_CAPTURE_V0_3.md').write_text(docs)
+          Path('.github/workflows/dataset-v0-3-integrate.yml').unlink()
           PY
       - name: Commit implementation
         run: |
