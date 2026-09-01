@@ -113,6 +113,53 @@ export function recordSceneOrderChange(project, { sceneId, direction, before, af
   }, options);
 }
 
+
+export function recordSceneDurationChange(project, {
+  sceneId,
+  beforeDurationSec,
+  afterDurationSec,
+  sceneIndex,
+  totalDurationBefore
+}, options = {}) {
+  const before = Number(beforeDurationSec);
+  const after = Number(afterDurationSec);
+  if (!sceneId || !Number.isFinite(before) || !Number.isFinite(after) || before < 1 || after < 1) return null;
+  if (Math.abs(before - after) < 0.001) return null;
+
+  const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+  const requestedIndex = Number(sceneIndex);
+  const resolvedIndex = Number.isInteger(requestedIndex) && requestedIndex >= 0 && requestedIndex < scenes.length
+    ? requestedIndex
+    : scenes.findIndex(scene => String(scene?.id || '') === String(sceneId));
+  const scene = resolvedIndex >= 0 ? scenes[resolvedIndex] : scenes.find(item => String(item?.id || '') === String(sceneId));
+  const targetDuration = Number(project?.targetDurationSec);
+  const suppliedTotalBefore = Number(totalDurationBefore);
+  const currentTotal = scenes.reduce((sum, item) => sum + (Number(item?.durationSec) || 0), 0);
+  const inferredTotalBefore = Number.isFinite(currentTotal) ? currentTotal - after + before : before;
+
+  return appendDecision(project, {
+    decisionType: 'scene-duration',
+    sceneId: String(sceneId),
+    context: {
+      screen: 'scene-editor',
+      sceneIndex: resolvedIndex,
+      sceneNumber: resolvedIndex >= 0 ? resolvedIndex + 1 : null,
+      sceneText: stringOr(scene?.text),
+      targetDurationSec: Number.isFinite(targetDuration) ? targetDuration : null,
+      projectTotalDurationSecBefore: Number.isFinite(suppliedTotalBefore) ? suppliedTotalBefore : inferredTotalBefore
+    },
+    proposal: { durationSec: before },
+    alternatives: [],
+    humanAction: { type: 'set-duration' },
+    finalDecision: { durationSec: after },
+    reasonCode: '',
+    reasonNote: '',
+    source: { type: 'system', feature: 'scene-editor', version: '0.2' },
+    assetIds: [],
+    rights: {}
+  }, options);
+}
+
 export function moveSceneWithDecision(project, index, direction, options = {}) {
   ensureLearningState(project);
   const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
