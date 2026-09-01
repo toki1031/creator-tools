@@ -9,6 +9,7 @@ import {
   normalizeLearningState,
   recordSceneDurationChange,
   recordSceneOrderChange,
+  recordSubtitleContentChange,
   snapshotSceneOrder
 } from '../decisionLog.js';
 
@@ -165,4 +166,81 @@ test('scene-duration ignores same or invalid values and does not create noise', 
   assert.equal(recordSceneDurationChange(project, { sceneId: 's1', beforeDurationSec: 5, afterDurationSec: Number.NaN, sceneIndex: 0 }), null);
   assert.equal(recordSceneDurationChange(project, { sceneId: '', beforeDurationSec: 5, afterDurationSec: 8, sceneIndex: 0 }), null);
   assert.equal(project.learning.decisions.length, 0);
+});
+
+test('subtitle-content stores one committed edit with text, forced break and card split structure', () => {
+  const project = {
+    id: 'p-subtitle',
+    learning: { decisions: [] },
+    scenes: [{
+      id: 's1', text: 'scene body', durationSec: 12,
+      subtitleText: 'これは字幕テストです。', imageAssetId: 'asset-1', narration: { audioData: 'audio' }
+    }]
+  };
+  const finalText = 'これは字幕テストです。\nここは同じカードです。\n\nここから次のカードです。';
+  project.scenes[0].subtitleText = finalText;
+  const record = recordSubtitleContentChange(project, {
+    sceneId: 's1',
+    beforeText: 'これは字幕テストです。',
+    afterText: finalText,
+    sceneIndex: 0,
+    maxCharsPerLine: 16,
+    maxLines: 2
+  }, {
+    createId: () => 'decision-subtitle',
+    now: () => '2026-09-01T16:00:00.000Z'
+  });
+
+  assert.equal(record.id, 'decision-subtitle');
+  assert.equal(record.decisionType, 'subtitle-content');
+  assert.equal(record.sceneId, 's1');
+  assert.equal(record.proposal.text, 'これは字幕テストです。');
+  assert.equal(record.proposal.cardCount, 1);
+  assert.equal(record.proposal.forcedLineBreakCount, 0);
+  assert.equal(record.finalDecision.text, finalText);
+  assert.equal(record.finalDecision.cardCount, 2);
+  assert.equal(record.finalDecision.forcedLineBreakCount, 1);
+  assert.deepEqual(record.finalDecision.cards, ['これは字幕テストです。\nここは同じカードです。', 'ここから次のカードです。']);
+  assert.equal(record.humanAction.type, 'edit-subtitle');
+  assert.ok(record.humanAction.changeKinds.includes('text'));
+  assert.ok(record.humanAction.changeKinds.includes('forced-line-break'));
+  assert.ok(record.humanAction.changeKinds.includes('card-split'));
+  assert.equal(record.context.screen, 'subtitle-editor');
+  assert.equal(record.context.sceneText, 'scene body');
+  assert.equal(record.context.durationSec, 12);
+  assert.equal(record.context.maxCharsPerLine, 16);
+  assert.equal(record.context.maxLines, 2);
+  assert.equal(record.source.version, '0.3');
+  assert.equal(project.learning.decisions.length, 1);
+  assert.equal(project.scenes[0].text, 'scene body');
+  assert.equal(project.scenes[0].durationSec, 12);
+  assert.equal(project.scenes[0].imageAssetId, 'asset-1');
+  assert.equal(project.scenes[0].narration.audioData, 'audio');
+});
+
+test('subtitle-content distinguishes a forced line break without treating it as text change', () => {
+  const project = { id: 'p-subtitle', learning: { decisions: [] }, scenes: [{ id: 's1', text: 'ABCD', subtitleText: 'AB\nCD', durationSec: 5 }] };
+  const record = recordSubtitleContentChange(project, {
+    sceneId: 's1', beforeText: 'ABCD', afterText: 'AB\nCD', sceneIndex: 0
+  });
+  assert.deepEqual(record.humanAction.changeKinds, ['forced-line-break']);
+  assert.equal(record.finalDecision.cardCount, 1);
+  assert.equal(record.finalDecision.forcedLineBreakCount, 1);
+});
+
+test('subtitle-content distinguishes card split and normalizes CRLF without duplicate noise', () => {
+  const project = { id: 'p-subtitle', learning: { decisions: [] }, scenes: [{ id: 's1', text: 'line', subtitleText: '前半\n\n後半', durationSec: 5 }] };
+  const record = recordSubtitleContentChange(project, {
+    sceneId: 's1', beforeText: '前半\n後半', afterText: '前半\n\n後半', sceneIndex: 0
+  });
+  assert.ok(record.humanAction.changeKinds.includes('forced-line-break'));
+  assert.ok(record.humanAction.changeKinds.includes('card-split'));
+  assert.equal(record.finalDecision.cardCount, 2);
+  assert.equal(record.finalDecision.forcedLineBreakCount, 0);
+
+  const unchanged = recordSubtitleContentChange(project, {
+    sceneId: 's1', beforeText: '前半\r\n\r\n後半', afterText: '前半\n\n後半', sceneIndex: 0
+  });
+  assert.equal(unchanged, null);
+  assert.equal(project.learning.decisions.length, 1);
 });
