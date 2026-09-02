@@ -1,4 +1,5 @@
 import { splitSubtitleCards } from './qualityLogic.js';
+import { resolveSubtitleYRatio } from './subtitlePosition.js';
 
 const clampInteger = (value, min, max) => Math.min(max, Math.max(min, Math.trunc(Number(value) || 0)));
 
@@ -88,7 +89,7 @@ function installSubtitlePreviewNavigation() {
       });
     }
 
-    const textarea = app.querySelector(`[data-sub-text="${CSS.escape(sceneIndex)}"]`);
+    const textarea = app.querySelector(`[data-sub-text="${sceneIndex}"]`);
     const maxChars = Number(app.querySelector('#maxChars')?.value) || 16;
     const maxLines = Number(app.querySelector('#maxLines')?.value) || 2;
     const preview = resolveSubtitlePreviewCard(textarea?.value || '', cardIndex, maxChars, maxLines);
@@ -116,6 +117,17 @@ function installSubtitlePreviewNavigation() {
     rendered.dataset.previewCardSignature = signature;
     rendered.classList.toggle('overflow', preview.overflow);
     replacePreviewLines(rendered, preview.lines);
+
+    if (previewBox.clientHeight) {
+      const scenePosition = app.querySelector(`[data-sub-position="${sceneIndex}"]`);
+      const hasSceneOverride = Boolean(scenePosition?.value);
+      const position = hasSceneOverride ? scenePosition.value : (app.querySelector('#subtitlePosition')?.value || 'bottom');
+      const offset = hasSceneOverride
+        ? Number(app.querySelector(`[data-sub-offset="${sceneIndex}"]`)?.value) || 0
+        : Number(app.querySelector('#positionOffset')?.value) || 0;
+      const safeRatio = resolveSubtitleYRatio(position, offset, rendered.offsetHeight / previewBox.clientHeight / 2);
+      rendered.style.top = `${(safeRatio * 100).toFixed(2)}%`;
+    }
   };
 
   const scheduleApply = () => {
