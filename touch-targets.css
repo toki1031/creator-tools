@@ -4,3 +4,25 @@
   min-height: 44px;
   padding: 8px 10px;
 }
+
+/* Subtitle card preview navigation added after Issue #24 QA. */
+.subtitle-preview-navigation {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+.subtitle-preview-navigation[hidden] {
+  display: none;
+}
+.subtitle-preview-navigation button {
+  min-width: 88px;
+  min-height: 44px;
+  padding: 8px 12px;
+}
+.subtitle-preview-navigation [data-subtitle-preview-status] {
+  min-width: 72px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
