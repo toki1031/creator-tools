@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applyDictionaryEntries, calculateBgmLoopCount, splitIntoScenes, splitSubtitleCards, splitSubtitlePhrases } from '../qualityLogic.js';
+import { applyDictionaryEntries, calculateBgmLoopCount, normalizeSubtitleContentForSync, splitIntoScenes, splitSubtitleCards, splitSubtitlePhrases, subtitleContentChanged } from '../qualityLogic.js';
 import { resolveSubtitlePreviewCard } from '../subtitlePreviewNavigation.js';
 
 test('読み辞書は長い語を優先して本文を実際に置換する', () => {
@@ -34,6 +34,19 @@ test('字幕カード数が減った場合はプレビュー位置を有効範�
   assert.equal(result.cardCount, 1);
   assert.equal(result.index, 0);
   assert.deepEqual(result.lines, ['カード1']);
+});
+test('字幕同期判定は改行・空行・行端空白だけの変更を無視する', () => {
+  const before = 'これは字幕テストです。';
+  const after = ' これは字幕\r\nテストです。 \r\n\r\n';
+  assert.equal(normalizeSubtitleContentForSync(after), before);
+  assert.equal(subtitleContentChanged(before, after), false);
+});
+test('字幕同期判定は句読点や語句の変更を文章変更として扱う', () => {
+  assert.equal(subtitleContentChanged('これは字幕です。', 'これは新しい字幕です。'), true);
+  assert.equal(subtitleContentChanged('字幕です。', '字幕です'), true);
+});
+test('字幕同期用本文はカード分割を除いてシーン本文向け文章へ戻す', () => {
+  assert.equal(normalizeSubtitleContentForSync('一行目\n二行目\n\n次のカード'), '一行目二行目次のカード');
 });
 test('シーン分割は目標尺から均等なシーン時間を割り当てる', () => {
   const scenes = splitIntoScenes('第一文です。第二文です。第三文です。', 60);
