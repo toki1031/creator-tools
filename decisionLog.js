@@ -160,6 +160,95 @@ export function recordSceneDurationChange(project, {
   }, options);
 }
 
+function normalizeSubtitleDecisionText(value = '') {
+  return String(value ?? '').replace(/\r\n?/g, '\n');
+}
+
+function summarizeSubtitleDecisionText(value = '') {
+  const text = normalizeSubtitleDecisionText(value);
+  const trimmed = text.trim();
+  const cards = trimmed
+    ? trimmed.split(/\n\s*\n+/).map(card => card.trim()).filter(Boolean)
+    : [];
+  const forcedLineBreakCount = cards.reduce((sum, card) => sum + Math.max(0, card.split('\n').length - 1), 0);
+  return { text, cardCount: cards.length, forcedLineBreakCount, cards };
+}
+
+function subtitleContentSignature(value = '') {
+  return normalizeSubtitleDecisionText(value).replace(/\s+/g, '');
+}
+
+function subtitleBreakLayout(value = '') {
+  const raw = normalizeSubtitleDecisionText(value).trim();
+  if (!raw) return { forced: [], cards: [] };
+  const blocks = raw.split(/\n\s*\n+/);
+  const forced = [];
+  const cards = [];
+  let offset = 0;
+  blocks.forEach((block, blockIndex) => {
+    const lines = block.split('\n');
+    lines.forEach((line, lineIndex) => {
+      offset += Array.from(line.replace(/\s+/g, '')).length;
+      if (lineIndex < lines.length - 1) forced.push(offset);
+    });
+    if (blockIndex < blocks.length - 1) cards.push(offset);
+  });
+  return { forced, cards };
+}
+
+export function recordSubtitleContentChange(project, {
+  sceneId,
+  beforeText,
+  afterText,
+  sceneIndex,
+  maxCharsPerLine,
+  maxLines
+}, options = {}) {
+  if (!sceneId) return null;
+  const before = summarizeSubtitleDecisionText(beforeText);
+  const after = summarizeSubtitleDecisionText(afterText);
+  if (before.text === after.text) return null;
+
+  const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+  const requestedIndex = Number(sceneIndex);
+  const resolvedIndex = Number.isInteger(requestedIndex) && requestedIndex >= 0 && requestedIndex < scenes.length
+    ? requestedIndex
+    : scenes.findIndex(scene => String(scene?.id || '') === String(sceneId));
+  const scene = resolvedIndex >= 0 ? scenes[resolvedIndex] : scenes.find(item => String(item?.id || '') === String(sceneId));
+  const beforeLayout = subtitleBreakLayout(before.text);
+  const afterLayout = subtitleBreakLayout(after.text);
+  const changeKinds = [];
+  if (subtitleContentSignature(before.text) !== subtitleContentSignature(after.text)) changeKinds.push('text');
+  if (JSON.stringify(beforeLayout.forced) !== JSON.stringify(afterLayout.forced)) changeKinds.push('forced-line-break');
+  if (JSON.stringify(beforeLayout.cards) !== JSON.stringify(afterLayout.cards)) changeKinds.push('card-split');
+  if (!changeKinds.length) return null;
+
+  const charsPerLine = Number(maxCharsPerLine);
+  const lineLimit = Number(maxLines);
+  return appendDecision(project, {
+    decisionType: 'subtitle-content',
+    sceneId: String(sceneId),
+    context: {
+      screen: 'subtitle-editor',
+      sceneIndex: resolvedIndex,
+      sceneNumber: resolvedIndex >= 0 ? resolvedIndex + 1 : null,
+      sceneText: stringOr(scene?.text),
+      durationSec: Number.isFinite(Number(scene?.durationSec)) ? Number(scene.durationSec) : null,
+      maxCharsPerLine: Number.isFinite(charsPerLine) ? charsPerLine : null,
+      maxLines: Number.isFinite(lineLimit) ? lineLimit : null
+    },
+    proposal: before,
+    alternatives: [],
+    humanAction: { type: 'edit-subtitle', changeKinds },
+    finalDecision: after,
+    reasonCode: '',
+    reasonNote: '',
+    source: { type: 'system', feature: 'subtitle-editor', version: '0.3' },
+    assetIds: [],
+    rights: {}
+  }, options);
+}
+
 export function moveSceneWithDecision(project, index, direction, options = {}) {
   ensureLearningState(project);
   const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
