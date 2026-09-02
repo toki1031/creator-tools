@@ -1,0 +1,54 @@
+name: Issue 29 integrate subtitle scene sync
+
+on:
+  push:
+    branches:
+      - issue29-subtitle-scene-sync
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: issue29-subtitle-scene-sync
+      - name: Patch main.js safely
+        env:
+          OLD_IMPORT: 'aW1wb3J0IHsgYXBwbHlEaWN0aW9uYXJ5RW50cmllcywgc3BsaXRJbnRvU2NlbmVzLCBzcGxpdFN1YnRpdGxlQ2FyZHMgfSBmcm9tICIuL3F1YWxpdHlMb2dpYy5qcyI7'
+          NEW_IMPORT: 'aW1wb3J0IHsgYXBwbHlEaWN0aW9uYXJ5RW50cmllcywgbm9ybWFsaXplU3VidGl0bGVDb250ZW50Rm9yU3luYywgc3BsaXRJbnRvU2NlbmVzLCBzcGxpdFN1YnRpdGxlQ2FyZHMsIHN1YnRpdGxlQ29udGVudENoYW5nZWQgfSBmcm9tICIuL3F1YWxpdHlMb2dpYy5qcyI7'
+          ANCHOR: 'Y29uc3QgZmluYWxSZXZpZXdTaWduYXR1cmUgPSBwcm9qZWN0ID0+IHs='
+          INSERT: 'CmZ1bmN0aW9uIGdldFN1YnRpdGxlU2NlbmVTeW5jRGlhbG9nKCkgewogIGxldCBkaWFsb2cgPSBkb2N1bWVudC5xdWVyeVNlbGVjdG9yKCcjc3VidGl0bGVTY2VuZVN5bmNEaWFsb2cnKTsKICBpZiAoZGlhbG9nKSByZXR1cm4gZGlhbG9nOwogIGRpYWxvZyA9IGRvY3VtZW50LmNyZWF0ZUVsZW1lbnQoJ2RpYWxvZycpOwogIGRpYWxvZy5pZCA9ICdzdWJ0aXRsZVNjZW5lU3luY0RpYWxvZyc7CiAgZGlhbG9nLmNsYXNzTmFtZSA9ICdzdWJ0aXRsZS1zeW5jLWRpYWxvZyc7CiAgZGlhbG9nLnNldEF0dHJpYnV0ZSgnYXJpYS1sYWJlbGxlZGJ5JywgJ3N1YnRpdGxlU2NlbmVTeW5jVGl0bGUnKTsKICBkaWFsb2cuaW5uZXJIVE1MID0gYDxoMiBpZD0ic3VidGl0bGVTY2VuZVN5bmNUaXRsZSI+44K344O844Oz5pys5paH44Gr44KC5Y+N5pig44GX44G+44GZ44GL77yfPC9oMj4KICAgIDxwPuWtl+W5leOBruaWh+eroOOBjOOCt+ODvOODs+acrOaWh+OBqOWkieOCj+OCiuOBvuOBl+OBn+OAguaUueihjOODu+OCq+ODvOODieWIhuWJsuOBr+Wtl+W5leOBoOOBkeOBq+aui+OBl+OBvuOBmeOAgjwvcD4KICAgIDxwIGNsYXNzPSJub3RpY2UiPuiqreOBv+S4iuOBkueUqOaWh+eroOOCkuaJi+WLleiqv+aVtOa4iOOBv+OBruWgtOWQiOOBr+S4iuabuOOBjeOBl+OBvuOBm+OCk+OAguOCt+ODvOODs+acrOaWh+OCkuWkieOBiOOCi+OBqOOAgeWPpOOBhOODiuODrOODvOOCt+ODp+ODs+OBr+WGjeeUn+aIkOWvvuixoeOBq+OBquOCiuOBvuOBmeOAgjwvcD4KICAgIDxkaXYgY2xhc3M9ImRpYWxvZy1hY3Rpb25zIj48YnV0dG9uIHR5cGU9ImJ1dHRvbiIgY2xhc3M9InByaW1hcnkiIGRhdGEtc3VidGl0bGUtb25seT7lrZfluZXjgaDjgZHlpInmm7Q8L2J1dHRvbj48YnV0dG9uIHR5cGU9ImJ1dHRvbiIgZGF0YS1zdWJ0aXRsZS1zeW5jPuOCt+ODvOODs+acrOaWh+OBq+OCguWPjeaYoDwvYnV0dG9uPjwvZGl2PmA7CiAgZG9jdW1lbnQuYm9keS5hcHBlbmRDaGlsZChkaWFsb2cpOwogIHJldHVybiBkaWFsb2c7Cn0KCmZ1bmN0aW9uIGFza1N1YnRpdGxlU2NlbmVTeW5jKCkgewogIGNvbnN0IGRpYWxvZyA9IGdldFN1YnRpdGxlU2NlbmVTeW5jRGlhbG9nKCk7CiAgcmV0dXJuIG5ldyBQcm9taXNlKHJlc29sdmUgPT4gewogICAgbGV0IHNldHRsZWQgPSBmYWxzZTsKICAgIGNvbnN0IGZpbmlzaCA9IHN5bmMgPT4gewogICAgICBpZiAoc2V0dGxlZCkgcmV0dXJuOwogICAgICBzZXR0bGVkID0gdHJ1ZTsKICAgICAgZGlhbG9nLm9uY2FuY2VsID0gbnVsbDsKICAgICAgaWYgKHR5cGVvZiBkaWFsb2cuY2xvc2UgPT09ICdmdW5jdGlvbicgJiYgZGlhbG9nLm9wZW4pIGRpYWxvZy5jbG9zZSgpOwogICAgICBlbHNlIGRpYWxvZy5yZW1vdmVBdHRyaWJ1dGUoJ29wZW4nKTsKICAgICAgcmVzb2x2ZShzeW5jKTsKICAgIH07CiAgICBkaWFsb2cucXVlcnlTZWxlY3RvcignW2RhdGEtc3VidGl0bGUtb25seV0nKS5vbmNsaWNrID0gKCkgPT4gZmluaXNoKGZhbHNlKTsKICAgIGRpYWxvZy5xdWVyeVNlbGVjdG9yKCdbZGF0YS1zdWJ0aXRsZS1zeW5jXScpLm9uY2xpY2sgPSAoKSA9PiBmaW5pc2godHJ1ZSk7CiAgICBkaWFsb2cub25jYW5jZWwgPSBldmVudCA9PiB7IGV2ZW50LnByZXZlbnREZWZhdWx0KCk7IGZpbmlzaChmYWxzZSk7IH07CiAgICBpZiAodHlwZW9mIGRpYWxvZy5zaG93TW9kYWwgPT09ICdmdW5jdGlvbicpIGRpYWxvZy5zaG93TW9kYWwoKTsKICAgIGVsc2UgZGlhbG9nLnNldEF0dHJpYnV0ZSgnb3BlbicsICcnKTsKICB9KTsKfQoKY29uc3QgZmluYWxSZXZpZXdTaWduYXR1cmUgPSBwcm9qZWN0ID0+IHs='
+          OLD_BLUR: 'ZWwub25ibHVyPSgpPT57Y29uc3QgaT1OdW1iZXIoZWwuZGF0YXNldC5zdWJUZXh0KSxzY2VuZT1zY2VuZXNbaV07aWYoIXNjZW5lKXJldHVybjtjb25zdCBiZWZvcmU9c3VidGl0bGVCZWZvcmVCeUVsZW1lbnQuaGFzKGVsKT9zdWJ0aXRsZUJlZm9yZUJ5RWxlbWVudC5nZXQoZWwpOlN0cmluZyhzY2VuZS5zdWJ0aXRsZVRleHQ/PycnKTtzdWJ0aXRsZUJlZm9yZUJ5RWxlbWVudC5kZWxldGUoZWwpO2NvbnN0IHJlY29yZD1yZWNvcmRTdWJ0aXRsZUNvbnRlbnRDaGFuZ2UocHJvamVjdCx7c2NlbmVJZDpzY2VuZS5pZCxiZWZvcmVUZXh0OmJlZm9yZSxhZnRlclRleHQ6U3RyaW5nKHNjZW5lLnN1YnRpdGxlVGV4dD8/JycpLHNjZW5lSW5kZXg6aSxtYXhDaGFyc1BlckxpbmU6c3QubWF4Q2hhcnNQZXJMaW5lLG1heExpbmVzOnN0Lm1heExpbmVzfSk7aWYocmVjb3JkKXNhdmUoKTt9Ow=='
+          NEW_BLUR: 'ZWwub25ibHVyPWFzeW5jKCk9Pntjb25zdCBpPU51bWJlcihlbC5kYXRhc2V0LnN1YlRleHQpLHNjZW5lPXNjZW5lc1tpXTtpZighc2NlbmUpcmV0dXJuO2NvbnN0IGJlZm9yZT1zdWJ0aXRsZUJlZm9yZUJ5RWxlbWVudC5oYXMoZWwpP3N1YnRpdGxlQmVmb3JlQnlFbGVtZW50LmdldChlbCk6U3RyaW5nKHNjZW5lLnN1YnRpdGxlVGV4dD8/JycpO3N1YnRpdGxlQmVmb3JlQnlFbGVtZW50LmRlbGV0ZShlbCk7Y29uc3QgYWZ0ZXI9U3RyaW5nKHNjZW5lLnN1YnRpdGxlVGV4dD8/JycpO2NvbnN0IHJlY29yZD1yZWNvcmRTdWJ0aXRsZUNvbnRlbnRDaGFuZ2UocHJvamVjdCx7c2NlbmVJZDpzY2VuZS5pZCxiZWZvcmVUZXh0OmJlZm9yZSxhZnRlclRleHQ6YWZ0ZXIsc2NlbmVJbmRleDppLG1heENoYXJzUGVyTGluZTpzdC5tYXhDaGFyc1BlckxpbmUsbWF4TGluZXM6c3QubWF4TGluZXN9KTtpZihyZWNvcmQpc2F2ZSgpO2lmKCFzdWJ0aXRsZUNvbnRlbnRDaGFuZ2VkKGJlZm9yZSxhZnRlcil8fCFzdWJ0aXRsZUNvbnRlbnRDaGFuZ2VkKHNjZW5lLnRleHR8fCcnLGFmdGVyKSlyZXR1cm47Y29uc3Qgc2hvdWxkU3luYz1hd2FpdCBhc2tTdWJ0aXRsZVNjZW5lU3luYygpO2lmKCFzaG91bGRTeW5jKXJldHVybjtjb25zdCBzY2VuZVRleHQ9bm9ybWFsaXplU3VidGl0bGVDb250ZW50Rm9yU3luYyhhZnRlcik7dXBkYXRlU2NlbmVUZXh0KHNjZW5lLHNjZW5lVGV4dCk7c2NlbmUuc3VidGl0bGVUZXh0PWFmdGVyO3JlbmRlclN1YnRpdGxlRWRpdG9yKCk7cmVuZGVyU3VidGl0bGVQcmV2aWV3KCk7c2F2ZSgpO307'
+        run: |
+          python - <<'PY'
+          import base64, os
+          from pathlib import Path
+
+          path = Path('main.js')
+          text = path.read_text()
+          def decoded(name):
+              return base64.b64decode(os.environ[name]).decode()
+          def replace_once(source, old, new, label):
+              count = source.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected exactly one match, found {count}')
+              return source.replace(old, new, 1)
+
+          text = replace_once(text, decoded('OLD_IMPORT'), decoded('NEW_IMPORT'), 'qualityLogic import')
+          text = replace_once(text, decoded('ANCHOR'), decoded('INSERT'), 'dialog insertion anchor')
+          text = replace_once(text, decoded('OLD_BLUR'), decoded('NEW_BLUR'), 'subtitle blur handler')
+          path.write_text(text)
+          PY
+      - name: Remove temporary workflow and commit integration
+        run: |
+          rm .github/workflows/issue29-integrate.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add main.js .github/workflows/issue29-integrate.yml
+          git commit -m 'Add optional subtitle to scene text sync'
+          git push
