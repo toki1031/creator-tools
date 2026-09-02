@@ -8,7 +8,7 @@ import { addImageAsset, assetUsageCount, assetUsageScenes, ensureMediaLibrary, e
 import { normalizeSubtitleOffset, resolveEffectiveSubtitlePosition, resolveSubtitleYRatio } from "./subtitlePosition.js";
 import { assessMvpVideoResult, describeVideoExportFailure, isMvpShortsProject, validateMvpShortsOutput } from "./videoMvp.js";
 import { createGenerationStartController, projectExpectsVideoAudio } from "./videoGenerationStart.js";
-import { applyDictionaryEntries, splitIntoScenes, splitSubtitleCards } from "./qualityLogic.js";
+import { applyDictionaryEntries, normalizeSubtitleContentForSync, splitIntoScenes, splitSubtitleCards, subtitleContentChanged } from "./qualityLogic.js";
 import { ensureLearningState, moveSceneWithDecision, recordSceneDurationChange, recordSubtitleContentChange } from "./decisionLog.js";
 
 const rootElement = document.querySelector("#app");
@@ -85,6 +85,42 @@ function getVideoGenerationConfirmDialog() {
     <div class="dialog-actions"><button type="button" data-generation-cancel>キャンセル</button><button type="button" class="primary" data-generation-confirm>生成を開始</button></div>`;
   document.body.appendChild(dialog);
   return dialog;
+}
+
+
+function getSubtitleSceneSyncDialog() {
+  let dialog = document.querySelector('#subtitleSceneSyncDialog');
+  if (dialog) return dialog;
+  dialog = document.createElement('dialog');
+  dialog.id = 'subtitleSceneSyncDialog';
+  dialog.className = 'subtitle-sync-dialog';
+  dialog.setAttribute('aria-labelledby', 'subtitleSceneSyncTitle');
+  dialog.innerHTML = `<h2 id="subtitleSceneSyncTitle">シーン本文にも反映しますか？</h2>
+    <p>字幕の文章がシーン本文と変わりました。改行・カード分割は字幕だけに残します。</p>
+    <p class="notice">読み上げ用文章を手動調整済みの場合は上書きしません。シーン本文を変えると、古いナレーションは再生成対象になります。</p>
+    <div class="dialog-actions"><button type="button" class="primary" data-subtitle-only>字幕だけ変更</button><button type="button" data-subtitle-sync>シーン本文にも反映</button></div>`;
+  document.body.appendChild(dialog);
+  return dialog;
+}
+
+function askSubtitleSceneSync() {
+  const dialog = getSubtitleSceneSyncDialog();
+  return new Promise(resolve => {
+    let settled = false;
+    const finish = sync => {
+      if (settled) return;
+      settled = true;
+      dialog.oncancel = null;
+      if (typeof dialog.close === 'function' && dialog.open) dialog.close();
+      else dialog.removeAttribute('open');
+      resolve(sync);
+    };
+    dialog.querySelector('[data-subtitle-only]').onclick = () => finish(false);
+    dialog.querySelector('[data-subtitle-sync]').onclick = () => finish(true);
+    dialog.oncancel = event => { event.preventDefault(); finish(false); };
+    if (typeof dialog.showModal === 'function') dialog.showModal();
+    else dialog.setAttribute('open', '');
+  });
 }
 
 const finalReviewSignature = project => {
@@ -738,7 +774,7 @@ async function renderBgm(id) {
     list.querySelectorAll('[data-sub-text]').forEach(el=>{
       el.onfocus=()=>{const i=Number(el.dataset.subText);subtitleBeforeByElement.set(el,String(scenes[i]?.subtitleText??''));};
       el.oninput=()=>{const i=Number(el.dataset.subText);scenes[i].subtitleText=el.value;const f=formatSubtitleLines(el.value,st.maxCharsPerLine,st.maxLines);const count=list.querySelector(`[data-sub-count="${i}"]`);count.textContent=`${f.chars}文字／目安${st.maxCharsPerLine*st.maxLines}文字${f.overflow?'・長すぎます':''}`;count.classList.toggle('warning',f.overflow);updateSubtitleCount();if(Number(root.querySelector('#previewScene').value)===i)renderSubtitlePreview();save();};
-      el.onblur=()=>{const i=Number(el.dataset.subText),scene=scenes[i];if(!scene)return;const before=subtitleBeforeByElement.has(el)?subtitleBeforeByElement.get(el):String(scene.subtitleText??'');subtitleBeforeByElement.delete(el);const record=recordSubtitleContentChange(project,{sceneId:scene.id,beforeText:before,afterText:String(scene.subtitleText??''),sceneIndex:i,maxCharsPerLine:st.maxCharsPerLine,maxLines:st.maxLines});if(record)save();};
+      el.onblur=async()=>{const i=Number(el.dataset.subText),scene=scenes[i];if(!scene)return;const before=subtitleBeforeByElement.has(el)?subtitleBeforeByElement.get(el):String(scene.subtitleText??'');subtitleBeforeByElement.delete(el);const after=String(scene.subtitleText??'');const record=recordSubtitleContentChange(project,{sceneId:scene.id,beforeText:before,afterText:after,sceneIndex:i,maxCharsPerLine:st.maxCharsPerLine,maxLines:st.maxLines});if(record)save();if(!subtitleContentChanged(before,after)||!subtitleContentChanged(scene.text||'',after))return;const shouldSync=await askSubtitleSceneSync();if(!shouldSync)return;const sceneText=normalizeSubtitleContentForSync(after);updateSceneText(scene,sceneText);scene.subtitleText=after;renderSubtitleEditor();renderSubtitlePreview();save();};
     });
     list.querySelectorAll('[data-sub-enabled]').forEach(el=>el.onchange=()=>{scenes[Number(el.dataset.subEnabled)].subtitleEnabled=el.checked;updateSubtitleCount();renderSubtitlePreview();save();});
     list.querySelectorAll('[data-sub-start]').forEach(el=>el.oninput=()=>{const i=Number(el.dataset.subStart),duration=Math.max(1,Number(scenes[i].durationSec)||1);scenes[i].subtitleStartSec=Math.min(duration,Math.max(0,Number(el.value)||0));if(scenes[i].subtitleEndSec<scenes[i].subtitleStartSec)scenes[i].subtitleEndSec=scenes[i].subtitleStartSec;save();});
