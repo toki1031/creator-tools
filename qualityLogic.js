@@ -25,6 +25,19 @@ export function splitSubtitleCards(value = '') {
   return String(value || '').replace(/\r\n?/g, '\n').trim().split(/\n\s*\n+/).map(card => card.trim()).filter(Boolean);
 }
 
+export function normalizeSubtitleContentForSync(value = '') {
+  return String(value ?? '')
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+    .join('');
+}
+
+export function subtitleContentChanged(before = '', after = '') {
+  return normalizeSubtitleContentForSync(before) !== normalizeSubtitleContentForSync(after);
+}
+
 export function splitSubtitlePhrases(text, maxChars = 13) {
   const raw = String(text || '').replace(/\r\n?/g, '\n').trim();
   if (!raw) return [];
