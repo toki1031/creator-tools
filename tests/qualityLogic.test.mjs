@@ -41,6 +41,12 @@ test('字幕同期判定は改行・空行・行端空白だけの変更を無�
   assert.equal(normalizeSubtitleContentForSync(after), before);
   assert.equal(subtitleContentChanged(before, after), false);
 });
+test('iPhone実機QAの改行だけ変更は文章変更と判定しない', () => {
+  const before = 'これは元の文章です。';
+  const after = 'これは元の\n文章です。';
+  assert.equal(normalizeSubtitleContentForSync(after), before);
+  assert.equal(subtitleContentChanged(before, after), false);
+});
 test('字幕同期判定は句読点や語句の変更を文章変更として扱う', () => {
   assert.equal(subtitleContentChanged('これは字幕です。', 'これは新しい字幕です。'), true);
   assert.equal(subtitleContentChanged('字幕です。', '字幕です'), true);
