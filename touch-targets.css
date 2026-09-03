@@ -5,6 +5,13 @@
   padding: 8px 10px;
 }
 
+/* Keep the workflow back action obvious and easy to tap on iPhone. */
+.editor-head > #back {
+  min-width: 72px;
+  min-height: 44px;
+  padding: 8px 10px;
+}
+
 /* Subtitle card preview navigation added after Issue #24 QA. */
 .subtitle-preview-navigation {
   display: flex;
