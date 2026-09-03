@@ -26,3 +26,9 @@
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
+
+/* Subtitle-to-scene optional sync dialog. */
+.subtitle-sync-dialog .dialog-actions button {
+  min-height: 44px;
+  padding: 10px 14px;
+}
