@@ -228,6 +228,17 @@ test('subtitle-content distinguishes a forced line break without treating it as 
   assert.equal(record.finalDecision.forcedLineBreakCount, 1);
 });
 
+test('subtitle-content treats the iPhone QA Japanese newline-only edit as layout-only', () => {
+  const project = { id: 'p-subtitle', learning: { decisions: [] }, scenes: [{ id: 's1', text: 'これは元の文章です。', subtitleText: 'これは元の\n文章です。', durationSec: 5 }] };
+  const record = recordSubtitleContentChange(project, {
+    sceneId: 's1', beforeText: 'これは元の文章です。', afterText: 'これは元の\n文章です。', sceneIndex: 0
+  });
+  assert.ok(record);
+  assert.deepEqual(record.humanAction.changeKinds, ['forced-line-break']);
+  assert.equal(record.humanAction.changeKinds.includes('text'), false);
+  assert.equal(project.learning.decisions.length, 1);
+});
+
 test('subtitle-content distinguishes card split and normalizes CRLF without duplicate noise', () => {
   const project = { id: 'p-subtitle', learning: { decisions: [] }, scenes: [{ id: 's1', text: 'line', subtitleText: '前半\n\n後半', durationSec: 5 }] };
   const record = recordSubtitleContentChange(project, {
