@@ -1,0 +1,84 @@
+name: Issue 31 editor back navigation
+
+on:
+  push:
+    branches:
+      - issue31-editor-back-navigation
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: issue31-editor-back-navigation
+      - name: Patch editor navigation
+        env:
+          IMPORT_ANCHOR: 'aW1wb3J0IHsgZW5zdXJlTGVhcm5pbmdTdGF0ZSwgbW92ZVNjZW5lV2l0aERlY2lzaW9uLCByZWNvcmRTY2VuZUR1cmF0aW9uQ2hhbmdlLCByZWNvcmRTdWJ0aXRsZUNvbnRlbnRDaGFuZ2UgfSBmcm9tICIuL2RlY2lzaW9uTG9nLmpzIjs='
+          IMPORT_INSERT: 'aW1wb3J0IHsgZW5zdXJlTGVhcm5pbmdTdGF0ZSwgbW92ZVNjZW5lV2l0aERlY2lzaW9uLCByZWNvcmRTY2VuZUR1cmF0aW9uQ2hhbmdlLCByZWNvcmRTdWJ0aXRsZUNvbnRlbnRDaGFuZ2UgfSBmcm9tICIuL2RlY2lzaW9uTG9nLmpzIjsKaW1wb3J0IHsgcHJldmlvdXNXb3JrZmxvd1BhZ2UgfSBmcm9tICIuL3dvcmtmbG93TmF2aWdhdGlvbi5qcyI7'
+          HELPER_ANCHOR: 'Y29uc3QgZmluYWxSZXZpZXdTaWduYXR1cmUgPSBwcm9qZWN0ID0+IHs='
+          HELPER_INSERT: 'ZnVuY3Rpb24gZ29QcmV2aW91c1dvcmtmbG93KHBhZ2UsIHByb2plY3QpIHsKICBjb25zdCBwcmV2aW91cyA9IHByZXZpb3VzV29ya2Zsb3dQYWdlKHBhZ2UpOwogIGNvbnN0IGlkID0gcHJvamVjdD8uaWQ7CiAgaWYgKHByZXZpb3VzID09PSAncHJvamVjdCcpIHJldHVybiBnb1Byb2plY3QoaWQpOwogIGlmIChwcmV2aW91cyA9PT0gJ3NjZW5lcycpIHJldHVybiBnb1NjZW5lcyhpZCk7CiAgaWYgKHByZXZpb3VzID09PSAnYmdtJykgcmV0dXJuIGdvQmdtKGlkKTsKICBpZiAocHJldmlvdXMgPT09ICdvdXRwdXQnKSByZXR1cm4gZ29PdXRwdXQoaWQpOwogIHJldHVybiBnb1N0dWRpbyhzdHVkaW9Gb3JHZW5yZShwcm9qZWN0Py5nZW5yZSkpOwp9Cgpjb25zdCBmaW5hbFJldmlld1NpZ25hdHVyZSA9IHByb2plY3QgPT4gew=='
+          DOUBLE_OLD: 'YmluZFNhdmVkTmF2aWdhdGlvbihyb290LnF1ZXJ5U2VsZWN0b3IoIiNiYWNrIiksZmx1c2hTYXZlLCgpPT5nb1N0dWRpbyhzdHVkaW9Gb3JHZW5yZShwcm9qZWN0LmdlbnJlKSkpOw=='
+          PROJECT_NEW: 'YmluZFNhdmVkTmF2aWdhdGlvbihyb290LnF1ZXJ5U2VsZWN0b3IoIiNiYWNrIiksZmx1c2hTYXZlLCgpPT5nb1ByZXZpb3VzV29ya2Zsb3coInByb2plY3QiLHByb2plY3QpKTs='
+          SCENES_NEW: 'YmluZFNhdmVkTmF2aWdhdGlvbihyb290LnF1ZXJ5U2VsZWN0b3IoIiNiYWNrIiksZmx1c2hTYXZlLCgpPT5nb1ByZXZpb3VzV29ya2Zsb3coInNjZW5lcyIscHJvamVjdCkpOw=='
+          SINGLE_OLD: 'YmluZFNhdmVkTmF2aWdhdGlvbihyb290LnF1ZXJ5U2VsZWN0b3IoJyNiYWNrJyksZmx1c2hTYXZlLCgpPT5nb1N0dWRpbyhzdHVkaW9Gb3JHZW5yZShwcm9qZWN0LmdlbnJlKSkpOw=='
+          BGM_NEW: 'YmluZFNhdmVkTmF2aWdhdGlvbihyb290LnF1ZXJ5U2VsZWN0b3IoJyNiYWNrJyksZmx1c2hTYXZlLCgpPT5nb1ByZXZpb3VzV29ya2Zsb3coJ2JnbScscHJvamVjdCkpOw=='
+          OUTPUT_NEW: 'YmluZFNhdmVkTmF2aWdhdGlvbihyb290LnF1ZXJ5U2VsZWN0b3IoJyNiYWNrJyksZmx1c2hTYXZlLCgpPT5nb1ByZXZpb3VzV29ya2Zsb3coJ291dHB1dCcscHJvamVjdCkpOw=='
+          PUBLISH_OLD: 'YmluZFNhdmVkTmF2aWdhdGlvbihyb290LnF1ZXJ5U2VsZWN0b3IoJyNiYWNrJyksZmx1c2hTYXZlLCgpPT5nb091dHB1dChpZCkpOw=='
+          PUBLISH_NEW: 'YmluZFNhdmVkTmF2aWdhdGlvbihyb290LnF1ZXJ5U2VsZWN0b3IoJyNiYWNrJyksZmx1c2hTYXZlLCgpPT5nb1ByZXZpb3VzV29ya2Zsb3coJ3B1Ymxpc2gnLHByb2plY3QpKTs='
+          AI_OLD: 'cm9vdC5xdWVyeVNlbGVjdG9yKCIjYmFjayIpLm9uY2xpY2sgPSAoKSA9PiBnb1N0dWRpbyhzdHVkaW8pOw=='
+          AI_NEW: 'cm9vdC5xdWVyeVNlbGVjdG9yKCIjYmFjayIpLm9uY2xpY2sgPSAoKSA9PiBnb1ByZXZpb3VzV29ya2Zsb3coImFpIiwgcHJvamVjdCk7'
+          LABEL_OLD: 'PGJ1dHRvbiBpZD0iYmFjayI+4oaQPC9idXR0b24+'
+          LABEL_NEW: 'PGJ1dHRvbiBpZD0iYmFjayIgYXJpYS1sYWJlbD0i5YmN44Gu55S76Z2i44G45oi744KLIj7ihpAg5oi744KLPC9idXR0b24+'
+        run: |
+          python - <<'PY'
+          import base64, os
+          from pathlib import Path
+
+          def dec(name):
+              return base64.b64decode(os.environ[name]).decode()
+          def replace_exact(text, old, new, expected, label):
+              count = text.count(old)
+              if count != expected:
+                  raise SystemExit(f'{label}: expected {expected}, found {count}')
+              return text.replace(old, new, expected)
+
+          path = Path('main.js')
+          text = path.read_text()
+          text = replace_exact(text, dec('IMPORT_ANCHOR'), dec('IMPORT_INSERT'), 1, 'import')
+          text = replace_exact(text, dec('HELPER_ANCHOR'), dec('HELPER_INSERT'), 1, 'helper')
+
+          double_old = dec('DOUBLE_OLD')
+          if text.count(double_old) != 2:
+              raise SystemExit(f'double back: expected 2, found {text.count(double_old)}')
+          text = text.replace(double_old, dec('PROJECT_NEW'), 1)
+          text = text.replace(double_old, dec('SCENES_NEW'), 1)
+
+          single_old = dec('SINGLE_OLD')
+          if text.count(single_old) != 2:
+              raise SystemExit(f'single back: expected 2, found {text.count(single_old)}')
+          text = text.replace(single_old, dec('BGM_NEW'), 1)
+          text = text.replace(single_old, dec('OUTPUT_NEW'), 1)
+
+          text = replace_exact(text, dec('PUBLISH_OLD'), dec('PUBLISH_NEW'), 1, 'publish back')
+          text = replace_exact(text, dec('AI_OLD'), dec('AI_NEW'), 1, 'ai back')
+
+          label_old = dec('LABEL_OLD')
+          label_count = text.count(label_old)
+          if label_count < 5:
+              raise SystemExit(f'back label: expected >=5, found {label_count}')
+          text = text.replace(label_old, dec('LABEL_NEW'))
+          path.write_text(text)
+          PY
+      - name: Remove temporary workflow and commit
+        run: |
+          rm .github/workflows/issue31-integrate.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add main.js .github/workflows/issue31-integrate.yml
+          git commit -m 'Make editor back navigation follow workflow steps'
+          git push
