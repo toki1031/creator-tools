@@ -10,6 +10,7 @@ import { assessMvpVideoResult, describeVideoExportFailure, isMvpShortsProject, v
 import { createGenerationStartController, projectExpectsVideoAudio } from "./videoGenerationStart.js";
 import { applyDictionaryEntries, normalizeSubtitleContentForSync, splitIntoScenes, splitSubtitleCards, subtitleContentChanged } from "./qualityLogic.js";
 import { ensureLearningState, moveSceneWithDecision, recordSceneDurationChange, recordSubtitleContentChange } from "./decisionLog.js";
+import { previousWorkflowPage } from "./workflowNavigation.js";
 
 const rootElement = document.querySelector("#app");
 if (!rootElement) throw new Error("#app がありません。");
@@ -121,6 +122,16 @@ function askSubtitleSceneSync() {
     if (typeof dialog.showModal === 'function') dialog.showModal();
     else dialog.setAttribute('open', '');
   });
+}
+
+function goPreviousWorkflow(page, project) {
+  const previous = previousWorkflowPage(page);
+  const id = project?.id;
+  if (previous === 'project') return goProject(id);
+  if (previous === 'scenes') return goScenes(id);
+  if (previous === 'bgm') return goBgm(id);
+  if (previous === 'output') return goOutput(id);
+  return goStudio(studioForGenre(project?.genre));
 }
 
 const finalReviewSignature = project => {
@@ -262,7 +273,7 @@ async function renderStudio(studioKey) {
   const isBgm = studioKey === "bgm";
   root.innerHTML = `
     <main class="shell">
-      <header class="editor-head"><button id="back">←</button><div><span>CREATOR OS</span><h1>${studio.icon} ${studio.title}</h1></div><button id="menu">•••</button></header>
+      <header class="editor-head"><button id="back" aria-label="前の画面へ戻る">← 戻る</button><div><span>CREATOR OS</span><h1>${studio.icon} ${studio.title}</h1></div><button id="menu">•••</button></header>
       <section class="studio-hero"><h2>${isBgm ? "長時間BGM動画を、迷わず組み立てる" : "企画から完成動画までを一つの制作線に"}</h2><p>${studio.desc}</p><div class="hero-buttons"><button class="primary" id="openCreate">＋ 新しいプロジェクト</button><button id="openAiGuide">🤖 AIスタッフの使い方</button></div></section>
       ${isBgm ? `<section class="workflow-grid">
         <article><b>1</b><h3>テーマ設計</h3><p>雨・窓辺・睡眠・読書など、用途と雰囲気を決める。</p></article>
@@ -306,7 +317,7 @@ async function renderProject(id) {
   ensureProjectSettings(project);
   root.innerHTML = `
     <main class="shell editor-shell">
-      <header class="editor-head"><button id="back">←</button><div><span>${labelPlatform(project.platform)}</span><h1>${escapeHtml(project.title)}</h1></div><button id="menu">•••</button></header>
+      <header class="editor-head"><button id="back" aria-label="前の画面へ戻る">← 戻る</button><div><span>${labelPlatform(project.platform)}</span><h1>${escapeHtml(project.title)}</h1></div><button id="menu">•••</button></header>
       <nav class="steps"><button id="stepAi">0 AIスタッフ</button><button class="active">1 台本</button><button id="stepScenes">2 シーン・ナレーション</button><button id="stepBgm">3 字幕・BGM</button><button id="stepOutput">4 出力</button></nav>
       <section class="editor-card"><div class="section-head"><div><h2>表示用の台本</h2><p>字幕や画面に表示する文章です。</p></div><span id="displayCount">${project.displayScript.length}文字</span></div><textarea id="displayScript" placeholder="台本を貼り付けてください。">${escapeHtml(project.displayScript)}</textarea></section>
       <section class="editor-card"><div class="section-head"><div><h2>音声用の台本</h2><p>読み方辞書と語り口調整を反映する専用原稿です。</p></div><button id="copyDisplay">表示用からコピー</button></div><textarea id="speechScript" placeholder="音声用原稿">${escapeHtml(project.speechScript)}</textarea><div class="tool-row"><select id="narrationStyle"><option value="standard">標準</option><option value="shorts">Shorts・テンポ重視</option><option value="documentary">ドキュメンタリー</option><option value="gentle">やさしい語り</option></select><button id="naturalize">自然な語り口に整える</button><button id="applyDictionary">辞書を反映</button></div></section>
@@ -327,7 +338,7 @@ async function renderProject(id) {
     await saveProject(project);
   };
   const {scheduleSave,flushSave}=createSaveController({delay:500,persist,setStatus:text=>saveState.textContent=text});
-  bindSavedNavigation(root.querySelector("#back"),flushSave,()=>goStudio(studioForGenre(project.genre)));
+  bindSavedNavigation(root.querySelector("#back"),flushSave,()=>goPreviousWorkflow("project",project));
   bindSavedNavigation(root.querySelector("#stepAi"),flushSave,()=>goAi(project.id));
   bindSavedNavigation(root.querySelector("#stepScenes"),flushSave,()=>goScenes(project.id));
   bindSavedNavigation(root.querySelector("#stepBgm"),flushSave,()=>goBgm(project.id));
@@ -422,7 +433,7 @@ async function renderScenes(id) {
   ensureMediaLibrary(project);
   root.innerHTML=`
     <main class="shell editor-shell">
-      <header class="editor-head"><button id="back">←</button><div><span>${labelPlatform(project.platform)}</span><h1>${escapeHtml(project.title)}</h1></div><button id="menu">•••</button></header>
+      <header class="editor-head"><button id="back" aria-label="前の画面へ戻る">← 戻る</button><div><span>${labelPlatform(project.platform)}</span><h1>${escapeHtml(project.title)}</h1></div><button id="menu">•••</button></header>
       <nav class="steps"><button id="stepAi">0 AIスタッフ</button><button id="stepScript">1 台本</button><button class="active">2 シーン・ナレーション</button><button id="stepBgm">3 字幕・BGM</button><button id="stepOutput">4 出力</button></nav>
       <section class="editor-card"><div class="section-head"><div><h2>シーン編集</h2><p>台本を場面に分け、画像・表示秒数・演出を設定します。</p></div><span id="sceneCount">${project.scenes.length}シーン</span></div><div class="tool-row"><button class="primary" id="autoSplit">台本から自動分割</button><button id="addScene">＋ 空のシーン</button><button id="manageMediaLibrary">画像素材ライブラリ</button><button id="undoScenes" disabled>↶ 1つ前に戻す</button></div><p class="muted">再分割時は既存の画像・動画をできるだけ保持します。文章が変わったシーンのナレーションは誤読防止のため再生成対象になります。</p></section>
       <section id="sceneList" class="scene-list"></section>
@@ -446,7 +457,7 @@ async function renderScenes(id) {
   const saveState=root.querySelector("#saveState"); let pendingAsset=Promise.resolve();
   const persist=async()=>{await pendingAsset;project.scenes.forEach((s,i)=>s.order=i+1);project.updatedAt=new Date().toISOString();await saveProject(project);};
   const {scheduleSave:save,flushSave}=createSaveController({delay:400,persist,setStatus:text=>saveState.textContent=text});
-  bindSavedNavigation(root.querySelector("#back"),flushSave,()=>goStudio(studioForGenre(project.genre)));
+  bindSavedNavigation(root.querySelector("#back"),flushSave,()=>goPreviousWorkflow("scenes",project));
   bindSavedNavigation(root.querySelector("#stepAi"),flushSave,()=>goAi(project.id));
   bindSavedNavigation(root.querySelector("#stepScript"),flushSave,()=>goProject(project.id));
   bindSavedNavigation(root.querySelector("#stepBgm"),flushSave,()=>goBgm(project.id));
@@ -659,7 +670,7 @@ async function renderBgm(id) {
   ensureProjectSettings(project);
   const b=project.bgm, st=project.subtitleStyle, scenes=project.scenes||[];
   root.innerHTML=`<main class="shell editor-shell">
-    <header class="editor-head"><button id="back">←</button><div><span>${labelPlatform(project.platform)}</span><h1>${escapeHtml(project.title)}</h1></div><button id="menu">•••</button></header>
+    <header class="editor-head"><button id="back" aria-label="前の画面へ戻る">← 戻る</button><div><span>${labelPlatform(project.platform)}</span><h1>${escapeHtml(project.title)}</h1></div><button id="menu">•••</button></header>
     <nav class="steps"><button id="stepAi">0 AIスタッフ</button><button id="stepScript">1 台本</button><button id="stepScenes">2 シーン・ナレーション</button><button class="active">3 字幕・BGM</button><button id="stepOutput">4 出力</button></nav>
     <section class="editor-card"><div class="section-head"><div><h2>BGM・音源</h2><p>音源の種類、音量、ループ、利用条件を保存します。</p></div><span id="saveState">保存済み</span></div>
       <div class="form-grid"><label>音源の種類<select id="source"><option value="none">BGMなし</option><option value="upload">自分の音源をアップロード</option><option value="free">無料BGM（情報を登録）</option><option value="ai">AI生成BGM（後で追加）</option></select></label><label>雰囲気<select id="category"><option value="calm">教養・落ち着き</option><option value="history">歴史・重厚</option><option value="challenge">挑戦・前進</option><option value="emotion">感動・余韻</option><option value="rain">雨・環境音</option><option value="sleep">睡眠・リラックス</option></select></label></div>
@@ -713,7 +724,7 @@ async function renderBgm(id) {
     readGlobalSettings(); project.output.subtitles=st.enabled; project.output.subtitlePosition=st.position; project.updatedAt=new Date().toISOString();await saveProject(project);saveState.textContent='保存済み';
   };
   const {scheduleSave:save,flushSave}=createSaveController({delay:350,persist,setStatus:text=>saveState.textContent=text});
-  bindSavedNavigation(root.querySelector('#back'),flushSave,()=>goStudio(studioForGenre(project.genre)));
+  bindSavedNavigation(root.querySelector('#back'),flushSave,()=>goPreviousWorkflow('bgm',project));
   bindSavedNavigation(root.querySelector('#stepAi'),flushSave,()=>goAi(id));
   bindSavedNavigation(root.querySelector('#stepScript'),flushSave,()=>goProject(id));
   bindSavedNavigation(root.querySelector('#stepScenes'),flushSave,()=>goScenes(id));
@@ -800,7 +811,7 @@ async function renderOutput(id) {
   const finalReviewApproved=Boolean(project.finalReview?.approved && project.finalReview?.signature===currentReviewSignature);
   const formatLabel=capabilities.h264Aac?'MP4 / H.264 + AAC対応':capabilities.h264?'MP4 / H.264対応（音声codec要確認）':capabilities.mp4?'MP4対応（codec要確認）':capabilities.webm?'WebM対応（MP4非対応）':'動画生成非対応';
   const longProject=total>180;
-  root.innerHTML=`<main class="shell editor-shell"><header class="editor-head"><button id="back">←</button><div><span>${labelPlatform(project.platform)}</span><h1>${escapeHtml(project.title)}</h1></div><button id="menu">•••</button></header>
+  root.innerHTML=`<main class="shell editor-shell"><header class="editor-head"><button id="back" aria-label="前の画面へ戻る">← 戻る</button><div><span>${labelPlatform(project.platform)}</span><h1>${escapeHtml(project.title)}</h1></div><button id="menu">•••</button></header>
   <nav class="steps"><button id="stepAi">0 AIスタッフ</button><button id="stepScript">1 台本</button><button id="stepScenes">2 シーン・ナレーション</button><button id="stepBgm">3 字幕・BGM</button><button class="active">4 出力</button></nav>
   <section class="editor-card"><div class="section-head"><div><h2>動画出力設定</h2><p>完成動画の形式を設定します。</p></div><span id="saveState">保存済み</span></div><div class="form-grid"><label>解像度<select id="resolution"><option value="1080x1920">1080×1920（高画質）</option><option value="720x1280">720×1280（iPhone推奨・軽量）</option></select></label><label>フレームレート<select id="fps"><option value="30">30fps（推奨）</option><option value="60">60fps（高負荷）</option></select></label><label>品質<select id="quality"><option value="standard">標準</option><option value="high">高品質</option></select></label><label class="check"><input id="subtitles" type="checkbox" ${o.subtitles?'checked':''}>字幕を表示</label><label>字幕位置<select id="subtitlePosition"><option value="top">上</option><option value="center">中央</option><option value="bottom">下</option></select></label><label class="check"><input id="bgmEnabled" type="checkbox" ${o.bgmEnabled?'checked':''}>BGMを使用</label></div></section>
   <section class="editor-card"><div class="section-head"><div><h2>素材チェック</h2><p>動画生成前に不足素材を確認します。</p></div><span class="status-chip ${capabilities.supported?'':'status-warn'}">${formatLabel}</span></div><div class="check-list"><p class="${project.displayScript?'ok':'warn'}">${project.displayScript?'✓':'!'} 台本：${project.displayScript.length}文字</p><p class="${scenes.length?'ok':'warn'}">${scenes.length?'✓':'!'} シーン：${scenes.length}件</p><p class="${hasImages===scenes.length&&scenes.length?'ok':'warn'}">${hasImages===scenes.length&&scenes.length?'✓':'!'} 画像：${hasImages}/${scenes.length}件</p><p class="${subtitleReady?'ok':'warn'}">${subtitleReady?'✓':'!'} 字幕：${subtitleReady}/${scenes.length}件${subtitleWarnings?`（長文警告${subtitleWarnings}件）`:''}</p><p class="${validation.bgmInvalid?'warn':project.bgm?.audioData&&o.bgmEnabled?'ok':'muted'}">${validation.bgmInvalid?'!':project.bgm?.audioData&&o.bgmEnabled?'✓':'−'} BGM音源：${escapeHtml(project.bgm?.fileName||project.bgm?.title||'なし')}${validation.bgmInvalid?'（動画ファイルのため要再登録）':''}</p><p class="${validation.narrationInvalid?'warn':validation.sceneNarrationCount===scenes.length&&scenes.length?'ok':project.narration?.audioData?'ok':'muted'}">${validation.narrationInvalid?'!':validation.sceneNarrationCount===scenes.length&&scenes.length?'✓':project.narration?.audioData?'✓':'−'} ナレーション：${validation.sceneNarrationCount?`シーン別 ${validation.sceneNarrationCount}/${scenes.length}件`:escapeHtml(project.narration?.fileName||'未登録')}${validation.narrationInvalid?'（動画ファイルのため要再登録）':''}</p><p>予定尺：${total.toFixed(1)}秒</p>${mvpValidation.applicable?`<p class="${mvpValidation.pass?'ok':'warn'}">${mvpValidation.pass?'✓':'!'} MVP Shorts：1080×1920 / 30fps / MP4 / 60秒以内${mvpValidation.pass?'':'（'+mvpValidation.errors.map(escapeHtml).join('／')+'）'}</p>`:''}</div>${validation.warnings.length?`<div class="render-warnings">${validation.warnings.map(item=>`<p>⚠ ${escapeHtml(item)}</p>`).join('')}</div>`:''}</section>
@@ -857,7 +868,7 @@ async function renderOutput(id) {
   const persistSettings=async()=>{const [w,h]=root.querySelector('#resolution').value.split('x').map(Number);Object.assign(o,{width:w,height:h,fps:Number(root.querySelector('#fps').value),quality:root.querySelector('#quality').value,subtitles:root.querySelector('#subtitles').checked,subtitlePosition:root.querySelector('#subtitlePosition').value,bgmEnabled:root.querySelector('#bgmEnabled').checked});st.enabled=o.subtitles;st.position=o.subtitlePosition;project.updatedAt=new Date().toISOString();await saveProject(project);canvas.width=w;canvas.height=h;};
   const {scheduleSave,flushSave}=createSaveController({delay:350,persist:async()=>{await persistSettings();if(prepared)drawProjectFrame(project,prepared,canvas,0);},setStatus:text=>root.querySelector('#saveState').textContent=text});
   ['resolution','fps','quality','subtitles','subtitlePosition','bgmEnabled'].forEach(k=>root.querySelector('#'+k).onchange=scheduleSave);
-  bindSavedNavigation(root.querySelector('#back'),flushSave,()=>goStudio(studioForGenre(project.genre)));
+  bindSavedNavigation(root.querySelector('#back'),flushSave,()=>goPreviousWorkflow('output',project));
   bindSavedNavigation(root.querySelector('#stepAi'),flushSave,()=>goAi(id));
   bindSavedNavigation(root.querySelector('#stepScript'),flushSave,()=>goProject(id));
   bindSavedNavigation(root.querySelector('#stepScenes'),flushSave,()=>goScenes(id));
@@ -968,11 +979,11 @@ async function renderOutput(id) {
 
 async function renderPublish(id) {
   const project=await getProject(id);if(!project){goHome();return;}ensureProjectSettings(project);const p=project.publish;
-  root.innerHTML=`<main class="shell editor-shell"><header class="editor-head"><button id="back">←</button><div><span>投稿準備</span><h1>${escapeHtml(project.title)}</h1></div><button id="menu">•••</button></header><section class="editor-card"><div class="section-head"><div><h2>YouTube投稿情報</h2><p>タイトル・概要欄・タグをまとめます。</p></div><span id="saveState">保存済み</span></div><label>タイトル<input id="publishTitle" value="${escapeHtml(p.title)}"></label><label>概要欄<textarea id="description" placeholder="動画の概要、出典、クレジットなど">${escapeHtml(p.description)}</textarea></label><label>タグ<input id="tags" value="${escapeHtml(p.tags)}" placeholder="偉人, 名言, Shorts"></label><label>サムネ文字<input id="thumbnailText" value="${escapeHtml(p.thumbnailText)}" placeholder="短く強い言葉"></label><label>公開設定<select id="visibility"><option value="private">非公開</option><option value="unlisted">限定公開</option><option value="public">公開</option></select></label><div class="tool-row"><button id="copyTitle">タイトルをコピー</button><button id="copyDescription">概要欄をコピー</button><button id="copyAll" class="primary">全部コピー</button></div></section><section class="actions"><button id="backOutput">← 出力へ</button><button id="exportJson">投稿情報JSON</button><button class="primary" id="done">Studioへ戻る</button></section></main>`;
+  root.innerHTML=`<main class="shell editor-shell"><header class="editor-head"><button id="back" aria-label="前の画面へ戻る">← 戻る</button><div><span>投稿準備</span><h1>${escapeHtml(project.title)}</h1></div><button id="menu">•••</button></header><section class="editor-card"><div class="section-head"><div><h2>YouTube投稿情報</h2><p>タイトル・概要欄・タグをまとめます。</p></div><span id="saveState">保存済み</span></div><label>タイトル<input id="publishTitle" value="${escapeHtml(p.title)}"></label><label>概要欄<textarea id="description" placeholder="動画の概要、出典、クレジットなど">${escapeHtml(p.description)}</textarea></label><label>タグ<input id="tags" value="${escapeHtml(p.tags)}" placeholder="偉人, 名言, Shorts"></label><label>サムネ文字<input id="thumbnailText" value="${escapeHtml(p.thumbnailText)}" placeholder="短く強い言葉"></label><label>公開設定<select id="visibility"><option value="private">非公開</option><option value="unlisted">限定公開</option><option value="public">公開</option></select></label><div class="tool-row"><button id="copyTitle">タイトルをコピー</button><button id="copyDescription">概要欄をコピー</button><button id="copyAll" class="primary">全部コピー</button></div></section><section class="actions"><button id="backOutput">← 出力へ</button><button id="exportJson">投稿情報JSON</button><button class="primary" id="done">Studioへ戻る</button></section></main>`;
   root.querySelector('#visibility').value=p.visibility;attachProjectMenu(project,root.querySelector('#menu'),()=>goStudio(studioForGenre(project.genre)));
   const persist=async()=>{Object.assign(p,{title:root.querySelector('#publishTitle').value,description:root.querySelector('#description').value,tags:root.querySelector('#tags').value,thumbnailText:root.querySelector('#thumbnailText').value,visibility:root.querySelector('#visibility').value});project.updatedAt=new Date().toISOString();await saveProject(project);};
   const {scheduleSave:save,flushSave}=createSaveController({delay:400,persist,setStatus:text=>root.querySelector('#saveState').textContent=text});
-  bindSavedNavigation(root.querySelector('#back'),flushSave,()=>goOutput(id));
+  bindSavedNavigation(root.querySelector('#back'),flushSave,()=>goPreviousWorkflow('publish',project));
   bindSavedNavigation(root.querySelector('#backOutput'),flushSave,()=>goOutput(id));
   bindSavedNavigation(root.querySelector('#done'),flushSave,()=>goStudio(studioForGenre(project.genre)));
   ['publishTitle','description','tags','thumbnailText','visibility'].forEach(k=>root.querySelector('#'+k).oninput=save);
@@ -1300,7 +1311,7 @@ async function renderAi(id) {
 
   root.innerHTML = `
     <main class="shell editor-shell">
-      <header class="editor-head"><button id="back">←</button><div><span>Prompt Engine v1</span><h1>🧠 AIスタッフ・プロンプト資産</h1></div><button id="menu">•••</button></header>
+      <header class="editor-head"><button id="back" aria-label="前の画面へ戻る">← 戻る</button><div><span>Prompt Engine v1</span><h1>🧠 AIスタッフ・プロンプト資産</h1></div><button id="menu">•••</button></header>
       <nav class="steps"><button class="active">0 AIスタッフ</button><button id="stepScript">1 台本</button><button id="stepScenes">2 シーン・ナレーション</button><button id="stepBgm">3 字幕・BGM</button><button id="stepOutput">4 出力</button></nav>
       <section class="editor-card ai-mode-notice">
         <div><strong>現在の接続方法：手動コピーモード</strong><p>Studio・ブランド・作成形式・担当AIのルールを自動合成します。API料金は発生しません。</p></div>
@@ -1337,7 +1348,7 @@ async function renderAi(id) {
       <dialog id="versionDialog"><form method="dialog" id="versionForm"><h2>プロンプト版を保存</h2><label>版名<input name="name" required placeholder="例：v2 冒頭3秒強化"></label><label>変更メモ<textarea name="note" placeholder="今回改善した点"></textarea></label><label>評価<select name="rating"><option value="0">未評価</option><option value="3">★★★</option><option value="4">★★★★</option><option value="5">★★★★★</option></select></label><div class="dialog-actions"><button type="button" id="cancelVersion">キャンセル</button><button class="primary" type="submit">保存</button></div></form></dialog>
     </main>`;
 
-  root.querySelector("#back").onclick = () => goStudio(studio);
+  root.querySelector("#back").onclick = () => goPreviousWorkflow("ai", project);
   root.querySelector("#stepScript").onclick = () => goProject(project.id);
   root.querySelector("#stepScenes").onclick = () => goScenes(project.id);
   root.querySelector("#stepBgm").onclick = () => goBgm(project.id);
