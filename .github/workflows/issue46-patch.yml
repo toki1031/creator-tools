@@ -1,0 +1,44 @@
+name: Issue 46 Patch Runner
+
+on:
+  push:
+    branches:
+      - issue-46-scene-subtitle-position-v07
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    if: github.event.head_commit.message == 'Bootstrap Issue 46 patch runner'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply scoped Issue 46 patch
+        run: node scripts/issue46-patch.mjs
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Run regression tests
+        run: npm test
+      - name: Production build
+        run: npm run build
+      - name: Diff checks
+        run: |
+          git diff --check
+          git diff --exit-code 6f72e8cd0be4aa6e543c29f47140e89324b06bb8 -- videoRenderer.js db.js projectFactory.js subtitlePosition.js
+      - name: Remove temporary patch runner
+        run: |
+          rm scripts/issue46-patch.mjs
+          rm .github/workflows/issue46-patch.yml
+      - name: Commit verified implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Capture scene subtitle position decisions"
+          git push origin HEAD:issue-46-scene-subtitle-position-v07
