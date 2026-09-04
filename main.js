@@ -5,6 +5,7 @@ import { downloadJson, downloadText } from "./download.js";
 import { getVideoCapabilities, getProjectDuration, validateVideoProject, prepareVideoProject, runVisualPreview, exportProjectVideo, drawProjectFrame } from "./videoRenderer.js";
 import { createProjectBackupPayload, createRestoredProject, LARGE_BACKUP_WARNING_BYTES, mergePronunciationDictionaries, normalizeImportedProject, parseProjectBackup, summarizeProjectBackup } from "./projectBackup.js";
 import { addImageAsset, assetUsageCount, assetUsageScenes, ensureMediaLibrary, estimateAssetBytes, promoteLegacySceneImage, removeAllUnusedAssets, removeUnusedAsset, renameMediaAsset, resolveSceneImageSource, summarizeMediaLibrary } from "./mediaLibrary.js";
+import { createAudioAssetIdFromFile, normalizeAudioAssetId } from "./audioAssetIdentity.js";
 import { normalizeSubtitleOffset, resolveEffectiveSubtitlePosition, resolveSubtitleYRatio } from "./subtitlePosition.js";
 import { assessMvpVideoResult, describeVideoExportFailure, isMvpShortsProject, validateMvpShortsOutput } from "./videoMvp.js";
 import { createGenerationStartController, projectExpectsVideoAudio } from "./videoGenerationStart.js";
@@ -590,7 +591,8 @@ function ensureProjectSettings(project) {
   ensureMediaLibrary(project);
   ensureLearningState(project);
   project.narration = { voiceURI:"", rate:0.92, pitch:0.94, volume:1, source:"browser", audioData:"", fileName:"", mimeType:"", ...(project.narration || {}) };
-  project.bgm = project.bgm || { source:"none", title:"", category:"calm", volume:0.12, ducking:true, fadeInSec:1, fadeOutSec:2, loop:true, license:"", credit:"", audioData:"", fileName:"" };
+  project.bgm = project.bgm || { source:"none", title:"", category:"calm", volume:0.12, ducking:true, fadeInSec:1, fadeOutSec:2, loop:true, license:"", credit:"", audioData:"", fileName:"", audioAssetId:"" };
+  project.bgm.audioAssetId = normalizeAudioAssetId(project.bgm.audioAssetId);
   project.subtitleStyle = {
     enabled:true, preset:"standard", fontSize:54, position:"bottom", positionOffsetPercent:0, maxCharsPerLine:16, maxLines:2,
     textColor:"#ffffff", outlineColor:"#000000", outlineWidth:4,
@@ -787,7 +789,7 @@ async function renderBgm(id) {
     }
     if(file.size>12_000_000&&!confirm('音源が大きいため端末保存容量を圧迫します。続けますか？')){e.target.value='';return;}
     root.querySelector('#source').value='upload';
-    pendingAsset=fileToDataUrl(file).then(data=>{b.audioData=data;b.fileName=file.name;b.source='upload';});
+    pendingAsset=(async()=>{const audioAssetId=await createAudioAssetIdFromFile(file);const data=await fileToDataUrl(file);b.audioData=data;b.fileName=file.name;b.source='upload';b.audioAssetId=audioAssetId;})();
     save();await pendingAsset;root.querySelector('#fileName').textContent=file.name;root.querySelector('#audioPreview').src=b.audioData;
   };
 
