@@ -10,7 +10,9 @@ import {
   recordSceneDurationChange,
   recordSceneImageSelection,
   recordSceneMotionChange,
+  recordSceneSubtitlePositionChange,
   recordSceneTransitionChange,
+  snapshotSceneSubtitlePosition,
   recordSceneOrderChange,
   recordSubtitleContentChange,
   snapshotSceneOrder
@@ -456,4 +458,62 @@ test('scene-transition treats an unset scene transition as the UI default fade b
   assert.deepEqual(record.proposal, { transition: 'fade' });
   assert.deepEqual(record.finalDecision, { transition: 'cut' });
   assert.equal(project.learning.decisions.length, 1);
+});
+
+
+test('scene-subtitle-position records inherit to override with normalized context', () => {
+  const project = { id:'p', platform:'youtube-shorts', aspectRatio:'9:16', learning:{decisions:[]}, subtitleStyle:{position:'bottom',positionOffsetPercent:4}, output:{subtitlePosition:'top'}, scenes:[{id:'s1',text:'字幕位置',durationSec:6}] };
+  const record=recordSceneSubtitlePositionChange(project,{sceneId:'s1',beforeState:{mode:'inherit'},afterState:{mode:'override',position:'top',offsetPercent:0},sceneIndex:0},{createId:()=> 'd1',now:()=> '2026-09-04T13:00:00.000Z'});
+  assert.equal(record.decisionType,'scene-subtitle-position');
+  assert.deepEqual(record.proposal,{mode:'inherit',position:null,offsetPercent:null});
+  assert.deepEqual(record.finalDecision,{mode:'override',position:'top',offsetPercent:0});
+  assert.equal(record.context.sceneText,'字幕位置');
+  assert.equal(record.context.sceneIndex,0);
+  assert.equal(record.context.durationSec,6);
+  assert.equal(record.context.globalSubtitlePosition,'bottom');
+  assert.equal(record.context.globalSubtitleOffsetPercent,4);
+  assert.deepEqual(record.humanAction,{type:'set-scene-subtitle-position'});
+  assert.deepEqual(record.source,{type:'human',feature:'subtitle-editor',version:'0.7'});
+});
+
+test('scene-subtitle-position records override changes, inherit, offset normalization and reset', () => {
+  const project={id:'p',learning:{decisions:[]},subtitleStyle:{position:'bottom'},scenes:[{id:'s1',text:'scene'}]};
+  const moved=recordSceneSubtitlePositionChange(project,{sceneId:'s1',beforeState:{mode:'override',position:'top',offsetPercent:0},afterState:{mode:'override',position:'center',offsetPercent:99},sceneIndex:0});
+  const inherited=recordSceneSubtitlePositionChange(project,{sceneId:'s1',beforeState:{mode:'override',position:'center',offsetPercent:5},afterState:{mode:'inherit'},sceneIndex:0});
+  const reset=recordSceneSubtitlePositionChange(project,{sceneId:'s1',beforeState:{mode:'override',position:'bottom',offsetPercent:5},afterState:{mode:'override',position:'bottom',offsetPercent:0},sceneIndex:0});
+  assert.deepEqual(moved.finalDecision,{mode:'override',position:'center',offsetPercent:15});
+  assert.deepEqual(inherited.finalDecision,{mode:'inherit',position:null,offsetPercent:null});
+  assert.equal(reset.proposal.offsetPercent,5);
+  assert.equal(reset.finalDecision.offsetPercent,0);
+});
+
+test('scene-subtitle-position ignores same, invalid, missing id and missing scene', () => {
+  const project={id:'p',learning:{decisions:[]},scenes:[{id:'s1'}]};
+  const same={mode:'override',position:'top',offsetPercent:0};
+  assert.equal(recordSceneSubtitlePositionChange(project,{sceneId:'s1',beforeState:same,afterState:same,sceneIndex:0}),null);
+  assert.equal(recordSceneSubtitlePositionChange(project,{sceneId:'s1',beforeState:{mode:'override',position:'wipe',offsetPercent:0},afterState:same,sceneIndex:0}),null);
+  assert.equal(recordSceneSubtitlePositionChange(project,{sceneId:'',beforeState:{mode:'inherit'},afterState:same,sceneIndex:0}),null);
+  assert.equal(recordSceneSubtitlePositionChange(project,{sceneId:'missing',beforeState:{mode:'inherit'},afterState:same,sceneIndex:0}),null);
+  assert.equal(project.learning.decisions.length,0);
+});
+
+test('scene-subtitle-position global context falls back to output then bottom', () => {
+  const a={id:'a',learning:{decisions:[]},subtitleStyle:{position:'invalid',positionOffsetPercent:-99},output:{subtitlePosition:'center'},scenes:[{id:'s'}]};
+  const ar=recordSceneSubtitlePositionChange(a,{sceneId:'s',beforeState:{mode:'inherit'},afterState:{mode:'override',position:'top',offsetPercent:0},sceneIndex:0});
+  assert.equal(ar.context.globalSubtitlePosition,'center');
+  assert.equal(ar.context.globalSubtitleOffsetPercent,-15);
+  const b={id:'b',learning:{decisions:[]},subtitleStyle:{position:'invalid'},output:{subtitlePosition:'invalid'},scenes:[{id:'s'}]};
+  const br=recordSceneSubtitlePositionChange(b,{sceneId:'s',beforeState:{mode:'inherit'},afterState:{mode:'override',position:'top',offsetPercent:0},sceneIndex:0});
+  assert.equal(br.context.globalSubtitlePosition,'bottom');
+});
+
+test('scene-subtitle-position snapshots scene state and only connects valid image rights', () => {
+  const project={id:'p',learning:{decisions:[]},subtitleStyle:{position:'bottom'},mediaLibrary:[{id:'img',type:'image',data:imageData,license:'CC BY',rights:{attributionRequired:true}}],scenes:[{id:'s',text:'scene',imageAssetId:'img',subtitlePosition:'center',subtitlePositionOffsetPercent:3}]};
+  assert.deepEqual(snapshotSceneSubtitlePosition(project.scenes[0]),{mode:'override',position:'center',offsetPercent:3});
+  assert.deepEqual(snapshotSceneSubtitlePosition({}),{mode:'inherit',position:null,offsetPercent:null});
+  assert.equal(snapshotSceneSubtitlePosition({subtitlePosition:'wipe'}),null);
+  const record=recordSceneSubtitlePositionChange(project,{sceneId:'s',beforeState:{mode:'inherit'},afterState:snapshotSceneSubtitlePosition(project.scenes[0]),sceneIndex:0});
+  assert.equal(record.context.imageAssetId,'img');
+  assert.deepEqual(record.assetIds,['img']);
+  assert.deepEqual(record.rights,{attributionRequired:true,license:'CC BY'});
 });
