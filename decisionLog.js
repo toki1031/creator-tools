@@ -1,3 +1,5 @@
+import { isImageDataUrl } from './mediaLibrary.js';
+
 const isRecord = value => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const stringOr = (value, fallback = '') => typeof value === 'string' ? value : fallback;
 
@@ -246,6 +248,76 @@ export function recordSubtitleContentChange(project, {
     source: { type: 'system', feature: 'subtitle-editor', version: '0.3' },
     assetIds: [],
     rights: {}
+  }, options);
+}
+
+function validImageAssetMap(project) {
+  const assets = Array.isArray(project?.mediaLibrary) ? project.mediaLibrary : [];
+  return new Map(assets.flatMap(asset => {
+    const id = stringOr(asset?.id).trim();
+    return id && asset?.type === 'image' && isImageDataUrl(asset?.data) ? [[id, asset]] : [];
+  }));
+}
+
+function imageAssetRights(asset) {
+  if (!isRecord(asset)) return {};
+  const rights = isRecord(asset.rights) ? cloneSafe(asset.rights) : {};
+  for (const key of [
+    'license', 'licenseUrl', 'source', 'sourceName', 'commercialUse',
+    'monetizationAllowed', 'attributionRequired', 'attributionText'
+  ]) {
+    if (asset[key] !== undefined) rights[key] = cloneSafe(asset[key]);
+  }
+  return rights;
+}
+
+export function recordSceneImageSelection(project, {
+  sceneId,
+  beforeAssetId,
+  afterAssetId,
+  sceneIndex,
+  candidateAssetIds
+}, options = {}) {
+  const before = stringOr(beforeAssetId).trim() || null;
+  const after = stringOr(afterAssetId).trim() || null;
+  if (!sceneId || before === after) return null;
+
+  const assets = validImageAssetMap(project);
+  if (after && !assets.has(after)) return null;
+  const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+  const requestedIndex = Number(sceneIndex);
+  const resolvedIndex = Number.isInteger(requestedIndex) && requestedIndex >= 0 && requestedIndex < scenes.length
+    && String(scenes[requestedIndex]?.id || '') === String(sceneId)
+    ? requestedIndex
+    : scenes.findIndex(scene => String(scene?.id || '') === String(sceneId));
+  const scene = resolvedIndex >= 0 ? scenes[resolvedIndex] : null;
+  if (!scene) return null;
+
+  const candidates = Array.isArray(candidateAssetIds)
+    ? [...new Set(candidateAssetIds.map(id => stringOr(id).trim()).filter(id => id && assets.has(id)))]
+    : [];
+  const alternatives = candidates.filter(id => id !== after).map(imageAssetId => ({ imageAssetId }));
+  const assetIds = [...new Set([before, after, ...candidates].filter(id => id && assets.has(id)))];
+  const rights = after ? imageAssetRights(assets.get(after)) : {};
+
+  return appendDecision(project, {
+    decisionType: 'scene-image-selection',
+    sceneId: String(sceneId),
+    context: {
+      sceneText: stringOr(scene.text),
+      sceneIndex: resolvedIndex,
+      platform: stringOr(project?.platform),
+      aspectRatio: stringOr(project?.aspectRatio)
+    },
+    proposal: { imageAssetId: before },
+    alternatives,
+    humanAction: { type: 'select-image-asset' },
+    finalDecision: { imageAssetId: after },
+    reasonCode: '',
+    reasonNote: '',
+    source: { type: 'human', feature: 'scene-editor', version: '0.4' },
+    assetIds,
+    rights
   }, options);
 }
 
