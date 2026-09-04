@@ -9,6 +9,7 @@ import {
   normalizeLearningState,
   recordSceneDurationChange,
   recordSceneImageSelection,
+  recordSceneMotionChange,
   recordSceneOrderChange,
   recordSubtitleContentChange,
   snapshotSceneOrder
@@ -320,4 +321,44 @@ test('scene-image-selection filters invalid duplicate asset ids and only copies 
   assert.deepEqual(record.alternatives, [{ imageAssetId: 'asset-a' }]);
   assert.deepEqual(record.assetIds, ['asset-b', 'asset-a']);
   assert.deepEqual(record.rights, { attributionRequired: true, license: 'CC BY', source: 'Example' });
+});
+
+test('scene-motion records one human motion selection with scene context', () => {
+  const project = {
+    id: 'p-motion', schemaVersion: 4, platform: 'youtube-shorts', aspectRatio: '9:16', learning: { decisions: [] },
+    scenes: [{ id: 'scene-motion', text: '動きを選ぶシーン', durationSec: 6, motion: 'zoom-out' }]
+  };
+  const record = recordSceneMotionChange(project, {
+    sceneId: 'scene-motion', beforeMotion: 'zoom-in', afterMotion: 'zoom-out', sceneIndex: 0
+  }, { createId: () => 'decision-motion', now: () => '2026-09-04T12:00:00.000Z' });
+
+  assert.equal(record.decisionType, 'scene-motion');
+  assert.equal(record.sceneId, 'scene-motion');
+  assert.equal(record.context.sceneText, '動きを選ぶシーン');
+  assert.equal(record.context.sceneIndex, 0);
+  assert.equal(record.context.durationSec, 6);
+  assert.equal(record.context.platform, 'youtube-shorts');
+  assert.equal(record.context.aspectRatio, '9:16');
+  assert.deepEqual(record.proposal, { motion: 'zoom-in' });
+  assert.deepEqual(record.finalDecision, { motion: 'zoom-out' });
+  assert.deepEqual(record.alternatives, []);
+  assert.deepEqual(record.assetIds, []);
+  assert.deepEqual(record.rights, {});
+  assert.deepEqual(record.humanAction, { type: 'select-scene-motion' });
+  assert.deepEqual(record.source, { type: 'human', feature: 'scene-editor', version: '0.5' });
+  assert.equal(record.timestamp, '2026-09-04T12:00:00.000Z');
+  assert.equal(project.learning.decisions.length, 1);
+  assert.equal(project.schemaVersion, 4);
+});
+
+test('scene-motion ignores the same motion value', () => {
+  const project = {
+    id: 'p-motion', learning: { decisions: [] },
+    scenes: [{ id: 'scene-motion', text: '同値', durationSec: 5, motion: 'zoom-in' }]
+  };
+  const record = recordSceneMotionChange(project, {
+    sceneId: 'scene-motion', beforeMotion: 'zoom-in', afterMotion: 'zoom-in', sceneIndex: 0
+  });
+  assert.equal(record, null);
+  assert.equal(project.learning.decisions.length, 0);
 });
