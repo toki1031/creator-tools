@@ -9,7 +9,7 @@ import { normalizeSubtitleOffset, resolveEffectiveSubtitlePosition, resolveSubti
 import { assessMvpVideoResult, describeVideoExportFailure, isMvpShortsProject, validateMvpShortsOutput } from "./videoMvp.js";
 import { createGenerationStartController, projectExpectsVideoAudio } from "./videoGenerationStart.js";
 import { applyDictionaryEntries, normalizeSubtitleContentForSync, splitIntoScenes, splitSubtitleCards, subtitleContentChanged } from "./qualityLogic.js";
-import { ensureLearningState, moveSceneWithDecision, recordSceneDurationChange, recordSceneImageSelection, recordSubtitleContentChange } from "./decisionLog.js";
+import { ensureLearningState, moveSceneWithDecision, recordSceneDurationChange, recordSceneImageSelection, recordSceneMotionChange, recordSubtitleContentChange } from "./decisionLog.js";
 
 const rootElement = document.querySelector("#app");
 if (!rootElement) throw new Error("#app がありません。");
@@ -548,7 +548,14 @@ async function renderScenes(id) {
         el.dataset.durationBefore=String(after);save();
       };
     });
-    root.querySelectorAll("[data-motion]").forEach(el=>el.onchange=()=>{project.scenes[Number(el.dataset.motion)].motion=el.value;save();});
+    root.querySelectorAll("[data-motion]").forEach(el=>el.onchange=()=>{
+      const index=Number(el.dataset.motion),scene=project.scenes[index];
+      if(!scene)return;
+      const before=scene.motion,after=el.value;
+      scene.motion=after;
+      recordSceneMotionChange(project,{sceneId:scene.id,beforeMotion:before,afterMotion:after,sceneIndex:index});
+      save();
+    });
     root.querySelectorAll("[data-image]").forEach(el=>el.onchange=async()=>{const file=el.files?.[0];if(!file)return;if(file.size>3_000_000&&!confirm("画像が大きいため保存容量を圧迫する可能性があります。続けますか？"))return;const scene=project.scenes[Number(el.dataset.image)];pendingAsset=fileToDataUrl(file).then(data=>{promoteLegacySceneImage(project,scene,{fileName:`シーン ${Number(el.dataset.image)+1} の旧画像`});const asset=addImageAsset(project,{data,fileName:file.name});scene.imageAssetId=asset.id;delete scene.imageData;});save();await pendingAsset;renderList();});
     root.querySelectorAll("[data-library]").forEach(el=>el.onclick=()=>openMediaLibrary(Number(el.dataset.library)));
     root.querySelectorAll("[data-remove]").forEach(el=>el.onclick=()=>{if(!confirm("このシーンを削除しますか？ 削除後も「1つ前に戻す」で復元できます。"))return;const index=Number(el.dataset.remove);promoteLegacySceneImage(project,project.scenes[index],{fileName:`シーン ${index+1} の旧画像`});snapshotScenes();project.scenes.splice(index,1);save();renderList();});
