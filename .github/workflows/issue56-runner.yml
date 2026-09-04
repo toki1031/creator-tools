@@ -79,40 +79,32 @@ jobs:
                   raise SystemExit(f'{path}: expected one match, got {count}: {old[:100]!r}')
               p.write_text(text.replace(old,new,1))
 
-          # main.js imports.
           replace_once(
               'main.js',
               'import { addImageAsset, assetUsageCount, assetUsageScenes, ensureMediaLibrary, estimateAssetBytes, promoteLegacySceneImage, removeAllUnusedAssets, removeUnusedAsset, renameMediaAsset, resolveSceneImageSource, summarizeMediaLibrary } from "./mediaLibrary.js";\n',
               'import { addImageAsset, assetUsageCount, assetUsageScenes, ensureMediaLibrary, estimateAssetBytes, promoteLegacySceneImage, removeAllUnusedAssets, removeUnusedAsset, renameMediaAsset, resolveSceneImageSource, summarizeMediaLibrary } from "./mediaLibrary.js";\nimport { createAudioAssetIdFromFile, normalizeAudioAssetId } from "./audioAssetIdentity.js";\n'
           )
-
-          # Keep the current BGM shape and add only an optional stable identity.
           replace_once(
               'main.js',
               '  project.bgm = project.bgm || { source:"none", title:"", category:"calm", volume:0.12, ducking:true, fadeInSec:1, fadeOutSec:2, loop:true, license:"", credit:"", audioData:"", fileName:"" };\n',
               '  project.bgm = project.bgm || { source:"none", title:"", category:"calm", volume:0.12, ducking:true, fadeInSec:1, fadeOutSec:2, loop:true, license:"", credit:"", audioData:"", fileName:"", audioAssetId:"" };\n  project.bgm.audioAssetId = normalizeAudioAssetId(project.bgm.audioAssetId);\n'
           )
-
           old_upload = "    pendingAsset=fileToDataUrl(file).then(data=>{b.audioData=data;b.fileName=file.name;b.source='upload';});\n"
           new_upload = "    pendingAsset=(async()=>{const audioAssetId=await createAudioAssetIdFromFile(file);const data=await fileToDataUrl(file);b.audioData=data;b.fileName=file.name;b.source='upload';b.audioAssetId=audioAssetId;})();\n"
           replace_once('main.js', old_upload, new_upload)
 
-          # projectBackup.js import + normalization.
           replace_once(
               'projectBackup.js',
               "import { normalizeLearningState } from './decisionLog.js';\n",
               "import { normalizeLearningState } from './decisionLog.js';\nimport { normalizeAudioAssetId } from './audioAssetIdentity.js';\n"
           )
-
           marker = "  const bgmSource = isRecord(source.bgm) ? safeClone(source.bgm) : {};\n  if (!isRecord(source.bgm)) fixes.push('BGM設定を補完');\n"
           replacement = marker + "  const requestedBgmAudioAssetId = stringOr(bgmSource.audioAssetId).trim();\n  const bgmAudioAssetId = normalizeAudioAssetId(requestedBgmAudioAssetId);\n  if (requestedBgmAudioAssetId && !bgmAudioAssetId) warnings.push('BGM音源IDを無効な値として除外しました。');\n"
           replace_once('projectBackup.js', marker, replacement)
-
           old_bgm = "    credit:stringOr(bgmSource.credit), audioData:cleanDataUrl(bgmSource.audioData, 'audio', 'BGM音源', warnings), fileName:stringOr(bgmSource.fileName)\n"
           new_bgm = "    credit:stringOr(bgmSource.credit), audioData:cleanDataUrl(bgmSource.audioData, 'audio', 'BGM音源', warnings), fileName:stringOr(bgmSource.fileName),\n    audioAssetId:bgmAudioAssetId\n"
           replace_once('projectBackup.js', old_bgm, new_bgm)
 
-          # Add focused unit tests.
           Path('tests/audioAssetIdentity.test.mjs').write_text(r'''import test from 'node:test';
           import assert from 'node:assert/strict';
           import { createAudioAssetIdFromArrayBuffer, createAudioAssetIdFromFile, normalizeAudioAssetId } from '../audioAssetIdentity.js';
@@ -183,6 +175,7 @@ jobs:
       - name: Diff checks
         shell: bash
         run: |
+          git add -N audioAssetIdentity.js tests/audioAssetIdentity.test.mjs
           git diff --check
           git diff --exit-code 8411764991f62a46aaef1fbbb16f4a6f6cd60a13 -- videoRenderer.js db.js projectFactory.js subtitlePosition.js qualityLogic.js decisionLog.js voice-lab.html
           changed="$(git diff --name-only 8411764991f62a46aaef1fbbb16f4a6f6cd60a13 | grep -v '^.github/workflows/issue56-runner.yml$' | sort)"
@@ -193,12 +186,13 @@ jobs:
         run: |
           rm .github/workflows/issue56-runner.yml
           rm -rf dist node_modules package-lock.json
+          git add audioAssetIdentity.js main.js projectBackup.js tests/audioAssetIdentity.test.mjs tests/projectBackup.test.mjs .github/workflows/issue56-runner.yml
           git clean -fdx
+          git diff --cached --check
           changed="$(git diff --name-only 8411764991f62a46aaef1fbbb16f4a6f6cd60a13 | sort)"
           expected="$(printf '%s\n' audioAssetIdentity.js main.js projectBackup.js tests/audioAssetIdentity.test.mjs tests/projectBackup.test.mjs | sort)"
           test "$changed" = "$expected"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add audioAssetIdentity.js main.js projectBackup.js tests/audioAssetIdentity.test.mjs tests/projectBackup.test.mjs .github/workflows/issue56-runner.yml
           git commit -m "Add stable BGM audio asset identity"
           git push origin HEAD:issue-56-bgm-audio-asset-id
