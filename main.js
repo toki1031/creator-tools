@@ -9,7 +9,7 @@ import { normalizeSubtitleOffset, resolveEffectiveSubtitlePosition, resolveSubti
 import { assessMvpVideoResult, describeVideoExportFailure, isMvpShortsProject, validateMvpShortsOutput } from "./videoMvp.js";
 import { createGenerationStartController, projectExpectsVideoAudio } from "./videoGenerationStart.js";
 import { applyDictionaryEntries, normalizeSubtitleContentForSync, splitIntoScenes, splitSubtitleCards, subtitleContentChanged } from "./qualityLogic.js";
-import { ensureLearningState, moveSceneWithDecision, recordGlobalSubtitlePositionChange, recordSceneDurationChange, recordSceneImageSelection, recordSceneMotionChange, recordSceneSubtitlePositionChange, recordSceneTransitionChange, recordSubtitleContentChange, recordSubtitleSceneSyncDecision, snapshotGlobalSubtitlePosition, snapshotSceneSubtitlePosition } from "./decisionLog.js";
+import { ensureLearningState, moveSceneWithDecision, recordBgmVolumeChange, recordGlobalSubtitlePositionChange, recordSceneDurationChange, recordSceneImageSelection, recordSceneMotionChange, recordSceneSubtitlePositionChange, recordSceneTransitionChange, recordSubtitleContentChange, recordSubtitleSceneSyncDecision, snapshotGlobalSubtitlePosition, snapshotSceneSubtitlePosition } from "./decisionLog.js";
 
 const rootElement = document.querySelector("#app");
 if (!rootElement) throw new Error("#app がありません。");
@@ -740,7 +740,18 @@ async function renderBgm(id) {
   bindSavedNavigation(root.querySelector('#nextOutput'),flushSave,()=>goOutput(id));
 
   const updateLabels=()=>{root.querySelector('#volumeValue').textContent=`${Math.round(Number(root.querySelector('#volume').value)*100)}%`;root.querySelector('#fontSizeValue').textContent=root.querySelector('#fontSize').value;const offset=normalizeSubtitleOffset(root.querySelector('#positionOffset').value);root.querySelector('#positionOffsetValue').textContent=`${offset>0?'+':''}${offset}%`;root.querySelector('#outlineWidthValue').textContent=root.querySelector('#outlineWidth').value;root.querySelector('#backgroundOpacityValue').textContent=`${Math.round(Number(root.querySelector('#backgroundOpacity').value)*100)}%`;};
-  ['source','category','bgmTitle','volume','fadeIn','fadeOut','ducking','loop','license','credit'].forEach(k=>root.querySelector('#'+k).oninput=()=>{updateLabels();save();});
+  ['source','category','bgmTitle','fadeIn','fadeOut','ducking','loop','license','credit'].forEach(k=>root.querySelector('#'+k).oninput=()=>{updateLabels();save();});
+  const bgmVolumeBeforeByElement=new WeakMap();
+  const volumeEl=root.querySelector('#volume');
+  const rememberBgmVolumeBefore=el=>{if(bgmVolumeBeforeByElement.has(el))return;bgmVolumeBeforeByElement.set(el,Number(el.value));};
+  const commitBgmVolumeDecision=el=>{if(!bgmVolumeBeforeByElement.has(el))return;const before=bgmVolumeBeforeByElement.get(el);bgmVolumeBeforeByElement.delete(el);const record=recordBgmVolumeChange(project,{beforeVolume:before,afterVolume:Number(el.value),bgmSource:root.querySelector('#source').value,bgmCategory:root.querySelector('#category').value,ducking:root.querySelector('#ducking').checked,loop:root.querySelector('#loop').checked});if(record)save();};
+  volumeEl.onpointerdown=()=>rememberBgmVolumeBefore(volumeEl);
+  volumeEl.onfocus=()=>rememberBgmVolumeBefore(volumeEl);
+  volumeEl.onkeydown=()=>rememberBgmVolumeBefore(volumeEl);
+  volumeEl.oninput=()=>{updateLabels();save();};
+  volumeEl.onpointerup=()=>commitBgmVolumeDecision(volumeEl);
+  volumeEl.onpointercancel=()=>bgmVolumeBeforeByElement.delete(volumeEl);
+  volumeEl.onblur=()=>commitBgmVolumeDecision(volumeEl);
   ['subtitleEnabled','fontSize','maxChars','maxLines','textColor','outlineColor','outlineWidth','backgroundEnabled','backgroundColor','backgroundOpacity'].forEach(k=>root.querySelector('#'+k).oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();});
   const globalSubtitlePositionBeforeByElement=new WeakMap();
   const rememberGlobalSubtitlePositionBefore=el=>{if(globalSubtitlePositionBeforeByElement.has(el))return;globalSubtitlePositionBeforeByElement.set(el,snapshotGlobalSubtitlePosition(project));};

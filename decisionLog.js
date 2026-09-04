@@ -602,6 +602,59 @@ export function recordSubtitleSceneSyncDecision(project, {
   }, options);
 }
 
+export function normalizeBgmVolume(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return null;
+  const clamped = Math.min(0.5, Math.max(0, number));
+  return Math.round((clamped + Number.EPSILON) * 100) / 100;
+}
+
+export function recordBgmVolumeChange(project, {
+  beforeVolume,
+  afterVolume,
+  bgmSource,
+  bgmCategory,
+  ducking,
+  loop
+}, options = {}) {
+  const before = normalizeBgmVolume(beforeVolume);
+  const after = normalizeBgmVolume(afterVolume);
+  if (before === null || after === null || before === after) return null;
+
+  const bgm = isRecord(project?.bgm) ? project.bgm : {};
+  const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+  const currentSource = typeof bgmSource === 'string' ? bgmSource.trim() : stringOr(bgm.source).trim();
+  const currentCategory = typeof bgmCategory === 'string' ? bgmCategory.trim() : stringOr(bgm.category).trim();
+  const currentDucking = typeof ducking === 'boolean' ? ducking : Boolean(bgm.ducking);
+  const currentLoop = typeof loop === 'boolean' ? loop : Boolean(bgm.loop);
+  const hasNarration = Boolean(project?.narration?.audioData) || scenes.some(scene => Boolean(scene?.narration?.audioData));
+
+  return appendDecision(project, {
+    decisionType: 'bgm-volume',
+    sceneId: '',
+    context: {
+      platform: stringOr(project?.platform),
+      aspectRatio: stringOr(project?.aspectRatio),
+      bgmSource: currentSource,
+      bgmCategory: currentCategory,
+      hasBgmAudio: Boolean(bgm.audioData),
+      ducking: currentDucking,
+      loop: currentLoop,
+      sceneCount: scenes.length,
+      hasNarration
+    },
+    proposal: { volume: before },
+    alternatives: [],
+    humanAction: { type: 'set-bgm-volume' },
+    finalDecision: { volume: after },
+    reasonCode: '',
+    reasonNote: '',
+    source: { type: 'human', feature: 'bgm-editor', version: '0.10' },
+    assetIds: [],
+    rights: {}
+  }, options);
+}
+
 export function moveSceneWithDecision(project, index, direction, options = {}) {
   ensureLearningState(project);
   const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
