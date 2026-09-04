@@ -1,0 +1,294 @@
+name: Issue 54 Implementation Runner
+
+on:
+  push:
+    branches:
+      - issue-54-narration-voice-v011
+
+permissions:
+  contents: write
+
+jobs:
+  implement-test-commit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply Dataset v0.11 patch
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected one match, got {count}')
+              p.write_text(text.replace(old, new, 1))
+
+          # decisionLog.js
+          marker = "export function moveSceneWithDecision(project, index, direction, options = {}) {"
+          block = r'''const KOKORO_NARRATION_VOICES = [
+            'jf_alpha',
+            'jf_gongitsune',
+            'jf_nezumi',
+            'jf_tebukuro',
+            'jm_kumo'
+          ];
+          const KOKORO_NARRATION_VOICE_SET = new Set(KOKORO_NARRATION_VOICES);
+
+          export function normalizeNarrationVoiceId(value) {
+            const voiceId = stringOr(value).trim();
+            return KOKORO_NARRATION_VOICE_SET.has(voiceId) ? voiceId : null;
+          }
+
+          export function recordNarrationVoiceDecision(project, {
+            beforeVoiceId,
+            afterVoiceId,
+            generationMode,
+            hadProjectNarration,
+            sceneNarrationCountBefore
+          }, options = {}) {
+            const after = normalizeNarrationVoiceId(afterVoiceId);
+            if (!after) return null;
+            const before = normalizeNarrationVoiceId(beforeVoiceId);
+            if (before === after) return null;
+            const mode = generationMode === 'full' || generationMode === 'scenes' ? generationMode : '';
+            if (!mode) return null;
+
+            const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+            const suppliedSceneNarrationCount = Number(sceneNarrationCountBefore);
+            const priorSceneNarrationCount = Number.isInteger(suppliedSceneNarrationCount) && suppliedSceneNarrationCount >= 0
+              ? suppliedSceneNarrationCount
+              : scenes.filter(scene => Boolean(scene?.narration?.audioData)).length;
+            const priorProjectNarration = typeof hadProjectNarration === 'boolean'
+              ? hadProjectNarration
+              : Boolean(project?.narration?.audioData);
+
+            return appendDecision(project, {
+              decisionType: 'narration-voice',
+              sceneId: '',
+              context: {
+                platform: stringOr(project?.platform),
+                aspectRatio: stringOr(project?.aspectRatio),
+                engine: 'kokoro-js-jp',
+                generationMode: mode,
+                sceneCount: scenes.length,
+                hadProjectNarration: priorProjectNarration,
+                sceneNarrationCountBefore: priorSceneNarrationCount
+              },
+              proposal: { voiceId: before },
+              alternatives: KOKORO_NARRATION_VOICES.filter(voiceId => voiceId !== after).map(voiceId => ({ voiceId })),
+              humanAction: { type: 'choose-narration-voice', generationMode: mode },
+              finalDecision: { voiceId: after },
+              reasonCode: '',
+              reasonNote: '',
+              source: { type: 'human', feature: 'voice-lab', version: '0.11' },
+              assetIds: [],
+              rights: {}
+            }, options);
+          }
+
+          ''' + marker
+          replace_once('decisionLog.js', marker, block)
+
+          # voice-lab.html import
+          replace_once(
+              'voice-lab.html',
+              'import { getProject, saveProject } from "./db.js";\n',
+              'import { getProject, saveProject } from "./db.js";\nimport { recordNarrationVoiceDecision } from "./decisionLog.js";\n'
+          )
+
+          # Full narration registration: snapshot prior state before mutating narration.
+          old_full = r'''  const project=await getProject(projectId);
+            if(!project) throw new Error(`対象プロジェクトが見つかりません: ${projectId}`);
+
+            project.narration={'''
+          new_full = r'''  const project=await getProject(projectId);
+            if(!project) throw new Error(`対象プロジェクトが見つかりません: ${projectId}`);
+            const narrationVoiceBefore=project.narration?.voiceId;
+            const hadProjectNarrationBefore=Boolean(project.narration?.audioData);
+            const sceneNarrationCountBefore=(Array.isArray(project.scenes)?project.scenes:[]).filter(scene=>Boolean(scene?.narration?.audioData)).length;
+
+            project.narration={'''
+          replace_once('voice-lab.html', old_full, new_full)
+
+          old_full_save = r'''    volume:project.narration?.volume ?? 1
+            };
+            project.speechScript=text || project.speechScript || '';
+            project.updatedAt=new Date().toISOString();
+            await saveProject(project);'''
+          new_full_save = r'''    volume:project.narration?.volume ?? 1
+            };
+            recordNarrationVoiceDecision(project,{
+              beforeVoiceId:narrationVoiceBefore,
+              afterVoiceId:voice,
+              generationMode:'full',
+              hadProjectNarration:hadProjectNarrationBefore,
+              sceneNarrationCountBefore
+            });
+            project.speechScript=text || project.speechScript || '';
+            project.updatedAt=new Date().toISOString();
+            await saveProject(project);'''
+          replace_once('voice-lab.html', old_full_save, new_full_save)
+
+          # Scene narration: snapshot once before loop, record once after all scenes succeed.
+          old_scene_start = r'''    const scenes=Array.isArray(project.scenes)?project.scenes:[];
+            if(!scenes.length) throw new Error('シーンがありません。Creator OSの「2. シーン」で台本を分割してください。');
+
+            const voice=$('#voice').value;'''
+          new_scene_start = r'''    const scenes=Array.isArray(project.scenes)?project.scenes:[];
+            if(!scenes.length) throw new Error('シーンがありません。Creator OSの「2. シーン」で台本を分割してください。');
+            const narrationVoiceBefore=project.narration?.voiceId;
+            const hadProjectNarrationBefore=Boolean(project.narration?.audioData);
+            const sceneNarrationCountBefore=scenes.filter(scene=>Boolean(scene?.narration?.audioData)).length;
+
+            const voice=$('#voice').value;'''
+          replace_once('voice-lab.html', old_scene_start, new_scene_start)
+
+          old_scene_finish = r'''      sceneMode:true,
+              sceneCount:scenes.length
+            };
+            project.updatedAt=new Date().toISOString();
+            await saveProject(project);'''
+          new_scene_finish = r'''      sceneMode:true,
+              sceneCount:scenes.length
+            };
+            recordNarrationVoiceDecision(project,{
+              beforeVoiceId:narrationVoiceBefore,
+              afterVoiceId:voice,
+              generationMode:'scenes',
+              hadProjectNarration:hadProjectNarrationBefore,
+              sceneNarrationCountBefore
+            });
+            project.updatedAt=new Date().toISOString();
+            await saveProject(project);'''
+          replace_once('voice-lab.html', old_scene_finish, new_scene_finish)
+
+          # tests imports
+          replace_once(
+              'tests/decisionLog.test.mjs',
+              '  normalizeBgmVolume,\n',
+              '  normalizeBgmVolume,\n  normalizeNarrationVoiceId,\n'
+          )
+          replace_once(
+              'tests/decisionLog.test.mjs',
+              '  recordBgmVolumeChange,\n',
+              '  recordBgmVolumeChange,\n  recordNarrationVoiceDecision,\n'
+          )
+
+          tests_path = Path('tests/decisionLog.test.mjs')
+          tests = tests_path.read_text()
+          marker_test = "test('narration-voice records first Kokoro voice adoption without audio payload'"
+          if marker_test not in tests:
+              tests += r'''
+
+          test('narration-voice records first Kokoro voice adoption without audio payload', () => {
+            const project={
+              id:'p-voice',platform:'youtube-shorts',aspectRatio:'9:16',learning:{decisions:[]},
+              narration:{audioData:'',voiceId:'legacy-browser-voice'},
+              scenes:[{id:'s1',narration:{audioData:'data:audio/wav;base64,AA=='}},{id:'s2'}]
+            };
+            const record=recordNarrationVoiceDecision(project,{
+              beforeVoiceId:'legacy-browser-voice',afterVoiceId:'jf_alpha',generationMode:'scenes',
+              hadProjectNarration:false,sceneNarrationCountBefore:1
+            },{createId:()=> 'd-voice-1',now:()=> '2026-09-05T00:00:00.000Z'});
+            assert.equal(record.decisionType,'narration-voice');
+            assert.equal(record.sceneId,'');
+            assert.deepEqual(record.proposal,{voiceId:null});
+            assert.deepEqual(record.finalDecision,{voiceId:'jf_alpha'});
+            assert.deepEqual(record.humanAction,{type:'choose-narration-voice',generationMode:'scenes'});
+            assert.deepEqual(record.source,{type:'human',feature:'voice-lab',version:'0.11'});
+            assert.equal(record.context.engine,'kokoro-js-jp');
+            assert.equal(record.context.generationMode,'scenes');
+            assert.equal(record.context.sceneCount,2);
+            assert.equal(record.context.hadProjectNarration,false);
+            assert.equal(record.context.sceneNarrationCountBefore,1);
+            assert.equal(record.alternatives.length,4);
+            assert.equal(record.alternatives.some(item=>item.voiceId==='jf_alpha'),false);
+            assert.equal(JSON.stringify(record).includes('data:audio'),false);
+          });
+
+          test('narration-voice records a changed accepted voice in full mode', () => {
+            const project={
+              id:'p-voice',platform:'instagram-reels',aspectRatio:'1:1',learning:{decisions:[]},
+              narration:{audioData:'data:audio/wav;base64,OLD',voiceId:'jf_alpha',fileName:'old.wav'},
+              scenes:[{id:'s1'}]
+            };
+            const record=recordNarrationVoiceDecision(project,{
+              beforeVoiceId:'jf_alpha',afterVoiceId:'jm_kumo',generationMode:'full',
+              hadProjectNarration:true,sceneNarrationCountBefore:0
+            });
+            assert.deepEqual(record.proposal,{voiceId:'jf_alpha'});
+            assert.deepEqual(record.finalDecision,{voiceId:'jm_kumo'});
+            assert.equal(record.context.generationMode,'full');
+            assert.equal(record.context.hadProjectNarration,true);
+            assert.equal(record.alternatives.some(item=>item.voiceId==='jf_alpha'),true);
+            assert.equal(record.alternatives.some(item=>item.voiceId==='jm_kumo'),false);
+            const serialized=JSON.stringify(record);
+            assert.equal(serialized.includes('OLD'),false);
+            assert.equal(serialized.includes('old.wav'),false);
+          });
+
+          test('narration voice normalization only accepts current Kokoro Voice Lab ids', () => {
+            for(const id of ['jf_alpha','jf_gongitsune','jf_nezumi','jf_tebukuro','jm_kumo']){
+              assert.equal(normalizeNarrationVoiceId(id),id);
+            }
+            assert.equal(normalizeNarrationVoiceId(''),null);
+            assert.equal(normalizeNarrationVoiceId('legacy'),null);
+            assert.equal(normalizeNarrationVoiceId(undefined),null);
+          });
+
+          test('narration-voice ignores same voice, invalid final voice and invalid generation mode', () => {
+            const project={id:'p',learning:{decisions:[]},narration:{},scenes:[]};
+            assert.equal(recordNarrationVoiceDecision(project,{beforeVoiceId:'jf_alpha',afterVoiceId:'jf_alpha',generationMode:'full'}),null);
+            assert.equal(recordNarrationVoiceDecision(project,{beforeVoiceId:null,afterVoiceId:'invalid',generationMode:'full'}),null);
+            assert.equal(recordNarrationVoiceDecision(project,{beforeVoiceId:null,afterVoiceId:'jf_alpha',generationMode:'preview'}),null);
+            assert.equal(project.learning.decisions.length,0);
+          });
+          '''
+              tests_path.write_text(tests)
+          PY
+      - name: Install dependencies without repository artifacts
+        run: npm install --package-lock=false --no-audit --no-fund
+      - name: Test
+        run: npm test
+      - name: Voice Lab inline module syntax check
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          text=Path('voice-lab.html').read_text()
+          start=text.index('<script type="module">')+len('<script type="module">')
+          end=text.index('</script>',start)
+          Path('/tmp/voice-lab.mjs').write_text(text[start:end])
+          PY
+          node --check /tmp/voice-lab.mjs
+      - name: Build
+        run: npm run build
+      - name: Diff checks
+        shell: bash
+        run: |
+          git diff --check
+          git diff --exit-code f6248546e40f750ea00fba8fcc9dff56f3a42006 -- videoRenderer.js db.js projectFactory.js subtitlePosition.js qualityLogic.js projectBackup.js main.js
+          test "$(git diff --name-only f6248546e40f750ea00fba8fcc9dff56f3a42006 -- decisionLog.js voice-lab.html tests/decisionLog.test.mjs | wc -l)" -eq 3
+      - name: Commit only intended source changes and remove runner
+        shell: bash
+        run: |
+          rm .github/workflows/issue54-runner.yml
+          rm -rf dist node_modules package-lock.json
+          git clean -fdx
+          changed="$(git diff --name-only f6248546e40f750ea00fba8fcc9dff56f3a42006 | sort)"
+          expected="$(printf '%s\n' decisionLog.js voice-lab.html tests/decisionLog.test.mjs | sort)"
+          test "$changed" = "$expected"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add decisionLog.js voice-lab.html tests/decisionLog.test.mjs .github/workflows/issue54-runner.yml
+          git commit -m "Capture narration voice decisions"
+          git push origin HEAD:issue-54-narration-voice-v011
