@@ -9,7 +9,7 @@ import { normalizeSubtitleOffset, resolveEffectiveSubtitlePosition, resolveSubti
 import { assessMvpVideoResult, describeVideoExportFailure, isMvpShortsProject, validateMvpShortsOutput } from "./videoMvp.js";
 import { createGenerationStartController, projectExpectsVideoAudio } from "./videoGenerationStart.js";
 import { applyDictionaryEntries, normalizeSubtitleContentForSync, splitIntoScenes, splitSubtitleCards, subtitleContentChanged } from "./qualityLogic.js";
-import { ensureLearningState, moveSceneWithDecision, recordSceneDurationChange, recordSceneImageSelection, recordSceneMotionChange, recordSceneSubtitlePositionChange, recordSceneTransitionChange, recordSubtitleContentChange, snapshotSceneSubtitlePosition } from "./decisionLog.js";
+import { ensureLearningState, moveSceneWithDecision, recordGlobalSubtitlePositionChange, recordSceneDurationChange, recordSceneImageSelection, recordSceneMotionChange, recordSceneSubtitlePositionChange, recordSceneTransitionChange, recordSubtitleContentChange, snapshotGlobalSubtitlePosition, snapshotSceneSubtitlePosition } from "./decisionLog.js";
 
 const rootElement = document.querySelector("#app");
 if (!rootElement) throw new Error("#app がありません。");
@@ -741,8 +741,20 @@ async function renderBgm(id) {
 
   const updateLabels=()=>{root.querySelector('#volumeValue').textContent=`${Math.round(Number(root.querySelector('#volume').value)*100)}%`;root.querySelector('#fontSizeValue').textContent=root.querySelector('#fontSize').value;const offset=normalizeSubtitleOffset(root.querySelector('#positionOffset').value);root.querySelector('#positionOffsetValue').textContent=`${offset>0?'+':''}${offset}%`;root.querySelector('#outlineWidthValue').textContent=root.querySelector('#outlineWidth').value;root.querySelector('#backgroundOpacityValue').textContent=`${Math.round(Number(root.querySelector('#backgroundOpacity').value)*100)}%`;};
   ['source','category','bgmTitle','volume','fadeIn','fadeOut','ducking','loop','license','credit'].forEach(k=>root.querySelector('#'+k).oninput=()=>{updateLabels();save();});
-  ['subtitleEnabled','subtitlePosition','positionOffset','fontSize','maxChars','maxLines','textColor','outlineColor','outlineWidth','backgroundEnabled','backgroundColor','backgroundOpacity'].forEach(k=>root.querySelector('#'+k).oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();});
-  root.querySelector('#resetPositionOffset').onclick=()=>{root.querySelector('#positionOffset').value='0';readGlobalSettings();updateLabels();renderSubtitlePreview();save();};
+  ['subtitleEnabled','fontSize','maxChars','maxLines','textColor','outlineColor','outlineWidth','backgroundEnabled','backgroundColor','backgroundOpacity'].forEach(k=>root.querySelector('#'+k).oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();});
+  const globalSubtitlePositionBeforeByElement=new WeakMap();
+  const rememberGlobalSubtitlePositionBefore=el=>{if(globalSubtitlePositionBeforeByElement.has(el))return;globalSubtitlePositionBeforeByElement.set(el,snapshotGlobalSubtitlePosition(project));};
+  const commitGlobalSubtitlePositionDecision=el=>{if(!globalSubtitlePositionBeforeByElement.has(el))return;const before=globalSubtitlePositionBeforeByElement.get(el);globalSubtitlePositionBeforeByElement.delete(el);const after=snapshotGlobalSubtitlePosition(project);const record=recordGlobalSubtitlePositionChange(project,{beforeState:before,afterState:after});if(record)save();};
+  const globalPositionEl=root.querySelector('#subtitlePosition');
+  globalPositionEl.onchange=()=>{const before=snapshotGlobalSubtitlePosition(project);readGlobalSettings();const after=snapshotGlobalSubtitlePosition(project);recordGlobalSubtitlePositionChange(project,{beforeState:before,afterState:after});updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();};
+  const globalOffsetEl=root.querySelector('#positionOffset');
+  globalOffsetEl.onpointerdown=()=>rememberGlobalSubtitlePositionBefore(globalOffsetEl);
+  globalOffsetEl.onfocus=()=>rememberGlobalSubtitlePositionBefore(globalOffsetEl);
+  globalOffsetEl.onkeydown=()=>rememberGlobalSubtitlePositionBefore(globalOffsetEl);
+  globalOffsetEl.oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();};
+  globalOffsetEl.onpointerup=()=>commitGlobalSubtitlePositionDecision(globalOffsetEl);
+  globalOffsetEl.onblur=()=>commitGlobalSubtitlePositionDecision(globalOffsetEl);
+  root.querySelector('#resetPositionOffset').onclick=()=>{const before=snapshotGlobalSubtitlePosition(project);root.querySelector('#positionOffset').value='0';readGlobalSettings();const after=snapshotGlobalSubtitlePosition(project);recordGlobalSubtitlePositionChange(project,{beforeState:before,afterState:after});updateLabels();renderSubtitlePreview();save();};
 
   const presets={
     standard:{fontSize:54,position:'bottom',maxCharsPerLine:16,maxLines:2,outlineWidth:4,backgroundEnabled:false,backgroundOpacity:.45},
