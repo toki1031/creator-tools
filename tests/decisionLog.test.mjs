@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createProject } from '../projectFactory.js';
+import { normalizeSubtitleContentForSync } from '../qualityLogic.js';
 import {
   appendDecision,
   ensureLearningState,
@@ -8,6 +9,7 @@ import {
   normalizeDecisionRecord,
   normalizeLearningState,
   recordGlobalSubtitlePositionChange,
+  recordSubtitleSceneSyncDecision,
   recordSceneDurationChange,
   recordSceneImageSelection,
   recordSceneMotionChange,
@@ -572,4 +574,68 @@ test('snapshotGlobalSubtitlePosition follows current visible global state', () =
   assert.deepEqual(snapshotGlobalSubtitlePosition(project),{position:'center',offsetPercent:-15});
   assert.equal(snapshotGlobalSubtitlePosition({subtitleStyle:{position:'wipe',positionOffsetPercent:0}}),null);
   assert.equal(snapshotGlobalSubtitlePosition({}),null);
+});
+
+
+test('subtitle-scene-sync records explicit sync-to-scene choice with context', () => {
+  const subtitleTextAfter='新しい\n字幕\n\nカード';
+  const sceneTextCandidate=normalizeSubtitleContentForSync(subtitleTextAfter);
+  const project={
+    id:'p-sync',platform:'youtube-shorts',aspectRatio:'9:16',learning:{decisions:[]},
+    scenes:[{id:'s1',text:'旧本文',speechText:'旧本文',durationSec:5,narration:{audioData:'data:audio/wav;base64,QQ=='}}]
+  };
+  const record=recordSubtitleSceneSyncDecision(project,{
+    sceneId:'s1',sceneIndex:0,sceneTextBefore:'旧本文',subtitleTextAfter,sceneTextCandidate,
+    syncToScene:true,speechTextFollowsScene:true,hadNarration:true
+  },{createId:()=> 'd-sync',now:()=> '2026-09-04T14:50:00.000Z'});
+  assert.equal(record.decisionType,'subtitle-scene-sync');
+  assert.equal(record.sceneId,'s1');
+  assert.deepEqual(record.proposal,{syncToScene:false});
+  assert.deepEqual(record.alternatives,[{syncToScene:true}]);
+  assert.deepEqual(record.finalDecision,{syncToScene:true});
+  assert.deepEqual(record.humanAction,{type:'choose-subtitle-scene-sync'});
+  assert.deepEqual(record.source,{type:'human',feature:'subtitle-editor',version:'0.9'});
+  assert.equal(record.context.sceneIndex,0);
+  assert.equal(record.context.sceneTextBefore,'旧本文');
+  assert.equal(record.context.subtitleTextAfter,subtitleTextAfter);
+  assert.equal(record.context.sceneTextCandidate,'新しい字幕カード');
+  assert.equal(record.context.durationSec,5);
+  assert.equal(record.context.platform,'youtube-shorts');
+  assert.equal(record.context.aspectRatio,'9:16');
+  assert.equal(record.context.speechTextFollowsScene,true);
+  assert.equal(record.context.hadNarration,true);
+  assert.deepEqual(record.assetIds,[]);
+  assert.deepEqual(record.rights,{});
+});
+
+test('subtitle-scene-sync records explicit subtitle-only choice even when final matches proposal', () => {
+  const project={id:'p',learning:{decisions:[]},scenes:[{id:'s1',text:'旧本文',durationSec:4}]};
+  const record=recordSubtitleSceneSyncDecision(project,{
+    sceneId:'s1',sceneIndex:0,sceneTextBefore:'旧本文',subtitleTextAfter:'新本文',sceneTextCandidate:'新本文',
+    syncToScene:false,speechTextFollowsScene:false,hadNarration:false
+  });
+  assert.deepEqual(record.proposal,{syncToScene:false});
+  assert.deepEqual(record.finalDecision,{syncToScene:false});
+  assert.equal(project.learning.decisions.length,1);
+});
+
+test('subtitle-scene-sync resolves Scene by id and preserves decision context flags', () => {
+  const project={id:'p',platform:'instagram-reels',aspectRatio:'9:16',learning:{decisions:[]},scenes:[{id:'a'},{id:'b',durationSec:7}]};
+  const record=recordSubtitleSceneSyncDecision(project,{
+    sceneId:'b',sceneIndex:0,sceneTextBefore:'A',subtitleTextAfter:'B',sceneTextCandidate:'B',
+    syncToScene:true,speechTextFollowsScene:false,hadNarration:false
+  });
+  assert.equal(record.context.sceneIndex,1);
+  assert.equal(record.context.durationSec,7);
+  assert.equal(record.context.speechTextFollowsScene,false);
+  assert.equal(record.context.hadNarration,false);
+});
+
+test('subtitle-scene-sync ignores dismissed or invalid choices and missing Scene', () => {
+  const project={id:'p',learning:{decisions:[]},scenes:[{id:'s1'}]};
+  const base={sceneIndex:0,sceneTextBefore:'A',subtitleTextAfter:'B',sceneTextCandidate:'B',speechTextFollowsScene:true,hadNarration:false};
+  assert.equal(recordSubtitleSceneSyncDecision(project,{...base,sceneId:'s1',syncToScene:'dismissed'}),null);
+  assert.equal(recordSubtitleSceneSyncDecision(project,{...base,sceneId:'',syncToScene:true}),null);
+  assert.equal(recordSubtitleSceneSyncDecision(project,{...base,sceneId:'missing',syncToScene:true}),null);
+  assert.equal(project.learning.decisions.length,0);
 });
