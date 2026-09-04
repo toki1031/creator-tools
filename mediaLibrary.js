@@ -1,5 +1,6 @@
 const isRecord = value => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const stringOr = (value, fallback = '') => typeof value === 'string' ? value : fallback;
+const promotedLegacyAssetIds = new WeakMap();
 
 export function isImageDataUrl(value) {
   return typeof value === 'string' && value.toLowerCase().startsWith('data:image/') && value.includes(',');
@@ -93,9 +94,17 @@ export function addImageAsset(project, { data, fileName = '', createId, now = ()
 export function promoteLegacySceneImage(project, scene, { fileName = '旧シーン画像', createId, now } = {}) {
   if (!scene || !isImageDataUrl(scene.imageData)) return null;
   const asset = addImageAsset(project, { data:scene.imageData, fileName, createId, now });
+  promotedLegacyAssetIds.set(scene, asset.id);
   scene.imageAssetId = asset.id;
   delete scene.imageData;
   return asset;
+}
+
+export function consumePromotedLegacyAssetId(scene) {
+  if (!scene || typeof scene !== 'object') return '';
+  const id = promotedLegacyAssetIds.get(scene);
+  promotedLegacyAssetIds.delete(scene);
+  return typeof id === 'string' ? id : '';
 }
 
 export function assetUsageScenes(project, assetId) {
