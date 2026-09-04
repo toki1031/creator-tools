@@ -20,7 +20,7 @@ jobs:
         with:
           node-version: '22'
       - name: Apply scoped Issue 46 patch
-        run: node scripts/issue46-patch.mjs
+        run: node scripts/issue46-patch-v2.mjs
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Run regression tests
@@ -34,6 +34,7 @@ jobs:
       - name: Remove temporary patch runner
         run: |
           rm scripts/issue46-patch.mjs
+          rm scripts/issue46-patch-v2.mjs
           rm .github/workflows/issue46-patch.yml
       - name: Commit verified implementation
         run: |
