@@ -1,0 +1,207 @@
+name: Issue 52 Implementation Runner
+
+on:
+  push:
+    branches:
+      - issue-52-bgm-volume-v010
+
+permissions:
+  contents: write
+
+jobs:
+  implement-test-commit:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply Dataset v0.10 patch
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected one match, got {count}')
+              p.write_text(text.replace(old, new, 1))
+
+          decision_marker = "export function moveSceneWithDecision(project, index, direction, options = {}) {"
+          decision_block = r'''export function normalizeBgmVolume(value) {
+            const number = Number(value);
+            if (!Number.isFinite(number)) return null;
+            const clamped = Math.min(0.5, Math.max(0, number));
+            return Math.round((clamped + Number.EPSILON) * 100) / 100;
+          }
+
+          export function recordBgmVolumeChange(project, {
+            beforeVolume,
+            afterVolume,
+            bgmSource,
+            bgmCategory,
+            ducking,
+            loop
+          }, options = {}) {
+            const before = normalizeBgmVolume(beforeVolume);
+            const after = normalizeBgmVolume(afterVolume);
+            if (before === null || after === null || before === after) return null;
+
+            const bgm = isRecord(project?.bgm) ? project.bgm : {};
+            const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+            const currentSource = typeof bgmSource === 'string' ? bgmSource.trim() : stringOr(bgm.source).trim();
+            const currentCategory = typeof bgmCategory === 'string' ? bgmCategory.trim() : stringOr(bgm.category).trim();
+            const currentDucking = typeof ducking === 'boolean' ? ducking : Boolean(bgm.ducking);
+            const currentLoop = typeof loop === 'boolean' ? loop : Boolean(bgm.loop);
+            const hasNarration = Boolean(project?.narration?.audioData) || scenes.some(scene => Boolean(scene?.narration?.audioData));
+
+            return appendDecision(project, {
+              decisionType: 'bgm-volume',
+              sceneId: '',
+              context: {
+                platform: stringOr(project?.platform),
+                aspectRatio: stringOr(project?.aspectRatio),
+                bgmSource: currentSource,
+                bgmCategory: currentCategory,
+                hasBgmAudio: Boolean(bgm.audioData),
+                ducking: currentDucking,
+                loop: currentLoop,
+                sceneCount: scenes.length,
+                hasNarration
+              },
+              proposal: { volume: before },
+              alternatives: [],
+              humanAction: { type: 'set-bgm-volume' },
+              finalDecision: { volume: after },
+              reasonCode: '',
+              reasonNote: '',
+              source: { type: 'human', feature: 'bgm-editor', version: '0.10' },
+              assetIds: [],
+              rights: {}
+            }, options);
+          }
+
+          ''' + decision_marker
+          replace_once('decisionLog.js', decision_marker, decision_block)
+
+          old_import = 'import { ensureLearningState, moveSceneWithDecision, recordGlobalSubtitlePositionChange, recordSceneDurationChange, recordSceneImageSelection, recordSceneMotionChange, recordSceneSubtitlePositionChange, recordSceneTransitionChange, recordSubtitleContentChange, recordSubtitleSceneSyncDecision, snapshotGlobalSubtitlePosition, snapshotSceneSubtitlePosition } from "./decisionLog.js";'
+          new_import = 'import { ensureLearningState, moveSceneWithDecision, recordBgmVolumeChange, recordGlobalSubtitlePositionChange, recordSceneDurationChange, recordSceneImageSelection, recordSceneMotionChange, recordSceneSubtitlePositionChange, recordSceneTransitionChange, recordSubtitleContentChange, recordSubtitleSceneSyncDecision, snapshotGlobalSubtitlePosition, snapshotSceneSubtitlePosition } from "./decisionLog.js";'
+          replace_once('main.js', old_import, new_import)
+
+          old_handlers = "  ['source','category','bgmTitle','volume','fadeIn','fadeOut','ducking','loop','license','credit'].forEach(k=>root.querySelector('#'+k).oninput=()=>{updateLabels();save();});\n"
+          new_handlers = "  ['source','category','bgmTitle','fadeIn','fadeOut','ducking','loop','license','credit'].forEach(k=>root.querySelector('#'+k).oninput=()=>{updateLabels();save();});\n  const bgmVolumeBeforeByElement=new WeakMap();\n  const volumeEl=root.querySelector('#volume');\n  const rememberBgmVolumeBefore=el=>{if(bgmVolumeBeforeByElement.has(el))return;bgmVolumeBeforeByElement.set(el,Number(el.value));};\n  const commitBgmVolumeDecision=el=>{if(!bgmVolumeBeforeByElement.has(el))return;const before=bgmVolumeBeforeByElement.get(el);bgmVolumeBeforeByElement.delete(el);const record=recordBgmVolumeChange(project,{beforeVolume:before,afterVolume:Number(el.value),bgmSource:root.querySelector('#source').value,bgmCategory:root.querySelector('#category').value,ducking:root.querySelector('#ducking').checked,loop:root.querySelector('#loop').checked});if(record)save();};\n  volumeEl.onpointerdown=()=>rememberBgmVolumeBefore(volumeEl);\n  volumeEl.onfocus=()=>rememberBgmVolumeBefore(volumeEl);\n  volumeEl.onkeydown=()=>rememberBgmVolumeBefore(volumeEl);\n  volumeEl.oninput=()=>{updateLabels();save();};\n  volumeEl.onpointerup=()=>commitBgmVolumeDecision(volumeEl);\n  volumeEl.onpointercancel=()=>bgmVolumeBeforeByElement.delete(volumeEl);\n  volumeEl.onblur=()=>commitBgmVolumeDecision(volumeEl);\n"
+          replace_once('main.js', old_handlers, new_handlers)
+
+          replace_once('tests/decisionLog.test.mjs',
+              '  recordGlobalSubtitlePositionChange,\n',
+              '  recordBgmVolumeChange,\n  recordGlobalSubtitlePositionChange,\n')
+          replace_once('tests/decisionLog.test.mjs',
+              '  normalizeLearningState,\n',
+              '  normalizeLearningState,\n  normalizeBgmVolume,\n')
+
+          tests_path = Path('tests/decisionLog.test.mjs')
+          tests = tests_path.read_text()
+          marker = "test('bgm-volume records one committed volume decision with compact context'"
+          if marker not in tests:
+              tests += r'''
+
+          test('bgm-volume records one committed volume decision with compact context', () => {
+            const project={
+              id:'p-bgm',platform:'youtube-shorts',aspectRatio:'9:16',learning:{decisions:[]},
+              bgm:{source:'upload',category:'calm',volume:0.12,ducking:true,loop:true,audioData:'data:audio/wav;base64,QQ==',title:'secret title',fileName:'private.wav',license:'private license',credit:'private credit'},
+              narration:{audioData:''},
+              scenes:[{id:'s1',narration:{audioData:'data:audio/wav;base64,AA=='}},{id:'s2'}]
+            };
+            const record=recordBgmVolumeChange(project,{
+              beforeVolume:0.12,afterVolume:0.2,bgmSource:'upload',bgmCategory:'history',ducking:false,loop:true
+            },{createId:()=> 'd-bgm',now:()=> '2026-09-04T15:30:00.000Z'});
+            assert.equal(record.decisionType,'bgm-volume');
+            assert.equal(record.sceneId,'');
+            assert.deepEqual(record.proposal,{volume:0.12});
+            assert.deepEqual(record.finalDecision,{volume:0.2});
+            assert.deepEqual(record.humanAction,{type:'set-bgm-volume'});
+            assert.deepEqual(record.source,{type:'human',feature:'bgm-editor',version:'0.10'});
+            assert.deepEqual(record.alternatives,[]);
+            assert.deepEqual(record.assetIds,[]);
+            assert.deepEqual(record.rights,{});
+            assert.deepEqual(record.context,{
+              platform:'youtube-shorts',aspectRatio:'9:16',bgmSource:'upload',bgmCategory:'history',
+              hasBgmAudio:true,ducking:false,loop:true,sceneCount:2,hasNarration:true
+            });
+            const serialized=JSON.stringify(record);
+            assert.equal(serialized.includes('secret title'),false);
+            assert.equal(serialized.includes('private.wav'),false);
+            assert.equal(serialized.includes('private license'),false);
+            assert.equal(serialized.includes('private credit'),false);
+            assert.equal(serialized.includes('data:audio'),false);
+          });
+
+          test('normalizeBgmVolume clamps and rounds to the visible 0.01 range', () => {
+            assert.equal(normalizeBgmVolume(0),0);
+            assert.equal(normalizeBgmVolume(0.5),0.5);
+            assert.equal(normalizeBgmVolume(-1),0);
+            assert.equal(normalizeBgmVolume(1),0.5);
+            assert.equal(normalizeBgmVolume(0.126),0.13);
+            assert.equal(normalizeBgmVolume('0.234'),0.23);
+            assert.equal(normalizeBgmVolume('not-a-number'),null);
+            assert.equal(normalizeBgmVolume(undefined),null);
+          });
+
+          test('bgm-volume ignores invalid and same normalized values without noise', () => {
+            const project={id:'p',learning:{decisions:[]},bgm:{source:'none',volume:0.12},scenes:[]};
+            assert.equal(recordBgmVolumeChange(project,{beforeVolume:0.12,afterVolume:0.124}),null);
+            assert.equal(recordBgmVolumeChange(project,{beforeVolume:'bad',afterVolume:0.2}),null);
+            assert.equal(recordBgmVolumeChange(project,{beforeVolume:0.2,afterVolume:Number.NaN}),null);
+            assert.equal(project.learning.decisions.length,0);
+          });
+
+          test('bgm-volume falls back to project context and detects global narration', () => {
+            const project={
+              id:'p',platform:'instagram-reels',aspectRatio:'1:1',learning:{decisions:[]},
+              bgm:{source:'free',category:'emotion',ducking:true,loop:false,audioData:''},
+              narration:{audioData:'data:audio/wav;base64,AA=='},scenes:[{id:'s1'}]
+            };
+            const record=recordBgmVolumeChange(project,{beforeVolume:0,afterVolume:0.5});
+            assert.equal(record.context.bgmSource,'free');
+            assert.equal(record.context.bgmCategory,'emotion');
+            assert.equal(record.context.hasBgmAudio,false);
+            assert.equal(record.context.ducking,true);
+            assert.equal(record.context.loop,false);
+            assert.equal(record.context.sceneCount,1);
+            assert.equal(record.context.hasNarration,true);
+          });
+          '''
+              tests_path.write_text(tests)
+          PY
+      - name: Install dependencies without repository artifacts
+        run: npm install --package-lock=false --no-audit --no-fund
+      - name: Test
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Diff checks
+        shell: bash
+        run: |
+          git diff --check
+          git diff --exit-code 707d83362a58acf5dc31d634a3a8bc8504707679 -- videoRenderer.js db.js projectFactory.js subtitlePosition.js qualityLogic.js projectBackup.js
+          test "$(git diff --name-only 707d83362a58acf5dc31d634a3a8bc8504707679 -- decisionLog.js main.js tests/decisionLog.test.mjs | wc -l)" -eq 3
+      - name: Commit only intended source changes and remove runner
+        shell: bash
+        run: |
+          rm .github/workflows/issue52-runner.yml
+          rm -rf dist node_modules package-lock.json
+          git clean -fdx
+          changed="$(git diff --name-only 707d83362a58acf5dc31d634a3a8bc8504707679 | sort)"
+          expected="$(printf '%s\n' decisionLog.js main.js tests/decisionLog.test.mjs | sort)"
+          test "$changed" = "$expected"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add decisionLog.js main.js tests/decisionLog.test.mjs .github/workflows/issue52-runner.yml
+          git commit -m "Capture BGM volume decisions"
+          git push origin HEAD:issue-52-bgm-volume-v010
