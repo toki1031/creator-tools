@@ -32,3 +32,29 @@
   min-height: 44px;
   padding: 10px 14px;
 }
+
+/* Text edit Undo / Redo controls for iPhone and desktop. */
+.editor-undo-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 8px 0;
+  background: #10131c;
+}
+.editor-undo-toolbar button {
+  min-width: 118px;
+  min-height: 44px;
+  padding: 9px 12px;
+}
+@media (max-width: 640px) {
+  .editor-undo-toolbar {
+    justify-content: stretch;
+  }
+  .editor-undo-toolbar button {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+}
