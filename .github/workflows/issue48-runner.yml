@@ -1,0 +1,207 @@
+name: Issue 48 Implementation Runner
+
+on:
+  push:
+    branches:
+      - issue-48-global-subtitle-position-v08
+
+permissions:
+  contents: write
+
+jobs:
+  implement-test-commit:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply Dataset v0.8 patch
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected one match, got {count}')
+              p.write_text(text.replace(old, new, 1))
+
+          decision_marker = "export function moveSceneWithDecision(project, index, direction, options = {}) {"
+          decision_block = r'''export function snapshotGlobalSubtitlePosition(project) {
+            const style = isRecord(project?.subtitleStyle) ? project.subtitleStyle : {};
+            const position = stringOr(style.position).trim();
+            if (!SCENE_SUBTITLE_POSITIONS.has(position)) return null;
+            return { position, offsetPercent: normalizeSubtitleOffset(style.positionOffsetPercent) };
+          }
+
+          function normalizeGlobalSubtitlePositionState(value) {
+            if (!isRecord(value)) return null;
+            const position = stringOr(value.position).trim();
+            if (!SCENE_SUBTITLE_POSITIONS.has(position)) return null;
+            return { position, offsetPercent: normalizeSubtitleOffset(value.offsetPercent) };
+          }
+
+          export function recordGlobalSubtitlePositionChange(project, {
+            beforeState,
+            afterState
+          }, options = {}) {
+            const before = normalizeGlobalSubtitlePositionState(beforeState);
+            const after = normalizeGlobalSubtitlePositionState(afterState);
+            if (!before || !after || JSON.stringify(before) === JSON.stringify(after)) return null;
+
+            const style = isRecord(project?.subtitleStyle) ? project.subtitleStyle : {};
+            const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+            const sceneOverrideCount = scenes.filter(scene =>
+              SCENE_SUBTITLE_POSITIONS.has(stringOr(scene?.subtitlePosition).trim())
+            ).length;
+
+            return appendDecision(project, {
+              decisionType: 'global-subtitle-position',
+              sceneId: '',
+              context: {
+                platform: stringOr(project?.platform),
+                aspectRatio: stringOr(project?.aspectRatio),
+                subtitlePreset: stringOr(style.preset),
+                subtitleEnabled: style.enabled !== false,
+                sceneCount: scenes.length,
+                sceneOverrideCount,
+                inheritedSceneCount: scenes.length - sceneOverrideCount
+              },
+              proposal: before,
+              alternatives: [],
+              humanAction: { type: 'set-global-subtitle-position' },
+              finalDecision: after,
+              reasonCode: '',
+              reasonNote: '',
+              source: { type: 'human', feature: 'subtitle-editor', version: '0.8' },
+              assetIds: [],
+              rights: {}
+            }, options);
+          }
+
+          ''' + decision_marker
+          replace_once('decisionLog.js', decision_marker, decision_block)
+
+          old_import = 'import { ensureLearningState, moveSceneWithDecision, recordSceneDurationChange, recordSceneImageSelection, recordSceneMotionChange, recordSceneSubtitlePositionChange, recordSceneTransitionChange, recordSubtitleContentChange, snapshotSceneSubtitlePosition } from "./decisionLog.js";'
+          new_import = 'import { ensureLearningState, moveSceneWithDecision, recordGlobalSubtitlePositionChange, recordSceneDurationChange, recordSceneImageSelection, recordSceneMotionChange, recordSceneSubtitlePositionChange, recordSceneTransitionChange, recordSubtitleContentChange, snapshotGlobalSubtitlePosition, snapshotSceneSubtitlePosition } from "./decisionLog.js";'
+          replace_once('main.js', old_import, new_import)
+
+          old_handlers = '''  ['subtitleEnabled','subtitlePosition','positionOffset','fontSize','maxChars','maxLines','textColor','outlineColor','outlineWidth','backgroundEnabled','backgroundColor','backgroundOpacity'].forEach(k=>root.querySelector('#'+k).oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();});
+            root.querySelector('#resetPositionOffset').onclick=()=>{root.querySelector('#positionOffset').value='0';readGlobalSettings();updateLabels();renderSubtitlePreview();save();};'''
+          new_handlers = '''  ['subtitleEnabled','fontSize','maxChars','maxLines','textColor','outlineColor','outlineWidth','backgroundEnabled','backgroundColor','backgroundOpacity'].forEach(k=>root.querySelector('#'+k).oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();});
+            const globalSubtitlePositionBeforeByElement=new WeakMap();
+            const rememberGlobalSubtitlePositionBefore=el=>{if(globalSubtitlePositionBeforeByElement.has(el))return;globalSubtitlePositionBeforeByElement.set(el,snapshotGlobalSubtitlePosition(project));};
+            const commitGlobalSubtitlePositionDecision=el=>{if(!globalSubtitlePositionBeforeByElement.has(el))return;const before=globalSubtitlePositionBeforeByElement.get(el);globalSubtitlePositionBeforeByElement.delete(el);const after=snapshotGlobalSubtitlePosition(project);const record=recordGlobalSubtitlePositionChange(project,{beforeState:before,afterState:after});if(record)save();};
+            const globalPositionEl=root.querySelector('#subtitlePosition');
+            globalPositionEl.onchange=()=>{const before=snapshotGlobalSubtitlePosition(project);readGlobalSettings();const after=snapshotGlobalSubtitlePosition(project);recordGlobalSubtitlePositionChange(project,{beforeState:before,afterState:after});updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();};
+            const globalOffsetEl=root.querySelector('#positionOffset');
+            globalOffsetEl.onpointerdown=()=>rememberGlobalSubtitlePositionBefore(globalOffsetEl);
+            globalOffsetEl.onfocus=()=>rememberGlobalSubtitlePositionBefore(globalOffsetEl);
+            globalOffsetEl.onkeydown=()=>rememberGlobalSubtitlePositionBefore(globalOffsetEl);
+            globalOffsetEl.oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();};
+            globalOffsetEl.onpointerup=()=>commitGlobalSubtitlePositionDecision(globalOffsetEl);
+            globalOffsetEl.onblur=()=>commitGlobalSubtitlePositionDecision(globalOffsetEl);
+            root.querySelector('#resetPositionOffset').onclick=()=>{const before=snapshotGlobalSubtitlePosition(project);root.querySelector('#positionOffset').value='0';readGlobalSettings();const after=snapshotGlobalSubtitlePosition(project);recordGlobalSubtitlePositionChange(project,{beforeState:before,afterState:after});updateLabels();renderSubtitlePreview();save();};'''
+          replace_once('main.js', old_handlers, new_handlers)
+
+          replace_once('tests/decisionLog.test.mjs',
+              '  recordSceneDurationChange,\n',
+              '  recordGlobalSubtitlePositionChange,\n  recordSceneDurationChange,\n')
+          replace_once('tests/decisionLog.test.mjs',
+              '  snapshotSceneSubtitlePosition,\n',
+              '  snapshotGlobalSubtitlePosition,\n  snapshotSceneSubtitlePosition,\n')
+
+          tests_path = Path('tests/decisionLog.test.mjs')
+          tests = tests_path.read_text()
+          marker = "test('global-subtitle-position records explicit global position with context'"
+          if marker not in tests:
+              tests += r'''
+
+          test('global-subtitle-position records explicit global position with context', () => {
+            const project={
+              id:'p-global-subtitle',platform:'youtube-shorts',aspectRatio:'9:16',learning:{decisions:[]},
+              subtitleStyle:{position:'top',positionOffsetPercent:2,preset:'minimal',enabled:true},
+              scenes:[{id:'a'},{id:'b',subtitlePosition:'bottom'},{id:'c',subtitlePosition:'wipe'}]
+            };
+            const before=snapshotGlobalSubtitlePosition(project);
+            project.subtitleStyle.position='center';
+            project.subtitleStyle.positionOffsetPercent=-3;
+            const after=snapshotGlobalSubtitlePosition(project);
+            const record=recordGlobalSubtitlePositionChange(project,{beforeState:before,afterState:after},{createId:()=> 'd-global',now:()=> '2026-09-04T14:00:00.000Z'});
+            assert.equal(record.decisionType,'global-subtitle-position');
+            assert.equal(record.sceneId,'');
+            assert.deepEqual(record.proposal,{position:'top',offsetPercent:2});
+            assert.deepEqual(record.finalDecision,{position:'center',offsetPercent:-3});
+            assert.deepEqual(record.humanAction,{type:'set-global-subtitle-position'});
+            assert.deepEqual(record.source,{type:'human',feature:'subtitle-editor',version:'0.8'});
+            assert.equal(record.context.platform,'youtube-shorts');
+            assert.equal(record.context.aspectRatio,'9:16');
+            assert.equal(record.context.subtitlePreset,'minimal');
+            assert.equal(record.context.subtitleEnabled,true);
+            assert.equal(record.context.sceneCount,3);
+            assert.equal(record.context.sceneOverrideCount,1);
+            assert.equal(record.context.inheritedSceneCount,2);
+            assert.deepEqual(record.assetIds,[]);
+            assert.deepEqual(record.rights,{});
+          });
+
+          test('global-subtitle-position normalizes offset and records reset', () => {
+            const project={id:'p',learning:{decisions:[]},subtitleStyle:{position:'bottom',positionOffsetPercent:99},scenes:[]};
+            const moved=recordGlobalSubtitlePositionChange(project,{beforeState:{position:'bottom',offsetPercent:99},afterState:{position:'top',offsetPercent:-99}});
+            assert.deepEqual(moved.proposal,{position:'bottom',offsetPercent:15});
+            assert.deepEqual(moved.finalDecision,{position:'top',offsetPercent:-15});
+            const reset=recordGlobalSubtitlePositionChange(project,{beforeState:{position:'top',offsetPercent:-5},afterState:{position:'top',offsetPercent:0}});
+            assert.equal(reset.proposal.offsetPercent,-5);
+            assert.equal(reset.finalDecision.offsetPercent,0);
+          });
+
+          test('global-subtitle-position ignores same normalized state and invalid positions', () => {
+            const project={id:'p',learning:{decisions:[]},subtitleStyle:{position:'bottom'},scenes:[]};
+            assert.equal(recordGlobalSubtitlePositionChange(project,{beforeState:{position:'top',offsetPercent:99},afterState:{position:'top',offsetPercent:15}}),null);
+            assert.equal(recordGlobalSubtitlePositionChange(project,{beforeState:{position:'wipe',offsetPercent:0},afterState:{position:'top',offsetPercent:0}}),null);
+            assert.equal(recordGlobalSubtitlePositionChange(project,{beforeState:{position:'top',offsetPercent:0},afterState:{position:'invalid',offsetPercent:0}}),null);
+            assert.equal(project.learning.decisions.length,0);
+          });
+
+          test('snapshotGlobalSubtitlePosition follows current visible global state', () => {
+            const project={subtitleStyle:{position:'center',positionOffsetPercent:-99}};
+            assert.deepEqual(snapshotGlobalSubtitlePosition(project),{position:'center',offsetPercent:-15});
+            assert.equal(snapshotGlobalSubtitlePosition({subtitleStyle:{position:'wipe',positionOffsetPercent:0}}),null);
+            assert.equal(snapshotGlobalSubtitlePosition({}),null);
+          });
+          '''
+              tests_path.write_text(tests)
+          PY
+      - name: Install dependencies without repository artifacts
+        run: npm install --package-lock=false --no-audit --no-fund
+      - name: Test
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Diff checks
+        shell: bash
+        run: |
+          git diff --check
+          git diff --exit-code d0b85f547a7eee7d0233a0188a3bbda0caf4a1d8 -- videoRenderer.js db.js projectFactory.js subtitlePosition.js
+          test "$(git diff --name-only d0b85f547a7eee7d0233a0188a3bbda0caf4a1d8 -- decisionLog.js main.js tests/decisionLog.test.mjs | wc -l)" -eq 3
+      - name: Commit only intended source changes and remove runner
+        shell: bash
+        run: |
+          rm .github/workflows/issue48-runner.yml
+          rm -rf dist node_modules package-lock.json
+          git clean -fdx
+          changed="$(git diff --name-only d0b85f547a7eee7d0233a0188a3bbda0caf4a1d8 | sort)"
+          expected="$(printf '%s\n' decisionLog.js main.js tests/decisionLog.test.mjs | sort)"
+          test "$changed" = "$expected"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add decisionLog.js main.js tests/decisionLog.test.mjs .github/workflows/issue48-runner.yml
+          git commit -m "Capture global subtitle position decisions"
+          git push origin HEAD:issue-48-global-subtitle-position-v08
