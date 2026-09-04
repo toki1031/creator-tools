@@ -66,6 +66,7 @@ audio,progress{width:100%;margin-top:12px}
 
 <script type="module">
 import { getProject, saveProject } from "./db.js";
+import { recordNarrationVoiceDecision } from "./decisionLog.js";
 const $=s=>document.querySelector(s);
 document.documentElement.dataset.voiceLabBoot = 'js-started';
 let tts=null, wavBlob=null, wavUrl=null;
@@ -173,6 +174,10 @@ $('#register').onclick=async()=>{
   const project=await getProject(projectId);
   if(!project) throw new Error(`対象プロジェクトが見つかりません: ${projectId}`);
 
+  const narrationVoiceBefore=project.narration?.voiceId;
+  const hadProjectNarrationBefore=Boolean(project.narration?.audioData);
+  const sceneNarrationCountBefore=(Array.isArray(project.scenes)?project.scenes:[]).filter(scene=>Boolean(scene?.narration?.audioData)).length;
+
   project.narration={
     ...(project.narration||{}),
     audioData,
@@ -182,6 +187,13 @@ $('#register').onclick=async()=>{
     voiceId:voice,
     volume:project.narration?.volume ?? 1
   };
+  recordNarrationVoiceDecision(project,{
+    beforeVoiceId:narrationVoiceBefore,
+    afterVoiceId:voice,
+    generationMode:'full',
+    hadProjectNarration:hadProjectNarrationBefore,
+    sceneNarrationCountBefore
+  });
   project.speechScript=text || project.speechScript || '';
   project.updatedAt=new Date().toISOString();
   await saveProject(project);
@@ -232,6 +244,10 @@ $('#generateScenes').onclick=async()=>{
     const scenes=Array.isArray(project.scenes)?project.scenes:[];
     if(!scenes.length) throw new Error('シーンがありません。Creator OSの「2. シーン」で台本を分割してください。');
 
+    const narrationVoiceBefore=project.narration?.voiceId;
+    const hadProjectNarrationBefore=Boolean(project.narration?.audioData);
+    const sceneNarrationCountBefore=scenes.filter(scene=>Boolean(scene?.narration?.audioData)).length;
+
     const voice=$('#voice').value;
     let total=0;
     const results=[];
@@ -281,6 +297,13 @@ $('#generateScenes').onclick=async()=>{
       sceneMode:true,
       sceneCount:scenes.length
     };
+    recordNarrationVoiceDecision(project,{
+      beforeVoiceId:narrationVoiceBefore,
+      afterVoiceId:voice,
+      generationMode:'scenes',
+      hadProjectNarration:hadProjectNarrationBefore,
+      sceneNarrationCountBefore
+    });
     project.updatedAt=new Date().toISOString();
     await saveProject(project);
 

@@ -9,7 +9,9 @@ import {
   normalizeDecisionRecord,
   normalizeLearningState,
   normalizeBgmVolume,
+  normalizeNarrationVoiceId,
   recordBgmVolumeChange,
+  recordNarrationVoiceDecision,
   recordGlobalSubtitlePositionChange,
   recordSubtitleSceneSyncDecision,
   recordSceneDurationChange,
@@ -707,4 +709,53 @@ test('bgm-volume falls back to project context and detects global narration', ()
   assert.equal(record.context.loop,false);
   assert.equal(record.context.sceneCount,1);
   assert.equal(record.context.hasNarration,true);
+});
+
+
+test('narration-voice records first Kokoro voice adoption without audio payload', () => {
+  const project={id:'p-voice',platform:'youtube-shorts',aspectRatio:'9:16',learning:{decisions:[]},narration:{audioData:'',voiceId:'legacy-browser-voice'},scenes:[{id:'s1',narration:{audioData:'data:audio/wav;base64,AA=='}},{id:'s2'}]};
+  const record=recordNarrationVoiceDecision(project,{beforeVoiceId:'legacy-browser-voice',afterVoiceId:'jf_alpha',generationMode:'scenes',hadProjectNarration:false,sceneNarrationCountBefore:1},{createId:()=> 'd-voice-1',now:()=> '2026-09-05T00:00:00.000Z'});
+  assert.equal(record.decisionType,'narration-voice');
+  assert.equal(record.sceneId,'');
+  assert.deepEqual(record.proposal,{voiceId:null});
+  assert.deepEqual(record.finalDecision,{voiceId:'jf_alpha'});
+  assert.deepEqual(record.humanAction,{type:'choose-narration-voice',generationMode:'scenes'});
+  assert.deepEqual(record.source,{type:'human',feature:'voice-lab',version:'0.11'});
+  assert.equal(record.context.engine,'kokoro-js-jp');
+  assert.equal(record.context.generationMode,'scenes');
+  assert.equal(record.context.sceneCount,2);
+  assert.equal(record.context.hadProjectNarration,false);
+  assert.equal(record.context.sceneNarrationCountBefore,1);
+  assert.equal(record.alternatives.length,4);
+  assert.equal(record.alternatives.some(item=>item.voiceId==='jf_alpha'),false);
+  assert.equal(JSON.stringify(record).includes('data:audio'),false);
+});
+
+test('narration-voice records a changed accepted voice in full mode', () => {
+  const project={id:'p-voice',platform:'instagram-reels',aspectRatio:'1:1',learning:{decisions:[]},narration:{audioData:'data:audio/wav;base64,OLD',voiceId:'jf_alpha',fileName:'old.wav'},scenes:[{id:'s1'}]};
+  const record=recordNarrationVoiceDecision(project,{beforeVoiceId:'jf_alpha',afterVoiceId:'jm_kumo',generationMode:'full',hadProjectNarration:true,sceneNarrationCountBefore:0});
+  assert.deepEqual(record.proposal,{voiceId:'jf_alpha'});
+  assert.deepEqual(record.finalDecision,{voiceId:'jm_kumo'});
+  assert.equal(record.context.generationMode,'full');
+  assert.equal(record.context.hadProjectNarration,true);
+  assert.equal(record.alternatives.some(item=>item.voiceId==='jf_alpha'),true);
+  assert.equal(record.alternatives.some(item=>item.voiceId==='jm_kumo'),false);
+  const serialized=JSON.stringify(record);
+  assert.equal(serialized.includes('OLD'),false);
+  assert.equal(serialized.includes('old.wav'),false);
+});
+
+test('narration voice normalization only accepts current Kokoro Voice Lab ids', () => {
+  for(const id of ['jf_alpha','jf_gongitsune','jf_nezumi','jf_tebukuro','jm_kumo']) assert.equal(normalizeNarrationVoiceId(id),id);
+  assert.equal(normalizeNarrationVoiceId(''),null);
+  assert.equal(normalizeNarrationVoiceId('legacy'),null);
+  assert.equal(normalizeNarrationVoiceId(undefined),null);
+});
+
+test('narration-voice ignores same voice, invalid final voice and invalid generation mode', () => {
+  const project={id:'p',learning:{decisions:[]},narration:{},scenes:[]};
+  assert.equal(recordNarrationVoiceDecision(project,{beforeVoiceId:'jf_alpha',afterVoiceId:'jf_alpha',generationMode:'full'}),null);
+  assert.equal(recordNarrationVoiceDecision(project,{beforeVoiceId:null,afterVoiceId:'invalid',generationMode:'full'}),null);
+  assert.equal(recordNarrationVoiceDecision(project,{beforeVoiceId:null,afterVoiceId:'jf_alpha',generationMode:'preview'}),null);
+  assert.equal(project.learning.decisions.length,0);
 });
