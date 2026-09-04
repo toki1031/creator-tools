@@ -237,3 +237,25 @@ test('実際のバックアップpayloadをJSON化して主要制作データを
   assert.equal(restored.finalReview,undefined);
   assert.deepEqual(normalized.pronunciationDictionary,[{from:'本田',to:'ほんだ'}]);
 });
+
+
+test('BGM audioAssetIdをschemaVersion 4のままbackup restoreで保持する', () => {
+  const raw=sample();
+  raw.bgm.audioAssetId='audio-sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad';
+  const normalized=normalizeImportedProject(raw);
+  assert.equal(normalized.project.schemaVersion,4);
+  assert.equal(normalized.project.bgm.audioAssetId,raw.bgm.audioAssetId);
+  const restored=createRestoredProject(normalized.project);
+  assert.equal(restored.bgm.audioAssetId,raw.bgm.audioAssetId);
+  const payload=createProjectBackupPayload(restored);
+  assert.equal(payload.bgm.audioAssetId,raw.bgm.audioAssetId);
+});
+
+test('不正なBGM audioAssetIdは音源自体を壊さず除外する', () => {
+  const raw=sample();
+  raw.bgm.audioAssetId='audio-sha256:not-a-valid-hash';
+  const normalized=normalizeImportedProject(raw);
+  assert.equal(normalized.project.bgm.audioAssetId,'');
+  assert.equal(normalized.project.bgm.audioData,audio);
+  assert.ok(normalized.warnings.some(item=>item.includes('BGM音源ID')));
+});

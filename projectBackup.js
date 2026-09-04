@@ -1,5 +1,6 @@
 import { findMediaAsset, isImageDataUrl, normalizeMediaLibrary, resolveSceneImageSource } from './mediaLibrary.js';
 import { normalizeLearningState } from './decisionLog.js';
+import { normalizeAudioAssetId } from './audioAssetIdentity.js';
 
 export const CURRENT_PROJECT_SCHEMA_VERSION = 4;
 export const LARGE_BACKUP_WARNING_BYTES = 25 * 1024 * 1024;
@@ -123,6 +124,9 @@ export function normalizeImportedProject(input, { createId } = {}) {
   const narration = normalizeNarration(source.narration, warnings, '全体ナレーション');
   const bgmSource = isRecord(source.bgm) ? safeClone(source.bgm) : {};
   if (!isRecord(source.bgm)) fixes.push('BGM設定を補完');
+  const requestedBgmAudioAssetId = stringOr(bgmSource.audioAssetId).trim();
+  const bgmAudioAssetId = normalizeAudioAssetId(requestedBgmAudioAssetId);
+  if (requestedBgmAudioAssetId && !bgmAudioAssetId) warnings.push('BGM音源IDを無効な値として除外しました。');
   const subtitleSource = isRecord(source.subtitleStyle) ? safeClone(source.subtitleStyle) : {};
   const offset = Math.min(15, Math.max(-15, Math.round(finiteOr(subtitleSource.positionOffsetPercent, 0))));
   const outputSource = isRecord(source.output) ? safeClone(source.output) : {};
@@ -132,7 +136,8 @@ export function normalizeImportedProject(input, { createId } = {}) {
     ...bgmSource, source:stringOr(bgmSource.source, 'none'), title:stringOr(bgmSource.title), category:stringOr(bgmSource.category, 'calm'),
     volume:finiteOr(bgmSource.volume, .12), ducking:booleanOr(bgmSource.ducking, true), fadeInSec:finiteOr(bgmSource.fadeInSec, 1),
     fadeOutSec:finiteOr(bgmSource.fadeOutSec, 2), loop:booleanOr(bgmSource.loop, true), license:stringOr(bgmSource.license),
-    credit:stringOr(bgmSource.credit), audioData:cleanDataUrl(bgmSource.audioData, 'audio', 'BGM音源', warnings), fileName:stringOr(bgmSource.fileName)
+    credit:stringOr(bgmSource.credit), audioData:cleanDataUrl(bgmSource.audioData, 'audio', 'BGM音源', warnings), fileName:stringOr(bgmSource.fileName),
+    audioAssetId:bgmAudioAssetId
   };
   source.subtitleStyle = {
     ...subtitleSource, enabled:booleanOr(subtitleSource.enabled, true), preset:stringOr(subtitleSource.preset, 'standard'),
