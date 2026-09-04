@@ -8,6 +8,8 @@ import {
   moveSceneWithDecision,
   normalizeDecisionRecord,
   normalizeLearningState,
+  normalizeBgmVolume,
+  recordBgmVolumeChange,
   recordGlobalSubtitlePositionChange,
   recordSubtitleSceneSyncDecision,
   recordSceneDurationChange,
@@ -638,4 +640,71 @@ test('subtitle-scene-sync ignores dismissed or invalid choices and missing Scene
   assert.equal(recordSubtitleSceneSyncDecision(project,{...base,sceneId:'',syncToScene:true}),null);
   assert.equal(recordSubtitleSceneSyncDecision(project,{...base,sceneId:'missing',syncToScene:true}),null);
   assert.equal(project.learning.decisions.length,0);
+});
+
+
+test('bgm-volume records one committed volume decision with compact context', () => {
+  const project={
+    id:'p-bgm',platform:'youtube-shorts',aspectRatio:'9:16',learning:{decisions:[]},
+    bgm:{source:'upload',category:'calm',volume:0.12,ducking:true,loop:true,audioData:'data:audio/wav;base64,QQ==',title:'secret title',fileName:'private.wav',license:'private license',credit:'private credit'},
+    narration:{audioData:''},
+    scenes:[{id:'s1',narration:{audioData:'data:audio/wav;base64,AA=='}},{id:'s2'}]
+  };
+  const record=recordBgmVolumeChange(project,{
+    beforeVolume:0.12,afterVolume:0.2,bgmSource:'upload',bgmCategory:'history',ducking:false,loop:true
+  },{createId:()=> 'd-bgm',now:()=> '2026-09-04T15:30:00.000Z'});
+  assert.equal(record.decisionType,'bgm-volume');
+  assert.equal(record.sceneId,'');
+  assert.deepEqual(record.proposal,{volume:0.12});
+  assert.deepEqual(record.finalDecision,{volume:0.2});
+  assert.deepEqual(record.humanAction,{type:'set-bgm-volume'});
+  assert.deepEqual(record.source,{type:'human',feature:'bgm-editor',version:'0.10'});
+  assert.deepEqual(record.alternatives,[]);
+  assert.deepEqual(record.assetIds,[]);
+  assert.deepEqual(record.rights,{});
+  assert.deepEqual(record.context,{
+    platform:'youtube-shorts',aspectRatio:'9:16',bgmSource:'upload',bgmCategory:'history',
+    hasBgmAudio:true,ducking:false,loop:true,sceneCount:2,hasNarration:true
+  });
+  const serialized=JSON.stringify(record);
+  assert.equal(serialized.includes('secret title'),false);
+  assert.equal(serialized.includes('private.wav'),false);
+  assert.equal(serialized.includes('private license'),false);
+  assert.equal(serialized.includes('private credit'),false);
+  assert.equal(serialized.includes('data:audio'),false);
+});
+
+test('normalizeBgmVolume clamps and rounds to the visible 0.01 range', () => {
+  assert.equal(normalizeBgmVolume(0),0);
+  assert.equal(normalizeBgmVolume(0.5),0.5);
+  assert.equal(normalizeBgmVolume(-1),0);
+  assert.equal(normalizeBgmVolume(1),0.5);
+  assert.equal(normalizeBgmVolume(0.126),0.13);
+  assert.equal(normalizeBgmVolume('0.234'),0.23);
+  assert.equal(normalizeBgmVolume('not-a-number'),null);
+  assert.equal(normalizeBgmVolume(undefined),null);
+});
+
+test('bgm-volume ignores invalid and same normalized values without noise', () => {
+  const project={id:'p',learning:{decisions:[]},bgm:{source:'none',volume:0.12},scenes:[]};
+  assert.equal(recordBgmVolumeChange(project,{beforeVolume:0.12,afterVolume:0.124}),null);
+  assert.equal(recordBgmVolumeChange(project,{beforeVolume:'bad',afterVolume:0.2}),null);
+  assert.equal(recordBgmVolumeChange(project,{beforeVolume:0.2,afterVolume:Number.NaN}),null);
+  assert.equal(project.learning.decisions.length,0);
+});
+
+test('bgm-volume falls back to project context and detects global narration', () => {
+  const project={
+    id:'p',platform:'instagram-reels',aspectRatio:'1:1',learning:{decisions:[]},
+    bgm:{source:'free',category:'emotion',ducking:true,loop:false,audioData:''},
+    narration:{audioData:'data:audio/wav;base64,AA=='},scenes:[{id:'s1'}]
+  };
+  const record=recordBgmVolumeChange(project,{beforeVolume:0,afterVolume:0.5});
+  assert.equal(record.context.bgmSource,'free');
+  assert.equal(record.context.bgmCategory,'emotion');
+  assert.equal(record.context.hasBgmAudio,false);
+  assert.equal(record.context.ducking,true);
+  assert.equal(record.context.loop,false);
+  assert.equal(record.context.sceneCount,1);
+  assert.equal(record.context.hasNarration,true);
 });
