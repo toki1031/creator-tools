@@ -555,6 +555,53 @@ export function recordGlobalSubtitlePositionChange(project, {
   }, options);
 }
 
+export function recordSubtitleSceneSyncDecision(project, {
+  sceneId,
+  sceneIndex,
+  sceneTextBefore,
+  subtitleTextAfter,
+  sceneTextCandidate,
+  syncToScene,
+  speechTextFollowsScene,
+  hadNarration
+}, options = {}) {
+  if (!sceneId || typeof syncToScene !== 'boolean') return null;
+
+  const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+  const requestedIndex = Number(sceneIndex);
+  const resolvedIndex = Number.isInteger(requestedIndex) && requestedIndex >= 0 && requestedIndex < scenes.length
+    && String(scenes[requestedIndex]?.id || '') === String(sceneId)
+    ? requestedIndex
+    : scenes.findIndex(scene => String(scene?.id || '') === String(sceneId));
+  const scene = resolvedIndex >= 0 ? scenes[resolvedIndex] : null;
+  if (!scene) return null;
+
+  return appendDecision(project, {
+    decisionType: 'subtitle-scene-sync',
+    sceneId: String(sceneId),
+    context: {
+      sceneIndex: resolvedIndex,
+      sceneTextBefore: stringOr(sceneTextBefore),
+      subtitleTextAfter: stringOr(subtitleTextAfter),
+      sceneTextCandidate: stringOr(sceneTextCandidate),
+      durationSec: Number.isFinite(Number(scene.durationSec)) ? Number(scene.durationSec) : null,
+      platform: stringOr(project?.platform),
+      aspectRatio: stringOr(project?.aspectRatio),
+      speechTextFollowsScene: Boolean(speechTextFollowsScene),
+      hadNarration: Boolean(hadNarration)
+    },
+    proposal: { syncToScene: false },
+    alternatives: [{ syncToScene: true }],
+    humanAction: { type: 'choose-subtitle-scene-sync' },
+    finalDecision: { syncToScene },
+    reasonCode: '',
+    reasonNote: '',
+    source: { type: 'human', feature: 'subtitle-editor', version: '0.9' },
+    assetIds: [],
+    rights: {}
+  }, options);
+}
+
 export function moveSceneWithDecision(project, index, direction, options = {}) {
   ensureLearningState(project);
   const scenes = Array.isArray(project?.scenes) ? project.scenes : [];

@@ -9,7 +9,7 @@ import { normalizeSubtitleOffset, resolveEffectiveSubtitlePosition, resolveSubti
 import { assessMvpVideoResult, describeVideoExportFailure, isMvpShortsProject, validateMvpShortsOutput } from "./videoMvp.js";
 import { createGenerationStartController, projectExpectsVideoAudio } from "./videoGenerationStart.js";
 import { applyDictionaryEntries, normalizeSubtitleContentForSync, splitIntoScenes, splitSubtitleCards, subtitleContentChanged } from "./qualityLogic.js";
-import { ensureLearningState, moveSceneWithDecision, recordGlobalSubtitlePositionChange, recordSceneDurationChange, recordSceneImageSelection, recordSceneMotionChange, recordSceneSubtitlePositionChange, recordSceneTransitionChange, recordSubtitleContentChange, snapshotGlobalSubtitlePosition, snapshotSceneSubtitlePosition } from "./decisionLog.js";
+import { ensureLearningState, moveSceneWithDecision, recordGlobalSubtitlePositionChange, recordSceneDurationChange, recordSceneImageSelection, recordSceneMotionChange, recordSceneSubtitlePositionChange, recordSceneTransitionChange, recordSubtitleContentChange, recordSubtitleSceneSyncDecision, snapshotGlobalSubtitlePosition, snapshotSceneSubtitlePosition } from "./decisionLog.js";
 
 const rootElement = document.querySelector("#app");
 if (!rootElement) throw new Error("#app がありません。");
@@ -107,17 +107,17 @@ function askSubtitleSceneSync() {
   const dialog = getSubtitleSceneSyncDialog();
   return new Promise(resolve => {
     let settled = false;
-    const finish = sync => {
+    const finish = choice => {
       if (settled) return;
       settled = true;
       dialog.oncancel = null;
       if (typeof dialog.close === 'function' && dialog.open) dialog.close();
       else dialog.removeAttribute('open');
-      resolve(sync);
+      resolve(choice);
     };
-    dialog.querySelector('[data-subtitle-only]').onclick = () => finish(false);
-    dialog.querySelector('[data-subtitle-sync]').onclick = () => finish(true);
-    dialog.oncancel = event => { event.preventDefault(); finish(false); };
+    dialog.querySelector('[data-subtitle-only]').onclick = () => finish('subtitle-only');
+    dialog.querySelector('[data-subtitle-sync]').onclick = () => finish('sync-to-scene');
+    dialog.oncancel = event => { event.preventDefault(); finish('dismissed'); };
     if (typeof dialog.showModal === 'function') dialog.showModal();
     else dialog.setAttribute('open', '');
   });
@@ -807,7 +807,7 @@ async function renderBgm(id) {
     list.querySelectorAll('[data-sub-text]').forEach(el=>{
       el.onfocus=()=>{const i=Number(el.dataset.subText);subtitleBeforeByElement.set(el,String(scenes[i]?.subtitleText??''));};
       el.oninput=()=>{const i=Number(el.dataset.subText);scenes[i].subtitleText=el.value;const f=formatSubtitleLines(el.value,st.maxCharsPerLine,st.maxLines);const count=list.querySelector(`[data-sub-count="${i}"]`);count.textContent=`${f.chars}文字／目安${st.maxCharsPerLine*st.maxLines}文字${f.overflow?'・長すぎます':''}`;count.classList.toggle('warning',f.overflow);updateSubtitleCount();if(Number(root.querySelector('#previewScene').value)===i)renderSubtitlePreview();save();};
-      el.onblur=async()=>{const i=Number(el.dataset.subText),scene=scenes[i];if(!scene)return;const before=subtitleBeforeByElement.has(el)?subtitleBeforeByElement.get(el):String(scene.subtitleText??'');subtitleBeforeByElement.delete(el);const after=String(scene.subtitleText??'');const record=recordSubtitleContentChange(project,{sceneId:scene.id,beforeText:before,afterText:after,sceneIndex:i,maxCharsPerLine:st.maxCharsPerLine,maxLines:st.maxLines});if(record)save();const changeKinds=Array.isArray(record?.humanAction?.changeKinds)?record.humanAction.changeKinds:[];if(!changeKinds.includes('text')||!subtitleContentChanged(scene.text||'',after))return;const shouldSync=await askSubtitleSceneSync();if(!shouldSync)return;const sceneText=normalizeSubtitleContentForSync(after);updateSceneText(scene,sceneText);scene.subtitleText=after;renderSubtitleEditor();renderSubtitlePreview();save();};
+      el.onblur=async()=>{const i=Number(el.dataset.subText),scene=scenes[i];if(!scene)return;const before=subtitleBeforeByElement.has(el)?subtitleBeforeByElement.get(el):String(scene.subtitleText??'');subtitleBeforeByElement.delete(el);const after=String(scene.subtitleText??'');const record=recordSubtitleContentChange(project,{sceneId:scene.id,beforeText:before,afterText:after,sceneIndex:i,maxCharsPerLine:st.maxCharsPerLine,maxLines:st.maxLines});if(record)save();const changeKinds=Array.isArray(record?.humanAction?.changeKinds)?record.humanAction.changeKinds:[];if(!changeKinds.includes('text')||!subtitleContentChanged(scene.text||'',after))return;const sceneTextBefore=String(scene.text||''),sceneText=normalizeSubtitleContentForSync(after),speechTextFollowsScene=scene.speechText==null||normalizeSceneText(scene.speechText)===normalizeSceneText(sceneTextBefore),hadNarration=Boolean(scene.narration);const syncChoice=await askSubtitleSceneSync();if(syncChoice==='dismissed')return;const shouldSync=syncChoice==='sync-to-scene';const syncRecord=recordSubtitleSceneSyncDecision(project,{sceneId:scene.id,sceneIndex:i,sceneTextBefore,subtitleTextAfter:after,sceneTextCandidate:sceneText,syncToScene:shouldSync,speechTextFollowsScene,hadNarration});if(syncRecord)save();if(!shouldSync)return;updateSceneText(scene,sceneText);scene.subtitleText=after;renderSubtitleEditor();renderSubtitlePreview();save();};
     });
     list.querySelectorAll('[data-sub-enabled]').forEach(el=>el.onchange=()=>{scenes[Number(el.dataset.subEnabled)].subtitleEnabled=el.checked;updateSubtitleCount();renderSubtitlePreview();save();});
     list.querySelectorAll('[data-sub-start]').forEach(el=>el.oninput=()=>{const i=Number(el.dataset.subStart),duration=Math.max(1,Number(scenes[i].durationSec)||1);scenes[i].subtitleStartSec=Math.min(duration,Math.max(0,Number(el.value)||0));if(scenes[i].subtitleEndSec<scenes[i].subtitleStartSec)scenes[i].subtitleEndSec=scenes[i].subtitleStartSec;save();});
