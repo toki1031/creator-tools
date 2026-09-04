@@ -9,7 +9,7 @@ import { normalizeSubtitleOffset, resolveEffectiveSubtitlePosition, resolveSubti
 import { assessMvpVideoResult, describeVideoExportFailure, isMvpShortsProject, validateMvpShortsOutput } from "./videoMvp.js";
 import { createGenerationStartController, projectExpectsVideoAudio } from "./videoGenerationStart.js";
 import { applyDictionaryEntries, normalizeSubtitleContentForSync, splitIntoScenes, splitSubtitleCards, subtitleContentChanged } from "./qualityLogic.js";
-import { ensureLearningState, moveSceneWithDecision, recordSceneDurationChange, recordSubtitleContentChange } from "./decisionLog.js";
+import { ensureLearningState, moveSceneWithDecision, recordSceneDurationChange, recordSceneImageSelection, recordSubtitleContentChange } from "./decisionLog.js";
 
 const rootElement = document.querySelector("#app");
 if (!rootElement) throw new Error("#app がありません。");
@@ -484,9 +484,12 @@ async function renderScenes(id) {
       const scene=project.scenes[libraryTargetIndex];
       if(!scene)return;
       const assetId=button.dataset.useAsset;
+      const beforeAssetId=scene.imageAssetId||null;
+      const candidateAssetIds=filtered.map(asset=>asset.id);
       promoteLegacySceneImage(project,scene,{fileName:`シーン ${libraryTargetIndex+1} の旧画像`});
       scene.imageAssetId=assetId;
       delete scene.imageData;
+      recordSceneImageSelection(project,{sceneId:scene.id,beforeAssetId,afterAssetId:assetId,sceneIndex:libraryTargetIndex,candidateAssetIds});
       save();mediaLibraryDialog.close();renderList();
     });
     grid.querySelectorAll("[data-rename-asset]").forEach(input=>input.onchange=()=>{

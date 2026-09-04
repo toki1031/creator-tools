@@ -8,10 +8,13 @@ import {
   normalizeDecisionRecord,
   normalizeLearningState,
   recordSceneDurationChange,
+  recordSceneImageSelection,
   recordSceneOrderChange,
   recordSubtitleContentChange,
   snapshotSceneOrder
 } from '../decisionLog.js';
+
+const imageData = 'data:image/png;base64,QQ==';
 
 test('new project starts with an empty learning decision list', () => {
   const project = createProject('QA', 'great-person', 'youtube-shorts');
@@ -254,4 +257,67 @@ test('subtitle-content distinguishes card split and normalizes CRLF without dupl
   });
   assert.equal(unchanged, null);
   assert.equal(project.learning.decisions.length, 1);
+});
+
+test('scene-image-selection records null to asset with scene context and no inferred rights', () => {
+  const project = {
+    id: 'p-image', platform: 'youtube-shorts', aspectRatio: '9:16', learning: { decisions: [] },
+    mediaLibrary: [{ id: 'asset-a', type: 'image', data: imageData }],
+    scenes: [{ id: 'scene-a', text: '採用する画像のシーン' }]
+  };
+  const record = recordSceneImageSelection(project, {
+    sceneId: 'scene-a', beforeAssetId: null, afterAssetId: 'asset-a', sceneIndex: 0
+  }, { createId: () => 'decision-image-a', now: () => '2026-09-04T00:00:00.000Z' });
+
+  assert.equal(record.decisionType, 'scene-image-selection');
+  assert.equal(record.sceneId, 'scene-a');
+  assert.equal(record.context.sceneText, '採用する画像のシーン');
+  assert.equal(record.context.sceneIndex, 0);
+  assert.equal(record.context.platform, 'youtube-shorts');
+  assert.equal(record.context.aspectRatio, '9:16');
+  assert.deepEqual(record.proposal, { imageAssetId: null });
+  assert.deepEqual(record.finalDecision, { imageAssetId: 'asset-a' });
+  assert.deepEqual(record.assetIds, ['asset-a']);
+  assert.deepEqual(record.rights, {});
+  assert.equal(record.humanAction.type, 'select-image-asset');
+  assert.equal(record.source.type, 'human');
+  assert.equal(project.learning.decisions.length, 1);
+});
+
+test('scene-image-selection records asset replacement once and ignores the same asset', () => {
+  const project = {
+    id: 'p-image', learning: { decisions: [] },
+    mediaLibrary: [
+      { id: 'asset-a', type: 'image', data: imageData },
+      { id: 'asset-b', type: 'image', data: imageData }
+    ],
+    scenes: [{ id: 'scene-a', text: 'scene', imageAssetId: 'asset-b' }]
+  };
+  const record = recordSceneImageSelection(project, {
+    sceneId: 'scene-a', beforeAssetId: 'asset-a', afterAssetId: 'asset-b', sceneIndex: 0
+  });
+  assert.deepEqual(record.proposal, { imageAssetId: 'asset-a' });
+  assert.deepEqual(record.finalDecision, { imageAssetId: 'asset-b' });
+  assert.equal(recordSceneImageSelection(project, {
+    sceneId: 'scene-a', beforeAssetId: 'asset-b', afterAssetId: 'asset-b', sceneIndex: 0
+  }), null);
+  assert.equal(project.learning.decisions.length, 1);
+});
+
+test('scene-image-selection filters invalid duplicate asset ids and only copies existing rights metadata', () => {
+  const project = {
+    id: 'p-image', learning: { decisions: [] },
+    mediaLibrary: [
+      { id: 'asset-a', type: 'image', data: imageData },
+      { id: 'asset-b', type: 'image', data: imageData, license: 'CC BY', source: 'Example', rights: { attributionRequired: true } }
+    ],
+    scenes: [{ id: 'scene-a', text: 'scene' }]
+  };
+  const record = recordSceneImageSelection(project, {
+    sceneId: 'scene-a', beforeAssetId: 'missing', afterAssetId: 'asset-b', sceneIndex: 0,
+    candidateAssetIds: [null, 'asset-a', 'asset-a', 'missing', 'asset-b']
+  });
+  assert.deepEqual(record.alternatives, [{ imageAssetId: 'asset-a' }]);
+  assert.deepEqual(record.assetIds, ['asset-b', 'asset-a']);
+  assert.deepEqual(record.rights, { attributionRequired: true, license: 'CC BY', source: 'Example' });
 });
