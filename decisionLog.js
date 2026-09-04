@@ -655,6 +655,67 @@ export function recordBgmVolumeChange(project, {
   }, options);
 }
 
+const KOKORO_NARRATION_VOICES = [
+  'jf_alpha',
+  'jf_gongitsune',
+  'jf_nezumi',
+  'jf_tebukuro',
+  'jm_kumo'
+];
+const KOKORO_NARRATION_VOICE_SET = new Set(KOKORO_NARRATION_VOICES);
+
+export function normalizeNarrationVoiceId(value) {
+  const voiceId = stringOr(value).trim();
+  return KOKORO_NARRATION_VOICE_SET.has(voiceId) ? voiceId : null;
+}
+
+export function recordNarrationVoiceDecision(project, {
+  beforeVoiceId,
+  afterVoiceId,
+  generationMode,
+  hadProjectNarration,
+  sceneNarrationCountBefore
+}, options = {}) {
+  const after = normalizeNarrationVoiceId(afterVoiceId);
+  if (!after) return null;
+  const before = normalizeNarrationVoiceId(beforeVoiceId);
+  if (before === after) return null;
+  const mode = generationMode === 'full' || generationMode === 'scenes' ? generationMode : '';
+  if (!mode) return null;
+
+  const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+  const suppliedSceneNarrationCount = Number(sceneNarrationCountBefore);
+  const priorSceneNarrationCount = Number.isInteger(suppliedSceneNarrationCount) && suppliedSceneNarrationCount >= 0
+    ? suppliedSceneNarrationCount
+    : scenes.filter(scene => Boolean(scene?.narration?.audioData)).length;
+  const priorProjectNarration = typeof hadProjectNarration === 'boolean'
+    ? hadProjectNarration
+    : Boolean(project?.narration?.audioData);
+
+  return appendDecision(project, {
+    decisionType: 'narration-voice',
+    sceneId: '',
+    context: {
+      platform: stringOr(project?.platform),
+      aspectRatio: stringOr(project?.aspectRatio),
+      engine: 'kokoro-js-jp',
+      generationMode: mode,
+      sceneCount: scenes.length,
+      hadProjectNarration: priorProjectNarration,
+      sceneNarrationCountBefore: priorSceneNarrationCount
+    },
+    proposal: { voiceId: before },
+    alternatives: KOKORO_NARRATION_VOICES.filter(voiceId => voiceId !== after).map(voiceId => ({ voiceId })),
+    humanAction: { type: 'choose-narration-voice', generationMode: mode },
+    finalDecision: { voiceId: after },
+    reasonCode: '',
+    reasonNote: '',
+    source: { type: 'human', feature: 'voice-lab', version: '0.11' },
+    assetIds: [],
+    rights: {}
+  }, options);
+}
+
 export function moveSceneWithDecision(project, index, direction, options = {}) {
   ensureLearningState(project);
   const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
