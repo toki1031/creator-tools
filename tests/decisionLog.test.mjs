@@ -10,6 +10,7 @@ import {
   recordSceneDurationChange,
   recordSceneImageSelection,
   recordSceneMotionChange,
+  recordSceneTransitionChange,
   recordSceneOrderChange,
   recordSubtitleContentChange,
   snapshotSceneOrder
@@ -48,7 +49,7 @@ test('snapshotSceneOrder preserves scene ids, order and text', () => {
   const snapshot = snapshotSceneOrder({ scenes: [
     { id: 's1', text: 'first' },
     { id: 's2', text: 'second' }
-  ] });
+  ]});
   assert.deepEqual(snapshot, [
     { sceneId: 's1', order: 1, text: 'first' },
     { sceneId: 's2', order: 2, text: 'second' }
@@ -361,4 +362,98 @@ test('scene-motion ignores the same motion value', () => {
   });
   assert.equal(record, null);
   assert.equal(project.learning.decisions.length, 0);
+});
+
+test('scene-transition records fade to cut with scene context and valid image rights', () => {
+  const project = {
+    id: 'p-transition', schemaVersion: 4, platform: 'youtube-shorts', aspectRatio: '9:16', learning: { decisions: [] },
+    mediaLibrary: [{
+      id: 'asset-image', type: 'image', data: imageData,
+      license: 'CC BY', rights: { attributionRequired: true }
+    }],
+    scenes: [{
+      id: 'scene-transition', text: '切り替えを選ぶシーン', durationSec: 7,
+      imageAssetId: 'asset-image', transition: 'cut'
+    }]
+  };
+  const record = recordSceneTransitionChange(project, {
+    sceneId: 'scene-transition', beforeTransition: 'fade', afterTransition: 'cut', sceneIndex: 0
+  }, { createId: () => 'decision-transition', now: () => '2026-09-04T12:00:00.000Z' });
+
+  assert.equal(record.decisionType, 'scene-transition');
+  assert.equal(record.sceneId, 'scene-transition');
+  assert.deepEqual(record.context, {
+    sceneText: '切り替えを選ぶシーン', sceneIndex: 0, durationSec: 7,
+    platform: 'youtube-shorts', aspectRatio: '9:16', imageAssetId: 'asset-image'
+  });
+  assert.deepEqual(record.proposal, { transition: 'fade' });
+  assert.deepEqual(record.alternatives, []);
+  assert.deepEqual(record.humanAction, { type: 'select-scene-transition' });
+  assert.deepEqual(record.finalDecision, { transition: 'cut' });
+  assert.deepEqual(record.source, { type: 'human', feature: 'scene-editor', version: '0.6' });
+  assert.deepEqual(record.assetIds, ['asset-image']);
+  assert.deepEqual(record.rights, { attributionRequired: true, license: 'CC BY' });
+  assert.equal(record.timestamp, '2026-09-04T12:00:00.000Z');
+  assert.equal(project.learning.decisions.length, 1);
+  assert.equal(project.schemaVersion, 4);
+});
+
+test('scene-transition records cut to fade without invalid image metadata', () => {
+  const project = {
+    id: 'p-transition', platform: 'instagram-reels', aspectRatio: '9:16', learning: { decisions: [] },
+    mediaLibrary: [{ id: 'not-an-image', type: 'video', data: 'data:video/mp4;base64,QQ==' }],
+    scenes: [{ id: 'scene-transition', text: 'カットからフェード', durationSec: 4, imageAssetId: 'not-an-image' }]
+  };
+  const record = recordSceneTransitionChange(project, {
+    sceneId: 'scene-transition', beforeTransition: 'cut', afterTransition: 'fade', sceneIndex: 0
+  });
+
+  assert.deepEqual(record.proposal, { transition: 'cut' });
+  assert.deepEqual(record.finalDecision, { transition: 'fade' });
+  assert.equal('imageAssetId' in record.context, false);
+  assert.deepEqual(record.assetIds, []);
+  assert.deepEqual(record.rights, {});
+  assert.equal(project.learning.decisions.length, 1);
+});
+
+test('scene-transition ignores unchanged, invalid, or missing scene selections', () => {
+  const project = {
+    id: 'p-transition', learning: { decisions: [] },
+    scenes: [{ id: 'scene-transition', text: '記録しない', durationSec: 5 }]
+  };
+
+  assert.equal(recordSceneTransitionChange(project, {
+    sceneId: 'scene-transition', beforeTransition: 'fade', afterTransition: 'fade', sceneIndex: 0
+  }), null);
+  assert.equal(recordSceneTransitionChange(project, {
+    sceneId: 'scene-transition', beforeTransition: 'none', afterTransition: 'cut', sceneIndex: 0
+  }), null);
+  assert.equal(recordSceneTransitionChange(project, {
+    sceneId: 'scene-transition', beforeTransition: 'cut', afterTransition: 'wipe', sceneIndex: 0
+  }), null);
+  assert.equal(recordSceneTransitionChange(project, {
+    sceneId: '', beforeTransition: 'fade', afterTransition: 'cut', sceneIndex: 0
+  }), null);
+  assert.equal(recordSceneTransitionChange(project, {
+    sceneId: 'missing', beforeTransition: 'fade', afterTransition: 'cut', sceneIndex: 0
+  }), null);
+  assert.equal(project.learning.decisions.length, 0);
+});
+
+test('scene-transition treats an unset scene transition as the UI default fade before cut', () => {
+  const project = {
+    id: 'p-transition-default', learning: { decisions: [] },
+    scenes: [{ id: 'scene-transition-default', text: '未設定の切り替え', durationSec: 5 }]
+  };
+  const scene = project.scenes[0];
+  const before = scene.transition === 'cut' ? 'cut' : 'fade';
+  const after = 'cut';
+  scene.transition = after;
+  const record = recordSceneTransitionChange(project, {
+    sceneId: scene.id, beforeTransition: before, afterTransition: after, sceneIndex: 0
+  });
+
+  assert.deepEqual(record.proposal, { transition: 'fade' });
+  assert.deepEqual(record.finalDecision, { transition: 'cut' });
+  assert.equal(project.learning.decisions.length, 1);
 });
