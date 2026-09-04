@@ -1,0 +1,203 @@
+name: Issue 50 Implementation Runner
+
+on:
+  push:
+    branches:
+      - issue-50-subtitle-scene-sync-v09
+
+permissions:
+  contents: write
+
+jobs:
+  implement-test-commit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply Dataset v0.9 patch
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected one match, got {count}')
+              p.write_text(text.replace(old, new, 1))
+
+          decision_marker = "export function moveSceneWithDecision(project, index, direction, options = {}) {"
+          decision_block = r'''export function recordSubtitleSceneSyncDecision(project, {
+            sceneId,
+            sceneIndex,
+            sceneTextBefore,
+            subtitleTextAfter,
+            sceneTextCandidate,
+            syncToScene,
+            speechTextFollowsScene,
+            hadNarration
+          }, options = {}) {
+            if (!sceneId || typeof syncToScene !== 'boolean') return null;
+
+            const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+            const requestedIndex = Number(sceneIndex);
+            const resolvedIndex = Number.isInteger(requestedIndex) && requestedIndex >= 0 && requestedIndex < scenes.length
+              && String(scenes[requestedIndex]?.id || '') === String(sceneId)
+              ? requestedIndex
+              : scenes.findIndex(scene => String(scene?.id || '') === String(sceneId));
+            const scene = resolvedIndex >= 0 ? scenes[resolvedIndex] : null;
+            if (!scene) return null;
+
+            return appendDecision(project, {
+              decisionType: 'subtitle-scene-sync',
+              sceneId: String(sceneId),
+              context: {
+                sceneIndex: resolvedIndex,
+                sceneTextBefore: stringOr(sceneTextBefore),
+                subtitleTextAfter: stringOr(subtitleTextAfter),
+                sceneTextCandidate: stringOr(sceneTextCandidate),
+                durationSec: Number.isFinite(Number(scene.durationSec)) ? Number(scene.durationSec) : null,
+                platform: stringOr(project?.platform),
+                aspectRatio: stringOr(project?.aspectRatio),
+                speechTextFollowsScene: Boolean(speechTextFollowsScene),
+                hadNarration: Boolean(hadNarration)
+              },
+              proposal: { syncToScene: false },
+              alternatives: [{ syncToScene: true }],
+              humanAction: { type: 'choose-subtitle-scene-sync' },
+              finalDecision: { syncToScene },
+              reasonCode: '',
+              reasonNote: '',
+              source: { type: 'human', feature: 'subtitle-editor', version: '0.9' },
+              assetIds: [],
+              rights: {}
+            }, options);
+          }
+
+          ''' + decision_marker
+          replace_once('decisionLog.js', decision_marker, decision_block)
+
+          old_import = 'import { ensureLearningState, moveSceneWithDecision, recordGlobalSubtitlePositionChange, recordSceneDurationChange, recordSceneImageSelection, recordSceneMotionChange, recordSceneSubtitlePositionChange, recordSceneTransitionChange, recordSubtitleContentChange, snapshotGlobalSubtitlePosition, snapshotSceneSubtitlePosition } from "./decisionLog.js";'
+          new_import = 'import { ensureLearningState, moveSceneWithDecision, recordGlobalSubtitlePositionChange, recordSceneDurationChange, recordSceneImageSelection, recordSceneMotionChange, recordSceneSubtitlePositionChange, recordSceneTransitionChange, recordSubtitleContentChange, recordSubtitleSceneSyncDecision, snapshotGlobalSubtitlePosition, snapshotSceneSubtitlePosition } from "./decisionLog.js";'
+          replace_once('main.js', old_import, new_import)
+
+          replace_once('main.js', '    const finish = sync => {\n', '    const finish = choice => {\n')
+          replace_once('main.js', '      resolve(sync);\n', '      resolve(choice);\n')
+          replace_once('main.js', "    dialog.querySelector('[data-subtitle-only]').onclick = () => finish(false);\n", "    dialog.querySelector('[data-subtitle-only]').onclick = () => finish('subtitle-only');\n")
+          replace_once('main.js', "    dialog.querySelector('[data-subtitle-sync]').onclick = () => finish(true);\n", "    dialog.querySelector('[data-subtitle-sync]').onclick = () => finish('sync-to-scene');\n")
+          replace_once('main.js', "    dialog.oncancel = event => { event.preventDefault(); finish(false); };\n", "    dialog.oncancel = event => { event.preventDefault(); finish('dismissed'); };\n")
+
+          old_caller = "const shouldSync=await askSubtitleSceneSync();if(!shouldSync)return;const sceneText=normalizeSubtitleContentForSync(after);updateSceneText(scene,sceneText);scene.subtitleText=after;renderSubtitleEditor();renderSubtitlePreview();save();"
+          new_caller = "const sceneTextBefore=String(scene.text||''),sceneText=normalizeSubtitleContentForSync(after),speechTextFollowsScene=scene.speechText==null||normalizeSceneText(scene.speechText)===normalizeSceneText(sceneTextBefore),hadNarration=Boolean(scene.narration);const syncChoice=await askSubtitleSceneSync();if(syncChoice==='dismissed')return;const shouldSync=syncChoice==='sync-to-scene';const syncRecord=recordSubtitleSceneSyncDecision(project,{sceneId:scene.id,sceneIndex:i,sceneTextBefore,subtitleTextAfter:after,sceneTextCandidate:sceneText,syncToScene:shouldSync,speechTextFollowsScene,hadNarration});if(syncRecord)save();if(!shouldSync)return;updateSceneText(scene,sceneText);scene.subtitleText=after;renderSubtitleEditor();renderSubtitlePreview();save();"
+          replace_once('main.js', old_caller, new_caller)
+
+          replace_once('tests/decisionLog.test.mjs',
+              "import { createProject } from '../projectFactory.js';\n",
+              "import { createProject } from '../projectFactory.js';\nimport { normalizeSubtitleContentForSync } from '../qualityLogic.js';\n")
+          replace_once('tests/decisionLog.test.mjs',
+              '  recordGlobalSubtitlePositionChange,\n',
+              '  recordGlobalSubtitlePositionChange,\n  recordSubtitleSceneSyncDecision,\n')
+
+          tests_path = Path('tests/decisionLog.test.mjs')
+          tests = tests_path.read_text()
+          marker = "test('subtitle-scene-sync records explicit sync-to-scene choice with context'"
+          if marker not in tests:
+              tests += r'''
+
+          test('subtitle-scene-sync records explicit sync-to-scene choice with context', () => {
+            const subtitleTextAfter='新しい\n字幕\n\nカード';
+            const sceneTextCandidate=normalizeSubtitleContentForSync(subtitleTextAfter);
+            const project={
+              id:'p-sync',platform:'youtube-shorts',aspectRatio:'9:16',learning:{decisions:[]},
+              scenes:[{id:'s1',text:'旧本文',speechText:'旧本文',durationSec:5,narration:{audioData:'data:audio/wav;base64,QQ=='}}]
+            };
+            const record=recordSubtitleSceneSyncDecision(project,{
+              sceneId:'s1',sceneIndex:0,sceneTextBefore:'旧本文',subtitleTextAfter,sceneTextCandidate,
+              syncToScene:true,speechTextFollowsScene:true,hadNarration:true
+            },{createId:()=> 'd-sync',now:()=> '2026-09-04T14:50:00.000Z'});
+            assert.equal(record.decisionType,'subtitle-scene-sync');
+            assert.equal(record.sceneId,'s1');
+            assert.deepEqual(record.proposal,{syncToScene:false});
+            assert.deepEqual(record.alternatives,[{syncToScene:true}]);
+            assert.deepEqual(record.finalDecision,{syncToScene:true});
+            assert.deepEqual(record.humanAction,{type:'choose-subtitle-scene-sync'});
+            assert.deepEqual(record.source,{type:'human',feature:'subtitle-editor',version:'0.9'});
+            assert.equal(record.context.sceneIndex,0);
+            assert.equal(record.context.sceneTextBefore,'旧本文');
+            assert.equal(record.context.subtitleTextAfter,subtitleTextAfter);
+            assert.equal(record.context.sceneTextCandidate,'新しい字幕カード');
+            assert.equal(record.context.durationSec,5);
+            assert.equal(record.context.platform,'youtube-shorts');
+            assert.equal(record.context.aspectRatio,'9:16');
+            assert.equal(record.context.speechTextFollowsScene,true);
+            assert.equal(record.context.hadNarration,true);
+            assert.deepEqual(record.assetIds,[]);
+            assert.deepEqual(record.rights,{});
+          });
+
+          test('subtitle-scene-sync records explicit subtitle-only choice even when final matches proposal', () => {
+            const project={id:'p',learning:{decisions:[]},scenes:[{id:'s1',text:'旧本文',durationSec:4}]};
+            const record=recordSubtitleSceneSyncDecision(project,{
+              sceneId:'s1',sceneIndex:0,sceneTextBefore:'旧本文',subtitleTextAfter:'新本文',sceneTextCandidate:'新本文',
+              syncToScene:false,speechTextFollowsScene:false,hadNarration:false
+            });
+            assert.deepEqual(record.proposal,{syncToScene:false});
+            assert.deepEqual(record.finalDecision,{syncToScene:false});
+            assert.equal(project.learning.decisions.length,1);
+          });
+
+          test('subtitle-scene-sync resolves Scene by id and preserves decision context flags', () => {
+            const project={id:'p',platform:'instagram-reels',aspectRatio:'9:16',learning:{decisions:[]},scenes:[{id:'a'},{id:'b',durationSec:7}]};
+            const record=recordSubtitleSceneSyncDecision(project,{
+              sceneId:'b',sceneIndex:0,sceneTextBefore:'A',subtitleTextAfter:'B',sceneTextCandidate:'B',
+              syncToScene:true,speechTextFollowsScene:false,hadNarration:false
+            });
+            assert.equal(record.context.sceneIndex,1);
+            assert.equal(record.context.durationSec,7);
+            assert.equal(record.context.speechTextFollowsScene,false);
+            assert.equal(record.context.hadNarration,false);
+          });
+
+          test('subtitle-scene-sync ignores dismissed or invalid choices and missing Scene', () => {
+            const project={id:'p',learning:{decisions:[]},scenes:[{id:'s1'}]};
+            const base={sceneIndex:0,sceneTextBefore:'A',subtitleTextAfter:'B',sceneTextCandidate:'B',speechTextFollowsScene:true,hadNarration:false};
+            assert.equal(recordSubtitleSceneSyncDecision(project,{...base,sceneId:'s1',syncToScene:'dismissed'}),null);
+            assert.equal(recordSubtitleSceneSyncDecision(project,{...base,sceneId:'',syncToScene:true}),null);
+            assert.equal(recordSubtitleSceneSyncDecision(project,{...base,sceneId:'missing',syncToScene:true}),null);
+            assert.equal(project.learning.decisions.length,0);
+          });
+          '''
+              tests_path.write_text(tests)
+          PY
+      - name: Install dependencies without repository artifacts
+        run: npm install --package-lock=false --no-audit --no-fund
+      - name: Test
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Diff checks
+        shell: bash
+        run: |
+          git diff --check
+          git diff --exit-code b6c8adb42c6b1aeca1f0fdc18ca35864e529cf7b -- videoRenderer.js db.js projectFactory.js subtitlePosition.js qualityLogic.js
+          test "$(git diff --name-only b6c8adb42c6b1aeca1f0fdc18ca35864e529cf7b -- decisionLog.js main.js tests/decisionLog.test.mjs | wc -l)" -eq 3
+      - name: Commit only intended source changes and remove runner
+        shell: bash
+        run: |
+          rm .github/workflows/issue50-runner.yml
+          rm -rf dist node_modules package-lock.json
+          git clean -fdx
+          changed="$(git diff --name-only b6c8adb42c6b1aeca1f0fdc18ca35864e529cf7b | sort)"
+          expected="$(printf '%s\n' decisionLog.js main.js tests/decisionLog.test.mjs | sort)"
+          test "$changed" = "$expected"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add decisionLog.js main.js tests/decisionLog.test.mjs .github/workflows/issue50-runner.yml
+          git commit -m "Capture subtitle Scene sync decisions"
+          git push origin HEAD:issue-50-subtitle-scene-sync-v09
