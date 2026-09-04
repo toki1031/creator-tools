@@ -1,4 +1,5 @@
 import { consumePromotedLegacyAssetId, isImageDataUrl } from './mediaLibrary.js';
+import { normalizeSubtitleOffset } from './subtitlePosition.js';
 
 const isRecord = value => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const stringOr = (value, fallback = '') => typeof value === 'string' ? value : fallback;
@@ -418,6 +419,85 @@ export function recordSceneTransitionChange(project, {
     reasonCode: '',
     reasonNote: '',
     source: { type: 'human', feature: 'scene-editor', version: '0.6' },
+    assetIds: imageAsset ? [imageAssetId] : [],
+    rights: imageAsset ? imageAssetRights(imageAsset) : {}
+  }, options);
+}
+
+const SCENE_SUBTITLE_POSITIONS = new Set(['top', 'center', 'bottom']);
+
+export function snapshotSceneSubtitlePosition(scene) {
+  const position = stringOr(scene?.subtitlePosition).trim();
+  if (!position) return { mode: 'inherit', position: null, offsetPercent: null };
+  if (!SCENE_SUBTITLE_POSITIONS.has(position)) return null;
+  return {
+    mode: 'override',
+    position,
+    offsetPercent: normalizeSubtitleOffset(scene?.subtitlePositionOffsetPercent)
+  };
+}
+
+function normalizeSceneSubtitlePositionState(value) {
+  if (!isRecord(value)) return null;
+  const mode = stringOr(value.mode).trim();
+  if (mode === 'inherit') return { mode: 'inherit', position: null, offsetPercent: null };
+  const position = stringOr(value.position).trim();
+  if (mode !== 'override' || !SCENE_SUBTITLE_POSITIONS.has(position)) return null;
+  return { mode: 'override', position, offsetPercent: normalizeSubtitleOffset(value.offsetPercent) };
+}
+
+export function recordSceneSubtitlePositionChange(project, {
+  sceneId,
+  beforeState,
+  afterState,
+  sceneIndex
+}, options = {}) {
+  if (!sceneId) return null;
+  const before = normalizeSceneSubtitlePositionState(beforeState);
+  const after = normalizeSceneSubtitlePositionState(afterState);
+  if (!before || !after || JSON.stringify(before) === JSON.stringify(after)) return null;
+
+  const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+  const requestedIndex = Number(sceneIndex);
+  const resolvedIndex = Number.isInteger(requestedIndex) && requestedIndex >= 0 && requestedIndex < scenes.length
+    && String(scenes[requestedIndex]?.id || '') === String(sceneId)
+    ? requestedIndex
+    : scenes.findIndex(scene => String(scene?.id || '') === String(sceneId));
+  const scene = resolvedIndex >= 0 ? scenes[resolvedIndex] : null;
+  if (!scene) return null;
+
+  const globalStyle = isRecord(project?.subtitleStyle) ? project.subtitleStyle : {};
+  const globalStylePosition = stringOr(globalStyle.position).trim();
+  const outputPosition = stringOr(project?.output?.subtitlePosition).trim();
+  const globalSubtitlePosition = SCENE_SUBTITLE_POSITIONS.has(globalStylePosition)
+    ? globalStylePosition
+    : SCENE_SUBTITLE_POSITIONS.has(outputPosition) ? outputPosition : 'bottom';
+
+  const assets = validImageAssetMap(project);
+  const imageAssetId = stringOr(scene.imageAssetId).trim();
+  const imageAsset = assets.get(imageAssetId);
+  const context = {
+    sceneText: stringOr(scene.text),
+    sceneIndex: resolvedIndex,
+    durationSec: Number.isFinite(Number(scene.durationSec)) ? Number(scene.durationSec) : null,
+    platform: stringOr(project?.platform),
+    aspectRatio: stringOr(project?.aspectRatio),
+    globalSubtitlePosition,
+    globalSubtitleOffsetPercent: normalizeSubtitleOffset(globalStyle.positionOffsetPercent)
+  };
+  if (imageAsset) context.imageAssetId = imageAssetId;
+
+  return appendDecision(project, {
+    decisionType: 'scene-subtitle-position',
+    sceneId: String(sceneId),
+    context,
+    proposal: before,
+    alternatives: [],
+    humanAction: { type: 'set-scene-subtitle-position' },
+    finalDecision: after,
+    reasonCode: '',
+    reasonNote: '',
+    source: { type: 'human', feature: 'subtitle-editor', version: '0.7' },
     assetIds: imageAsset ? [imageAssetId] : [],
     rights: imageAsset ? imageAssetRights(imageAsset) : {}
   }, options);

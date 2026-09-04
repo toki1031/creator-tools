@@ -1,0 +1,9 @@
+{
+  "name": "Creator OS",
+  "short_name": "Creator OS",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0b0e15",
+  "theme_color": "#10131c",
+  "description": "動画・SNS制作を支援するCreator OS"
+}
