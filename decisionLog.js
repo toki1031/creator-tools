@@ -503,6 +503,58 @@ export function recordSceneSubtitlePositionChange(project, {
   }, options);
 }
 
+export function snapshotGlobalSubtitlePosition(project) {
+  const style = isRecord(project?.subtitleStyle) ? project.subtitleStyle : {};
+  const position = stringOr(style.position).trim();
+  if (!SCENE_SUBTITLE_POSITIONS.has(position)) return null;
+  return { position, offsetPercent: normalizeSubtitleOffset(style.positionOffsetPercent) };
+}
+
+function normalizeGlobalSubtitlePositionState(value) {
+  if (!isRecord(value)) return null;
+  const position = stringOr(value.position).trim();
+  if (!SCENE_SUBTITLE_POSITIONS.has(position)) return null;
+  return { position, offsetPercent: normalizeSubtitleOffset(value.offsetPercent) };
+}
+
+export function recordGlobalSubtitlePositionChange(project, {
+  beforeState,
+  afterState
+}, options = {}) {
+  const before = normalizeGlobalSubtitlePositionState(beforeState);
+  const after = normalizeGlobalSubtitlePositionState(afterState);
+  if (!before || !after || JSON.stringify(before) === JSON.stringify(after)) return null;
+
+  const style = isRecord(project?.subtitleStyle) ? project.subtitleStyle : {};
+  const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+  const sceneOverrideCount = scenes.filter(scene =>
+    SCENE_SUBTITLE_POSITIONS.has(stringOr(scene?.subtitlePosition).trim())
+  ).length;
+
+  return appendDecision(project, {
+    decisionType: 'global-subtitle-position',
+    sceneId: '',
+    context: {
+      platform: stringOr(project?.platform),
+      aspectRatio: stringOr(project?.aspectRatio),
+      subtitlePreset: stringOr(style.preset),
+      subtitleEnabled: style.enabled !== false,
+      sceneCount: scenes.length,
+      sceneOverrideCount,
+      inheritedSceneCount: scenes.length - sceneOverrideCount
+    },
+    proposal: before,
+    alternatives: [],
+    humanAction: { type: 'set-global-subtitle-position' },
+    finalDecision: after,
+    reasonCode: '',
+    reasonNote: '',
+    source: { type: 'human', feature: 'subtitle-editor', version: '0.8' },
+    assetIds: [],
+    rights: {}
+  }, options);
+}
+
 export function moveSceneWithDecision(project, index, direction, options = {}) {
   ensureLearningState(project);
   const scenes = Array.isArray(project?.scenes) ? project.scenes : [];

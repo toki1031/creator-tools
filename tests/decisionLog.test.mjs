@@ -7,11 +7,13 @@ import {
   moveSceneWithDecision,
   normalizeDecisionRecord,
   normalizeLearningState,
+  recordGlobalSubtitlePositionChange,
   recordSceneDurationChange,
   recordSceneImageSelection,
   recordSceneMotionChange,
   recordSceneSubtitlePositionChange,
   recordSceneTransitionChange,
+  snapshotGlobalSubtitlePosition,
   snapshotSceneSubtitlePosition,
   recordSceneOrderChange,
   recordSubtitleContentChange,
@@ -516,4 +518,58 @@ test('scene-subtitle-position snapshots scene state and only connects valid imag
   assert.equal(record.context.imageAssetId,'img');
   assert.deepEqual(record.assetIds,['img']);
   assert.deepEqual(record.rights,{attributionRequired:true,license:'CC BY'});
+});
+
+
+test('global-subtitle-position records explicit global position with context', () => {
+  const project={
+    id:'p-global-subtitle',platform:'youtube-shorts',aspectRatio:'9:16',learning:{decisions:[]},
+    subtitleStyle:{position:'top',positionOffsetPercent:2,preset:'minimal',enabled:true},
+    scenes:[{id:'a'},{id:'b',subtitlePosition:'bottom'},{id:'c',subtitlePosition:'wipe'}]
+  };
+  const before=snapshotGlobalSubtitlePosition(project);
+  project.subtitleStyle.position='center';
+  project.subtitleStyle.positionOffsetPercent=-3;
+  const after=snapshotGlobalSubtitlePosition(project);
+  const record=recordGlobalSubtitlePositionChange(project,{beforeState:before,afterState:after},{createId:()=> 'd-global',now:()=> '2026-09-04T14:00:00.000Z'});
+  assert.equal(record.decisionType,'global-subtitle-position');
+  assert.equal(record.sceneId,'');
+  assert.deepEqual(record.proposal,{position:'top',offsetPercent:2});
+  assert.deepEqual(record.finalDecision,{position:'center',offsetPercent:-3});
+  assert.deepEqual(record.humanAction,{type:'set-global-subtitle-position'});
+  assert.deepEqual(record.source,{type:'human',feature:'subtitle-editor',version:'0.8'});
+  assert.equal(record.context.platform,'youtube-shorts');
+  assert.equal(record.context.aspectRatio,'9:16');
+  assert.equal(record.context.subtitlePreset,'minimal');
+  assert.equal(record.context.subtitleEnabled,true);
+  assert.equal(record.context.sceneCount,3);
+  assert.equal(record.context.sceneOverrideCount,1);
+  assert.equal(record.context.inheritedSceneCount,2);
+  assert.deepEqual(record.assetIds,[]);
+  assert.deepEqual(record.rights,{});
+});
+
+test('global-subtitle-position normalizes offset and records reset', () => {
+  const project={id:'p',learning:{decisions:[]},subtitleStyle:{position:'bottom',positionOffsetPercent:99},scenes:[]};
+  const moved=recordGlobalSubtitlePositionChange(project,{beforeState:{position:'bottom',offsetPercent:99},afterState:{position:'top',offsetPercent:-99}});
+  assert.deepEqual(moved.proposal,{position:'bottom',offsetPercent:15});
+  assert.deepEqual(moved.finalDecision,{position:'top',offsetPercent:-15});
+  const reset=recordGlobalSubtitlePositionChange(project,{beforeState:{position:'top',offsetPercent:-5},afterState:{position:'top',offsetPercent:0}});
+  assert.equal(reset.proposal.offsetPercent,-5);
+  assert.equal(reset.finalDecision.offsetPercent,0);
+});
+
+test('global-subtitle-position ignores same normalized state and invalid positions', () => {
+  const project={id:'p',learning:{decisions:[]},subtitleStyle:{position:'bottom'},scenes:[]};
+  assert.equal(recordGlobalSubtitlePositionChange(project,{beforeState:{position:'top',offsetPercent:99},afterState:{position:'top',offsetPercent:15}}),null);
+  assert.equal(recordGlobalSubtitlePositionChange(project,{beforeState:{position:'wipe',offsetPercent:0},afterState:{position:'top',offsetPercent:0}}),null);
+  assert.equal(recordGlobalSubtitlePositionChange(project,{beforeState:{position:'top',offsetPercent:0},afterState:{position:'invalid',offsetPercent:0}}),null);
+  assert.equal(project.learning.decisions.length,0);
+});
+
+test('snapshotGlobalSubtitlePosition follows current visible global state', () => {
+  const project={subtitleStyle:{position:'center',positionOffsetPercent:-99}};
+  assert.deepEqual(snapshotGlobalSubtitlePosition(project),{position:'center',offsetPercent:-15});
+  assert.equal(snapshotGlobalSubtitlePosition({subtitleStyle:{position:'wipe',positionOffsetPercent:0}}),null);
+  assert.equal(snapshotGlobalSubtitlePosition({}),null);
 });
