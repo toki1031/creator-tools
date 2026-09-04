@@ -374,6 +374,55 @@ export function recordSceneMotionChange(project, {
   }, options);
 }
 
+const SCENE_TRANSITIONS = new Set(['fade', 'cut']);
+
+export function recordSceneTransitionChange(project, {
+  sceneId,
+  beforeTransition,
+  afterTransition,
+  sceneIndex
+}, options = {}) {
+  const before = stringOr(beforeTransition).trim();
+  const after = stringOr(afterTransition).trim();
+  if (!sceneId || !SCENE_TRANSITIONS.has(before) || !SCENE_TRANSITIONS.has(after) || before === after) return null;
+
+  const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+  const requestedIndex = Number(sceneIndex);
+  const resolvedIndex = Number.isInteger(requestedIndex) && requestedIndex >= 0 && requestedIndex < scenes.length
+    && String(scenes[requestedIndex]?.id || '') === String(sceneId)
+    ? requestedIndex
+    : scenes.findIndex(scene => String(scene?.id || '') === String(sceneId));
+  const scene = resolvedIndex >= 0 ? scenes[resolvedIndex] : null;
+  if (!scene) return null;
+
+  const assets = validImageAssetMap(project);
+  const imageAssetId = stringOr(scene.imageAssetId).trim();
+  const imageAsset = assets.get(imageAssetId);
+  const context = {
+    sceneText: stringOr(scene.text),
+    sceneIndex: resolvedIndex,
+    durationSec: Number.isFinite(Number(scene.durationSec)) ? Number(scene.durationSec) : null,
+    platform: stringOr(project?.platform),
+    aspectRatio: stringOr(project?.aspectRatio)
+  };
+  if (imageAsset) context.imageAssetId = imageAssetId;
+
+  return appendDecision(project, {
+    decisionType: 'scene-transition',
+    sceneId: String(sceneId),
+    context,
+    proposal: { transition: before },
+    alternatives: [],
+    humanAction: { type: 'select-scene-transition' },
+    finalDecision: { transition: after },
+    reasonCode: '',
+    reasonNote: '',
+    source: { type: 'human', feature: 'scene-editor', version: '0.6' },
+    assetIds: imageAsset ? [imageAssetId] : [],
+    rights: imageAsset ? imageAssetRights(imageAsset) : {}
+  }, options);
+}
+
 export function moveSceneWithDecision(project, index, direction, options = {}) {
   ensureLearningState(project);
   const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
