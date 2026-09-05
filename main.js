@@ -10,7 +10,7 @@ import { normalizeSubtitleOffset, resolveEffectiveSubtitlePosition, resolveSubti
 import { assessMvpVideoResult, describeVideoExportFailure, isMvpShortsProject, validateMvpShortsOutput } from "./videoMvp.js";
 import { createGenerationStartController, projectExpectsVideoAudio } from "./videoGenerationStart.js";
 import { applyDictionaryEntries, normalizeSubtitleContentForSync, splitIntoScenes, splitSubtitleCards, subtitleContentChanged } from "./qualityLogic.js";
-import { ensureLearningState, moveSceneWithDecision, recordBgmDuckingChange, recordBgmFadeInChange, recordBgmFadeOutChange, recordBgmLoopChange, recordBgmSelectionChange, recordBgmVolumeChange, recordGlobalSubtitlePositionChange, recordSceneDurationChange, recordSceneImageSelection, recordSceneMotionChange, recordSceneSubtitlePositionChange, recordSceneTransitionChange, recordSubtitleContentChange, recordSubtitleBackgroundEnabledChange, recordSubtitleBackgroundOpacityChange, recordSubtitleFontSizeChange, recordSubtitleMaxCharsChange, recordSubtitleMaxLinesChange, recordSubtitleOutlineWidthChange, recordSubtitlePresetChange, recordSubtitleSceneSyncDecision, snapshotBgmFadeIn, snapshotBgmFadeOut, snapshotGlobalSubtitlePosition, snapshotSceneSubtitlePosition, snapshotSubtitleBackgroundEnabled, snapshotSubtitleBackgroundOpacity, snapshotSubtitleFontSize, snapshotSubtitleMaxChars, snapshotSubtitleMaxLines, snapshotSubtitleOutlineWidth, snapshotSubtitlePresetState } from "./decisionLog.js";
+import { ensureLearningState, moveSceneWithDecision, recordBgmDuckingChange, recordBgmFadeInChange, recordBgmFadeOutChange, recordBgmLoopChange, recordBgmSelectionChange, recordBgmVolumeChange, recordGlobalSubtitlePositionChange, recordSceneDurationChange, recordSceneImageSelection, recordSceneMotionChange, recordSceneSubtitlePositionChange, recordSceneTransitionChange, recordSubtitleContentChange, recordSubtitleBackgroundEnabledChange, recordSubtitleBackgroundOpacityChange, recordSubtitleEnabledChange, recordSubtitleFontSizeChange, recordSubtitleMaxCharsChange, recordSubtitleMaxLinesChange, recordSubtitleOutlineWidthChange, recordSubtitlePresetChange, recordSubtitleSceneSyncDecision, snapshotBgmFadeIn, snapshotBgmFadeOut, snapshotGlobalSubtitlePosition, snapshotSceneSubtitlePosition, snapshotSubtitleBackgroundEnabled, snapshotSubtitleBackgroundOpacity, snapshotSubtitleEnabled, snapshotSubtitleFontSize, snapshotSubtitleMaxChars, snapshotSubtitleMaxLines, snapshotSubtitleOutlineWidth, snapshotSubtitlePresetState } from "./decisionLog.js";
 
 const rootElement = document.querySelector("#app");
 if (!rootElement) throw new Error("#app がありません。");
@@ -800,7 +800,18 @@ loopEl.onblur=()=>commitBgmLoopDecision(loopEl);
   volumeEl.onpointerup=()=>commitBgmVolumeDecision(volumeEl);
   volumeEl.onpointercancel=()=>bgmVolumeBeforeByElement.delete(volumeEl);
   volumeEl.onblur=()=>commitBgmVolumeDecision(volumeEl);
-  ['subtitleEnabled','textColor','outlineColor','backgroundColor'].forEach(k=>root.querySelector('#'+k).oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();});
+  ['textColor','outlineColor','backgroundColor'].forEach(k=>root.querySelector('#'+k).oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();});
+  const subtitleEnabledBeforeByElement=new WeakMap();
+const subtitleEnabledEl=root.querySelector('#subtitleEnabled');
+const rememberSubtitleEnabledBefore=el=>{if(subtitleEnabledBeforeByElement.has(el))return;subtitleEnabledBeforeByElement.set(el,snapshotSubtitleEnabled(Boolean(el.checked)));};
+const commitSubtitleEnabledDecision=el=>{if(!subtitleEnabledBeforeByElement.has(el))return;const before=subtitleEnabledBeforeByElement.get(el);subtitleEnabledBeforeByElement.delete(el);const after=snapshotSubtitleEnabled(Boolean(el.checked));const record=recordSubtitleEnabledChange(project,{beforeState:before,afterState:after});if(record)save();};
+subtitleEnabledEl.onpointerdown=()=>rememberSubtitleEnabledBefore(subtitleEnabledEl);
+subtitleEnabledEl.onfocus=()=>rememberSubtitleEnabledBefore(subtitleEnabledEl);
+subtitleEnabledEl.onkeydown=()=>rememberSubtitleEnabledBefore(subtitleEnabledEl);
+subtitleEnabledEl.oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();};
+subtitleEnabledEl.onchange=()=>commitSubtitleEnabledDecision(subtitleEnabledEl);
+subtitleEnabledEl.onpointercancel=()=>subtitleEnabledBeforeByElement.delete(subtitleEnabledEl);
+subtitleEnabledEl.onblur=()=>commitSubtitleEnabledDecision(subtitleEnabledEl);
   const subtitleBackgroundOpacityBeforeByElement=new WeakMap();
 const backgroundOpacityEl=root.querySelector('#backgroundOpacity');
 const rememberSubtitleBackgroundOpacityBefore=el=>{if(subtitleBackgroundOpacityBeforeByElement.has(el))return;subtitleBackgroundOpacityBeforeByElement.set(el,snapshotSubtitleBackgroundOpacity(el.value));};
