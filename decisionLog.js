@@ -875,6 +875,66 @@ export function recordBgmVolumeChange(project, {
   }, options);
 }
 
+export function normalizeSubtitleColor(value) {
+  const normalized = typeof value === 'string' ? value.trim() : '';
+  return /^#[0-9a-fA-F]{6}$/.test(normalized) ? normalized.toLowerCase() : null;
+}
+
+export function snapshotSubtitleTextColor(value) {
+  return { textColor: normalizeSubtitleColor(value) };
+}
+
+export function recordSubtitleTextColorChange(project, { beforeState, afterState }, options = {}) {
+  const beforeRaw = isRecord(beforeState) ? beforeState.textColor : beforeState;
+  const afterRaw = isRecord(afterState) ? afterState.textColor : afterState;
+  const before = normalizeSubtitleColor(beforeRaw);
+  const after = normalizeSubtitleColor(afterRaw);
+  if (after === null || before === after) return null;
+
+  const style = isRecord(project?.subtitleStyle) ? project.subtitleStyle : {};
+  const subtitleEnabled = style.enabled !== false;
+  if (!subtitleEnabled) return null;
+
+  const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+  const subtitleSceneCount = scenes.filter(scene => scene?.subtitleEnabled !== false && stringOr(scene?.subtitleText).trim()).length;
+  const positionValue = stringOr(style.position).trim();
+  const position = ['top', 'center', 'bottom'].includes(positionValue) ? positionValue : '';
+  const hasNarration = Boolean(project?.narration?.audioData) || scenes.some(scene => Boolean(scene?.narration?.audioData));
+
+  return appendDecision(project, {
+    decisionType: 'subtitle-text-color',
+    sceneId: '',
+    context: {
+      platform: stringOr(project?.platform),
+      aspectRatio: stringOr(project?.aspectRatio),
+      subtitleEnabled,
+      subtitlePreset: stringOr(style.preset).trim() || 'standard',
+      fontSizePx: normalizeSubtitleFontSize(style.fontSize),
+      position,
+      positionOffsetPercent: normalizeSubtitleOffset(style.positionOffsetPercent),
+      maxCharsPerLine: normalizeSubtitleMaxChars(style.maxCharsPerLine),
+      maxLines: normalizeSubtitleMaxLines(style.maxLines),
+      outlineColor: normalizeSubtitleColor(style.outlineColor),
+      outlineWidth: normalizeSubtitleOutlineWidth(style.outlineWidth),
+      backgroundEnabled: normalizeSubtitleBackgroundEnabled(style.backgroundEnabled),
+      backgroundColor: normalizeSubtitleColor(style.backgroundColor),
+      backgroundOpacity: normalizeSubtitleBackgroundOpacityDisplay(style.backgroundOpacity),
+      sceneCount: scenes.length,
+      subtitleSceneCount,
+      hasNarration
+    },
+    proposal: { textColor: before },
+    alternatives: [],
+    humanAction: { type: 'set-subtitle-text-color' },
+    finalDecision: { textColor: after },
+    reasonCode: '',
+    reasonNote: '',
+    source: { type: 'human', feature: 'subtitle-editor', version: '0.25' },
+    assetIds: [],
+    rights: {}
+  }, options);
+}
+
 export function normalizeSubtitleEnabled(value) {
   return typeof value === 'boolean' ? value : null;
 }
