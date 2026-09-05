@@ -656,6 +656,85 @@ export function recordBgmVolumeChange(project, {
   }, options);
 }
 
+const SUBTITLE_PRESET_IDS = ['standard', 'large', 'minimal', 'boxed'];
+const SUBTITLE_PRESET_SET = new Set(SUBTITLE_PRESET_IDS);
+const SUBTITLE_POSITIONS = new Set(['top', 'center', 'bottom']);
+
+function subtitlePresetNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function normalizeSubtitlePresetState(value, { fallbackPreset = false } = {}) {
+  if (!isRecord(value)) return null;
+  const rawPreset = stringOr(value.preset).trim();
+  const preset = SUBTITLE_PRESET_SET.has(rawPreset) ? rawPreset : (fallbackPreset ? 'standard' : '');
+  if (!preset) return null;
+  const style = isRecord(value.style) ? value.style : {};
+  const rawPosition = stringOr(style.position).trim();
+  return {
+    preset,
+    style: {
+      fontSize: subtitlePresetNumber(style.fontSize),
+      position: SUBTITLE_POSITIONS.has(rawPosition) ? rawPosition : null,
+      maxCharsPerLine: subtitlePresetNumber(style.maxCharsPerLine),
+      maxLines: subtitlePresetNumber(style.maxLines),
+      outlineWidth: subtitlePresetNumber(style.outlineWidth),
+      backgroundEnabled: Boolean(style.backgroundEnabled),
+      backgroundOpacity: subtitlePresetNumber(style.backgroundOpacity)
+    }
+  };
+}
+
+export function snapshotSubtitlePresetState(style) {
+  const source = isRecord(style) ? style : {};
+  return normalizeSubtitlePresetState({
+    preset: source.preset,
+    style: {
+      fontSize: source.fontSize,
+      position: source.position,
+      maxCharsPerLine: source.maxCharsPerLine,
+      maxLines: source.maxLines,
+      outlineWidth: source.outlineWidth,
+      backgroundEnabled: source.backgroundEnabled,
+      backgroundOpacity: source.backgroundOpacity
+    }
+  }, { fallbackPreset: true });
+}
+
+export function recordSubtitlePresetChange(project, { beforeState, afterState }, options = {}) {
+  const before = normalizeSubtitlePresetState(beforeState, { fallbackPreset: true });
+  const after = normalizeSubtitlePresetState(afterState);
+  if (!before || !after || before.preset === after.preset) return null;
+
+  const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+  const overridePositions = new Set(['top', 'center', 'bottom']);
+  const subtitleSceneCount = scenes.filter(scene => stringOr(scene?.subtitleText).trim()).length;
+  const sceneOverrideCount = scenes.filter(scene => overridePositions.has(stringOr(scene?.subtitlePosition).trim())).length;
+
+  return appendDecision(project, {
+    decisionType: 'subtitle-preset',
+    sceneId: '',
+    context: {
+      platform: stringOr(project?.platform),
+      aspectRatio: stringOr(project?.aspectRatio),
+      subtitleEnabled: Boolean(project?.subtitleStyle?.enabled),
+      sceneCount: scenes.length,
+      subtitleSceneCount,
+      sceneOverrideCount
+    },
+    proposal: before,
+    alternatives: SUBTITLE_PRESET_IDS.filter(preset => preset !== after.preset).map(preset => ({ preset })),
+    humanAction: { type: 'select-subtitle-preset' },
+    finalDecision: after,
+    reasonCode: '',
+    reasonNote: '',
+    source: { type: 'human', feature: 'subtitle-editor', version: '0.13' },
+    assetIds: [],
+    rights: {}
+  }, options);
+}
+
 export function recordBgmSelectionChange(project, {
   beforeAudioAssetId,
   afterAudioAssetId,

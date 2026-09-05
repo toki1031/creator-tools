@@ -14,6 +14,7 @@ import {
   recordBgmVolumeChange,
   recordNarrationVoiceDecision,
   recordGlobalSubtitlePositionChange,
+  recordSubtitlePresetChange,
   recordSubtitleSceneSyncDecision,
   recordSceneDurationChange,
   recordSceneImageSelection,
@@ -22,6 +23,7 @@ import {
   recordSceneTransitionChange,
   snapshotGlobalSubtitlePosition,
   snapshotSceneSubtitlePosition,
+  snapshotSubtitlePresetState,
   recordSceneOrderChange,
   recordSubtitleContentChange,
   snapshotSceneOrder
@@ -790,4 +792,45 @@ test('bgm-selection normalizes legacy/invalid previous id to null', () => {
   const after='audio-sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd', project={id:'p',learning:{decisions:[]},bgm:{category:'calm'},scenes:[]};
   const record=recordBgmSelectionChange(project,{beforeAudioAssetId:'legacy-file-name.mp3',afterAudioAssetId:after,selectionMethod:'upload',hadBgmBefore:true});
   assert.deepEqual(record.proposal,{audioAssetId:null}); assert.equal(record.context.hadBgmBefore,true); assert.deepEqual(record.assetIds,[after]);
+});
+
+
+test('subtitle-preset records standard to large with effective style and context', () => {
+  const project={id:'p-preset',platform:'youtube-shorts',aspectRatio:'9:16',learning:{decisions:[]},subtitleStyle:{enabled:true},scenes:[{id:'s1',subtitleText:'字幕あり'},{id:'s2',subtitleText:'',subtitlePosition:'top'},{id:'s3',subtitleText:'別字幕',subtitlePosition:'invalid'}]};
+  const before=snapshotSubtitlePresetState({preset:'standard',fontSize:54,position:'bottom',maxCharsPerLine:16,maxLines:2,outlineWidth:4,backgroundEnabled:false,backgroundOpacity:.45});
+  const after=snapshotSubtitlePresetState({preset:'large',fontSize:68,position:'bottom',maxCharsPerLine:13,maxLines:2,outlineWidth:5,backgroundEnabled:false,backgroundOpacity:.45});
+  const record=recordSubtitlePresetChange(project,{beforeState:before,afterState:after},{createId:()=> 'd-preset-1',now:()=> '2026-09-05T00:00:00.000Z'});
+  assert.equal(record.decisionType,'subtitle-preset');
+  assert.equal(record.sceneId,'');
+  assert.deepEqual(record.proposal,before);
+  assert.deepEqual(record.finalDecision,after);
+  assert.deepEqual(record.humanAction,{type:'select-subtitle-preset'});
+  assert.deepEqual(record.source,{type:'human',feature:'subtitle-editor',version:'0.13'});
+  assert.deepEqual(record.alternatives,[{preset:'standard'},{preset:'minimal'},{preset:'boxed'}]);
+  assert.deepEqual(record.context,{platform:'youtube-shorts',aspectRatio:'9:16',subtitleEnabled:true,sceneCount:3,subtitleSceneCount:2,sceneOverrideCount:1});
+});
+
+test('subtitle-preset records minimal to boxed including the applied style bundle', () => {
+  const project={id:'p',learning:{decisions:[]},subtitleStyle:{enabled:false},scenes:[]};
+  const before=snapshotSubtitlePresetState({preset:'minimal',fontSize:48,position:'center',maxCharsPerLine:18,maxLines:2,outlineWidth:2,backgroundEnabled:false,backgroundOpacity:.35});
+  const after=snapshotSubtitlePresetState({preset:'boxed',fontSize:52,position:'bottom',maxCharsPerLine:16,maxLines:2,outlineWidth:0,backgroundEnabled:true,backgroundOpacity:.58});
+  const record=recordSubtitlePresetChange(project,{beforeState:before,afterState:after});
+  assert.equal(record.proposal.preset,'minimal');
+  assert.equal(record.finalDecision.preset,'boxed');
+  assert.deepEqual(record.finalDecision.style,{fontSize:52,position:'bottom',maxCharsPerLine:16,maxLines:2,outlineWidth:0,backgroundEnabled:true,backgroundOpacity:.58});
+  assert.deepEqual(record.alternatives,[{preset:'standard'},{preset:'large'},{preset:'minimal'}]);
+});
+
+test('subtitle preset snapshot treats missing or legacy preset as UI-effective standard and normalizes invalid style values', () => {
+  const snapshot=snapshotSubtitlePresetState({preset:'legacy',fontSize:'54',position:'side',maxCharsPerLine:'16',maxLines:2,outlineWidth:'bad',backgroundEnabled:1,backgroundOpacity:'0.45'});
+  assert.deepEqual(snapshot,{preset:'standard',style:{fontSize:54,position:null,maxCharsPerLine:16,maxLines:2,outlineWidth:null,backgroundEnabled:true,backgroundOpacity:.45}});
+  assert.equal(snapshotSubtitlePresetState({}).preset,'standard');
+});
+
+test('subtitle-preset ignores same preset and invalid final preset', () => {
+  const project={id:'p',learning:{decisions:[]},subtitleStyle:{},scenes:[]};
+  const standard=snapshotSubtitlePresetState({preset:'standard',fontSize:54,position:'bottom'});
+  assert.equal(recordSubtitlePresetChange(project,{beforeState:standard,afterState:standard}),null);
+  assert.equal(recordSubtitlePresetChange(project,{beforeState:standard,afterState:{preset:'invalid',style:{fontSize:1}}}),null);
+  assert.equal(project.learning.decisions.length,0);
 });
