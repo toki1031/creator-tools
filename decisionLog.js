@@ -1043,6 +1043,71 @@ export function normalizeSubtitleBackgroundEnabled(value) {
   return typeof value === 'boolean' ? value : null;
 }
 
+function normalizeSubtitleBackgroundOpacityDisplay(value) {
+  const raw = Number(value);
+  if (!Number.isFinite(raw) || raw < 0 || raw > 0.9) return null;
+  return Math.round(raw * 100) / 100;
+}
+
+export function normalizeSubtitleBackgroundOpacity(value) {
+  const normalized = normalizeSubtitleBackgroundOpacityDisplay(value);
+  if (normalized === null) return null;
+  const steps = normalized / 0.05;
+  if (Math.abs(steps - Math.round(steps)) > 1e-8) return null;
+  return Math.round(normalized * 100) / 100;
+}
+
+export function snapshotSubtitleBackgroundOpacity(value) {
+  return { backgroundOpacity: normalizeSubtitleBackgroundOpacityDisplay(value) };
+}
+
+export function recordSubtitleBackgroundOpacityChange(project, {
+  beforeState,
+  afterState,
+  backgroundEnabled
+}, options = {}) {
+  const beforeRaw = isRecord(beforeState) ? beforeState.backgroundOpacity : beforeState;
+  const afterRaw = isRecord(afterState) ? afterState.backgroundOpacity : afterState;
+  const before = normalizeSubtitleBackgroundOpacityDisplay(beforeRaw);
+  const after = normalizeSubtitleBackgroundOpacity(afterRaw);
+  const style = isRecord(project?.subtitleStyle) ? project.subtitleStyle : {};
+  const enabled = typeof backgroundEnabled === 'boolean' ? backgroundEnabled : Boolean(style.backgroundEnabled);
+  if (!enabled || after === null || before === after) return null;
+
+  const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+  const subtitleSceneCount = scenes.filter(scene => scene?.subtitleEnabled !== false && stringOr(scene?.subtitleText).trim()).length;
+  const rawPosition = stringOr(style.position).trim();
+  const position = ['top', 'center', 'bottom'].includes(rawPosition) ? rawPosition : '';
+
+  return appendDecision(project, {
+    decisionType: 'subtitle-background-opacity',
+    sceneId: '',
+    context: {
+      platform: stringOr(project?.platform),
+      aspectRatio: stringOr(project?.aspectRatio),
+      subtitlePreset: stringOr(style.preset).trim() || 'standard',
+      backgroundEnabled: true,
+      backgroundColor: stringOr(style.backgroundColor).trim(),
+      fontSizePx: normalizeSubtitleFontSize(style.fontSize),
+      position,
+      maxCharsPerLine: normalizeSubtitleMaxChars(style.maxCharsPerLine),
+      maxLines: normalizeSubtitleMaxLines(style.maxLines),
+      outlineWidth: normalizeSubtitleOutlineWidth(style.outlineWidth),
+      sceneCount: scenes.length,
+      subtitleSceneCount
+    },
+    proposal: { backgroundOpacity: before },
+    alternatives: [],
+    humanAction: { type: 'set-subtitle-background-opacity' },
+    finalDecision: { backgroundOpacity: after },
+    reasonCode: '',
+    reasonNote: '',
+    source: { type: 'human', feature: 'subtitle-editor', version: '0.23' },
+    assetIds: [],
+    rights: {}
+  }, options);
+}
+
 export function snapshotSubtitleBackgroundEnabled(value) {
   return { backgroundEnabled: normalizeSubtitleBackgroundEnabled(value) };
 }

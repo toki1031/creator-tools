@@ -14,6 +14,7 @@ import {
   normalizeSubtitleMaxChars,
   normalizeSubtitleOutlineWidth,
   normalizeSubtitleBackgroundEnabled,
+  normalizeSubtitleBackgroundOpacity,
   normalizeSubtitleMaxLines,
   normalizeNarrationVoiceId,
   recordBgmDuckingChange,
@@ -28,6 +29,7 @@ import {
   recordSubtitleMaxCharsChange,
   recordSubtitleOutlineWidthChange,
   recordSubtitleBackgroundEnabledChange,
+  recordSubtitleBackgroundOpacityChange,
   recordSubtitleMaxLinesChange,
   recordSubtitlePresetChange,
   recordSubtitleSceneSyncDecision,
@@ -44,6 +46,7 @@ import {
   snapshotSubtitleMaxChars,
   snapshotSubtitleOutlineWidth,
   snapshotSubtitleBackgroundEnabled,
+  snapshotSubtitleBackgroundOpacity,
   snapshotSubtitleMaxLines,
   snapshotSubtitlePresetState,
   recordSceneOrderChange,
@@ -1322,4 +1325,58 @@ test('bgm-fade-out ignores unchanged, out-of-range and off-step final values wit
   assert.equal(recordBgmFadeOutChange(project,{beforeState:{fadeOutSec:2},afterState:{fadeOutSec:2.25}}),null);
   assert.equal(recordBgmFadeOutChange(project,{beforeState:{fadeOutSec:2},afterState:{fadeOutSec:'bad'}}),null);
   assert.equal(project.learning.decisions.length,0);
+});
+
+
+test('subtitle background opacity normalization accepts only direct 0.05 slider steps', () => {
+  assert.equal(normalizeSubtitleBackgroundOpacity(0), 0);
+  assert.equal(normalizeSubtitleBackgroundOpacity(0.45), 0.45);
+  assert.equal(normalizeSubtitleBackgroundOpacity('0.60'), 0.6);
+  assert.equal(normalizeSubtitleBackgroundOpacity(0.9), 0.9);
+  assert.equal(normalizeSubtitleBackgroundOpacity(0.58), null);
+  assert.equal(normalizeSubtitleBackgroundOpacity(-0.05), null);
+  assert.equal(normalizeSubtitleBackgroundOpacity(0.95), null);
+  assert.equal(normalizeSubtitleBackgroundOpacity('bad'), null);
+});
+
+test('subtitle-background-opacity records one active-background adjustment with style context', () => {
+  const project={
+    id:'p-opacity',platform:'youtube-shorts',aspectRatio:'9:16',learning:{decisions:[]},
+    subtitleStyle:{preset:'boxed',fontSize:52,position:'bottom',maxCharsPerLine:16,maxLines:2,outlineWidth:0,backgroundEnabled:true,backgroundColor:'#101010',backgroundOpacity:0.6},
+    scenes:[{id:'s1',subtitleText:'字幕あり'},{id:'s2',subtitleText:'',subtitleEnabled:true},{id:'s3',subtitleText:'非表示',subtitleEnabled:false}]
+  };
+  const record=recordSubtitleBackgroundOpacityChange(project,{
+    beforeState:{backgroundOpacity:0.45},afterState:{backgroundOpacity:0.6},backgroundEnabled:true
+  },{createId:()=> 'd-opacity-1',now:()=> '2026-09-05T10:05:00.000Z'});
+  assert.equal(record.decisionType,'subtitle-background-opacity');
+  assert.deepEqual(record.proposal,{backgroundOpacity:0.45});
+  assert.deepEqual(record.finalDecision,{backgroundOpacity:0.6});
+  assert.deepEqual(record.alternatives,[]);
+  assert.deepEqual(record.humanAction,{type:'set-subtitle-background-opacity'});
+  assert.deepEqual(record.source,{type:'human',feature:'subtitle-editor',version:'0.23'});
+  assert.deepEqual(record.assetIds,[]);
+  assert.deepEqual(record.rights,{});
+  assert.deepEqual(record.context,{
+    platform:'youtube-shorts',aspectRatio:'9:16',subtitlePreset:'boxed',backgroundEnabled:true,backgroundColor:'#101010',
+    fontSizePx:52,position:'bottom',maxCharsPerLine:16,maxLines:2,outlineWidth:0,sceneCount:3,subtitleSceneCount:1
+  });
+  assert.equal(project.learning.decisions.length,1);
+});
+
+test('subtitle-background-opacity ignores opacity edits while subtitle background is disabled', () => {
+  const project={id:'p',learning:{decisions:[]},subtitleStyle:{backgroundEnabled:false,backgroundOpacity:0.6},scenes:[]};
+  assert.equal(recordSubtitleBackgroundOpacityChange(project,{beforeState:{backgroundOpacity:0.45},afterState:{backgroundOpacity:0.6},backgroundEnabled:false}),null);
+  assert.equal(project.learning.decisions.length,0);
+});
+
+test('subtitle-background-opacity keeps a valid preset-derived before value but rejects invalid final states', () => {
+  const project={id:'p',learning:{decisions:[]},subtitleStyle:{backgroundEnabled:true,backgroundOpacity:0.6},scenes:[]};
+  const record=recordSubtitleBackgroundOpacityChange(project,{beforeState:snapshotSubtitleBackgroundOpacity(0.58),afterState:{backgroundOpacity:0.6},backgroundEnabled:true});
+  assert.deepEqual(record.proposal,{backgroundOpacity:0.58});
+  assert.deepEqual(record.finalDecision,{backgroundOpacity:0.6});
+  assert.deepEqual(snapshotSubtitleBackgroundOpacity(0.58),{backgroundOpacity:0.58});
+  assert.equal(recordSubtitleBackgroundOpacityChange(project,{beforeState:{backgroundOpacity:0.6},afterState:{backgroundOpacity:0.6},backgroundEnabled:true}),null);
+  assert.equal(recordSubtitleBackgroundOpacityChange(project,{beforeState:{backgroundOpacity:0.6},afterState:{backgroundOpacity:0.58},backgroundEnabled:true}),null);
+  assert.equal(recordSubtitleBackgroundOpacityChange(project,{beforeState:{backgroundOpacity:0.6},afterState:{backgroundOpacity:1},backgroundEnabled:true}),null);
+  assert.equal(project.learning.decisions.length,1);
 });
