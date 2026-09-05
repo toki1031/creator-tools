@@ -875,6 +875,62 @@ export function recordBgmVolumeChange(project, {
   }, options);
 }
 
+export function normalizeSubtitleEnabled(value) {
+  return typeof value === 'boolean' ? value : null;
+}
+
+export function snapshotSubtitleEnabled(value) {
+  return { subtitleEnabled: normalizeSubtitleEnabled(value) };
+}
+
+export function recordSubtitleEnabledChange(project, { beforeState, afterState }, options = {}) {
+  const beforeRaw = isRecord(beforeState) ? beforeState.subtitleEnabled : beforeState;
+  const afterRaw = isRecord(afterState) ? afterState.subtitleEnabled : afterState;
+  const before = normalizeSubtitleEnabled(beforeRaw);
+  const after = normalizeSubtitleEnabled(afterRaw);
+  if (after === null || before === after) return null;
+
+  const style = isRecord(project?.subtitleStyle) ? project.subtitleStyle : {};
+  const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+  const subtitleSceneCount = scenes.filter(scene => scene?.subtitleEnabled !== false && stringOr(scene?.subtitleText).trim()).length;
+  const positionValue = stringOr(style.position).trim();
+  const position = ['top', 'center', 'bottom'].includes(positionValue) ? positionValue : '';
+  const hasNarration = Boolean(project?.narration?.audioData) || scenes.some(scene => Boolean(scene?.narration?.audioData));
+
+  return appendDecision(project, {
+    decisionType: 'subtitle-enabled',
+    sceneId: '',
+    context: {
+      platform: stringOr(project?.platform),
+      aspectRatio: stringOr(project?.aspectRatio),
+      subtitlePreset: stringOr(style.preset).trim() || 'standard',
+      fontSizePx: normalizeSubtitleFontSize(style.fontSize),
+      position,
+      positionOffsetPercent: normalizeSubtitleOffset(style.positionOffsetPercent),
+      maxCharsPerLine: normalizeSubtitleMaxChars(style.maxCharsPerLine),
+      maxLines: normalizeSubtitleMaxLines(style.maxLines),
+      textColor: stringOr(style.textColor).trim(),
+      outlineColor: stringOr(style.outlineColor).trim(),
+      outlineWidth: normalizeSubtitleOutlineWidth(style.outlineWidth),
+      backgroundEnabled: normalizeSubtitleBackgroundEnabled(style.backgroundEnabled),
+      backgroundColor: stringOr(style.backgroundColor).trim(),
+      backgroundOpacity: normalizeSubtitleBackgroundOpacityDisplay(style.backgroundOpacity),
+      sceneCount: scenes.length,
+      subtitleSceneCount,
+      hasNarration
+    },
+    proposal: { subtitleEnabled: before },
+    alternatives: [{ subtitleEnabled: !after }],
+    humanAction: { type: 'set-subtitle-enabled' },
+    finalDecision: { subtitleEnabled: after },
+    reasonCode: '',
+    reasonNote: '',
+    source: { type: 'human', feature: 'subtitle-editor', version: '0.24' },
+    assetIds: [],
+    rights: {}
+  }, options);
+}
+
 export function normalizeSubtitleFontSize(value) {
   if (value === '' || value === null || value === undefined) return null;
   const number = Number(value);

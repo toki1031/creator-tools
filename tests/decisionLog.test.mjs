@@ -15,6 +15,7 @@ import {
   normalizeSubtitleOutlineWidth,
   normalizeSubtitleBackgroundEnabled,
   normalizeSubtitleBackgroundOpacity,
+  normalizeSubtitleEnabled,
   normalizeSubtitleMaxLines,
   normalizeNarrationVoiceId,
   recordBgmDuckingChange,
@@ -30,6 +31,7 @@ import {
   recordSubtitleOutlineWidthChange,
   recordSubtitleBackgroundEnabledChange,
   recordSubtitleBackgroundOpacityChange,
+  recordSubtitleEnabledChange,
   recordSubtitleMaxLinesChange,
   recordSubtitlePresetChange,
   recordSubtitleSceneSyncDecision,
@@ -47,6 +49,7 @@ import {
   snapshotSubtitleOutlineWidth,
   snapshotSubtitleBackgroundEnabled,
   snapshotSubtitleBackgroundOpacity,
+  snapshotSubtitleEnabled,
   snapshotSubtitleMaxLines,
   snapshotSubtitlePresetState,
   recordSceneOrderChange,
@@ -1378,5 +1381,62 @@ test('subtitle-background-opacity keeps a valid preset-derived before value but 
   assert.equal(recordSubtitleBackgroundOpacityChange(project,{beforeState:{backgroundOpacity:0.6},afterState:{backgroundOpacity:0.6},backgroundEnabled:true}),null);
   assert.equal(recordSubtitleBackgroundOpacityChange(project,{beforeState:{backgroundOpacity:0.6},afterState:{backgroundOpacity:0.58},backgroundEnabled:true}),null);
   assert.equal(recordSubtitleBackgroundOpacityChange(project,{beforeState:{backgroundOpacity:0.6},afterState:{backgroundOpacity:1},backgroundEnabled:true}),null);
+  assert.equal(project.learning.decisions.length,1);
+});
+
+
+test('subtitle enabled normalization accepts booleans only', () => {
+  assert.equal(normalizeSubtitleEnabled(true), true);
+  assert.equal(normalizeSubtitleEnabled(false), false);
+  assert.equal(normalizeSubtitleEnabled(1), null);
+  assert.equal(normalizeSubtitleEnabled('true'), null);
+  assert.equal(normalizeSubtitleEnabled(null), null);
+  assert.deepEqual(snapshotSubtitleEnabled(false), { subtitleEnabled: false });
+});
+
+test('subtitle-enabled records explicit true to false choice with current style context', () => {
+  const project={
+    id:'p-sub-enabled',platform:'youtube-shorts',aspectRatio:'9:16',learning:{decisions:[]},
+    subtitleStyle:{enabled:false,preset:'standard',fontSize:54,position:'bottom',positionOffsetPercent:3,maxCharsPerLine:16,maxLines:2,textColor:'#ffffff',outlineColor:'#000000',outlineWidth:4,backgroundEnabled:true,backgroundColor:'#111111',backgroundOpacity:0.45},
+    scenes:[
+      {id:'s1',subtitleText:'字幕あり',narration:{audioData:'data:audio/wav;base64,QQ=='}},
+      {id:'s2',subtitleText:'個別OFF',subtitleEnabled:false},
+      {id:'s3',subtitleText:''}
+    ]
+  };
+  const record=recordSubtitleEnabledChange(project,{beforeState:{subtitleEnabled:true},afterState:{subtitleEnabled:false}},{createId:()=> 'd-sub-enabled-1',now:()=> '2026-09-05T11:00:00.000Z'});
+  assert.equal(record.decisionType,'subtitle-enabled');
+  assert.deepEqual(record.proposal,{subtitleEnabled:true});
+  assert.deepEqual(record.alternatives,[{subtitleEnabled:true}]);
+  assert.deepEqual(record.humanAction,{type:'set-subtitle-enabled'});
+  assert.deepEqual(record.finalDecision,{subtitleEnabled:false});
+  assert.deepEqual(record.source,{type:'human',feature:'subtitle-editor',version:'0.24'});
+  assert.deepEqual(record.assetIds,[]);
+  assert.deepEqual(record.rights,{});
+  assert.deepEqual(record.context,{
+    platform:'youtube-shorts',aspectRatio:'9:16',subtitlePreset:'standard',fontSizePx:54,position:'bottom',positionOffsetPercent:3,
+    maxCharsPerLine:16,maxLines:2,textColor:'#ffffff',outlineColor:'#000000',outlineWidth:4,backgroundEnabled:true,backgroundColor:'#111111',backgroundOpacity:0.45,
+    sceneCount:3,subtitleSceneCount:1,hasNarration:true
+  });
+  assert.equal(project.learning.decisions.length,1);
+});
+
+test('subtitle-enabled records explicit false to true choice and opposite alternative', () => {
+  const project={id:'p',platform:'instagram-reels',aspectRatio:'9:16',learning:{decisions:[]},subtitleStyle:{enabled:true},scenes:[]};
+  const record=recordSubtitleEnabledChange(project,{beforeState:snapshotSubtitleEnabled(false),afterState:snapshotSubtitleEnabled(true)});
+  assert.deepEqual(record.proposal,{subtitleEnabled:false});
+  assert.deepEqual(record.finalDecision,{subtitleEnabled:true});
+  assert.deepEqual(record.alternatives,[{subtitleEnabled:false}]);
+  assert.equal(record.context.subtitlePreset,'standard');
+  assert.equal(record.context.sceneCount,0);
+});
+
+test('subtitle-enabled allows invalid legacy before as null but ignores same and invalid final states', () => {
+  const project={id:'p',learning:{decisions:[]},subtitleStyle:{enabled:true},scenes:[]};
+  const record=recordSubtitleEnabledChange(project,{beforeState:{subtitleEnabled:'legacy'},afterState:{subtitleEnabled:true}});
+  assert.deepEqual(record.proposal,{subtitleEnabled:null});
+  assert.deepEqual(record.finalDecision,{subtitleEnabled:true});
+  assert.equal(recordSubtitleEnabledChange(project,{beforeState:{subtitleEnabled:true},afterState:{subtitleEnabled:true}}),null);
+  assert.equal(recordSubtitleEnabledChange(project,{beforeState:{subtitleEnabled:false},afterState:{subtitleEnabled:'false'}}),null);
   assert.equal(project.learning.decisions.length,1);
 });
