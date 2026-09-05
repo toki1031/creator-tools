@@ -673,6 +673,67 @@ export function recordBgmFadeInChange(project, {
   }, options);
 }
 
+export function snapshotBgmFadeOut(value) {
+  return { fadeOutSec: normalizeBgmFadeSeconds(value) };
+}
+
+export function recordBgmFadeOutChange(project, {
+  beforeState,
+  afterState,
+  bgmSource,
+  bgmCategory,
+  bgmVolume,
+  fadeInSec,
+  ducking,
+  loop,
+  hasBgm
+}, options = {}) {
+  const beforeRaw = isRecord(beforeState) ? beforeState.fadeOutSec : beforeState;
+  const afterRaw = isRecord(afterState) ? afterState.fadeOutSec : afterState;
+  const before = normalizeBgmFadeSeconds(beforeRaw);
+  const after = normalizeBgmFadeSeconds(afterRaw);
+  if (after === null || before === after) return null;
+
+  const bgm = isRecord(project?.bgm) ? project.bgm : {};
+  const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+  const currentVolume = normalizeBgmVolume(bgmVolume ?? bgm.volume);
+  const currentFadeIn = normalizeBgmFadeSeconds(fadeInSec ?? bgm.fadeInSec);
+  const currentDucking = typeof ducking === 'boolean' ? ducking : Boolean(bgm.ducking);
+  const currentLoop = typeof loop === 'boolean' ? loop : Boolean(bgm.loop);
+  const currentHasBgm = typeof hasBgm === 'boolean' ? hasBgm : Boolean(bgm.audioData);
+  const hasNarration = Boolean(project?.narration?.audioData) || scenes.some(scene => Boolean(scene?.narration?.audioData));
+  const audioAssetId = normalizeAudioAssetId(bgm.audioAssetId);
+  const projectDurationSec = scenes.reduce((sum, scene) => sum + Math.max(0, Number(scene?.durationSec) || 0), 0);
+
+  return appendDecision(project, {
+    decisionType: 'bgm-fade-out',
+    sceneId: '',
+    context: {
+      platform: stringOr(project?.platform),
+      aspectRatio: stringOr(project?.aspectRatio),
+      bgmSource: typeof bgmSource === 'string' ? bgmSource.trim() : stringOr(bgm.source).trim(),
+      bgmCategory: typeof bgmCategory === 'string' ? bgmCategory.trim() : stringOr(bgm.category).trim(),
+      bgmVolume: currentVolume,
+      fadeInSec: currentFadeIn,
+      ducking: currentDucking,
+      loop: currentLoop,
+      hasBgm: currentHasBgm,
+      hasNarration,
+      sceneCount: scenes.length,
+      projectDurationSec
+    },
+    proposal: { fadeOutSec: before },
+    alternatives: [],
+    humanAction: { type: 'set-bgm-fade-out' },
+    finalDecision: { fadeOutSec: after },
+    reasonCode: '',
+    reasonNote: '',
+    source: { type: 'human', feature: 'bgm-editor', version: '0.22' },
+    assetIds: audioAssetId ? [audioAssetId] : [],
+    rights: {}
+  }, options);
+}
+
 export function recordBgmLoopChange(project, {
   beforeLoop,
   afterLoop,
