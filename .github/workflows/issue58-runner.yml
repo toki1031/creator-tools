@@ -112,7 +112,7 @@ jobs:
           rm -rf dist node_modules package-lock.json
           git clean -fdx
           changed="$(git status --short | awk '{print $2}' | sort)"
-          expected="$(printf '%s\n' decisionLog.js main.js tests/decisionLog.test.mjs | sort)"
+          expected="$(printf '%s\n' .github/workflows/issue58-runner.yml decisionLog.js main.js tests/decisionLog.test.mjs | sort)"
           printf 'changed:\n%s\nexpected:\n%s\n' "$changed" "$expected"
           test "$changed" = "$expected"
           git config user.name "github-actions[bot]"
