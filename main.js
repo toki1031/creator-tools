@@ -10,7 +10,7 @@ import { normalizeSubtitleOffset, resolveEffectiveSubtitlePosition, resolveSubti
 import { assessMvpVideoResult, describeVideoExportFailure, isMvpShortsProject, validateMvpShortsOutput } from "./videoMvp.js";
 import { createGenerationStartController, projectExpectsVideoAudio } from "./videoGenerationStart.js";
 import { applyDictionaryEntries, normalizeSubtitleContentForSync, splitIntoScenes, splitSubtitleCards, subtitleContentChanged } from "./qualityLogic.js";
-import { ensureLearningState, moveSceneWithDecision, recordBgmDuckingChange, recordBgmLoopChange, recordBgmSelectionChange, recordBgmVolumeChange, recordGlobalSubtitlePositionChange, recordSceneDurationChange, recordSceneImageSelection, recordSceneMotionChange, recordSceneSubtitlePositionChange, recordSceneTransitionChange, recordSubtitleContentChange, recordSubtitleBackgroundEnabledChange, recordSubtitleFontSizeChange, recordSubtitleMaxCharsChange, recordSubtitleMaxLinesChange, recordSubtitlePresetChange, recordSubtitleSceneSyncDecision, snapshotGlobalSubtitlePosition, snapshotSceneSubtitlePosition, snapshotSubtitleBackgroundEnabled, snapshotSubtitleFontSize, snapshotSubtitleMaxChars, snapshotSubtitleMaxLines, snapshotSubtitlePresetState } from "./decisionLog.js";
+import { ensureLearningState, moveSceneWithDecision, recordBgmDuckingChange, recordBgmLoopChange, recordBgmSelectionChange, recordBgmVolumeChange, recordGlobalSubtitlePositionChange, recordSceneDurationChange, recordSceneImageSelection, recordSceneMotionChange, recordSceneSubtitlePositionChange, recordSceneTransitionChange, recordSubtitleContentChange, recordSubtitleBackgroundEnabledChange, recordSubtitleFontSizeChange, recordSubtitleMaxCharsChange, recordSubtitleMaxLinesChange, recordSubtitleOutlineWidthChange, recordSubtitlePresetChange, recordSubtitleSceneSyncDecision, snapshotGlobalSubtitlePosition, snapshotSceneSubtitlePosition, snapshotSubtitleBackgroundEnabled, snapshotSubtitleFontSize, snapshotSubtitleMaxChars, snapshotSubtitleMaxLines, snapshotSubtitleOutlineWidth, snapshotSubtitlePresetState } from "./decisionLog.js";
 
 const rootElement = document.querySelector("#app");
 if (!rootElement) throw new Error("#app がありません。");
@@ -776,7 +776,18 @@ loopEl.onblur=()=>commitBgmLoopDecision(loopEl);
   volumeEl.onpointerup=()=>commitBgmVolumeDecision(volumeEl);
   volumeEl.onpointercancel=()=>bgmVolumeBeforeByElement.delete(volumeEl);
   volumeEl.onblur=()=>commitBgmVolumeDecision(volumeEl);
-  ['subtitleEnabled','textColor','outlineColor','outlineWidth','backgroundColor','backgroundOpacity'].forEach(k=>root.querySelector('#'+k).oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();});
+  ['subtitleEnabled','textColor','outlineColor','backgroundColor','backgroundOpacity'].forEach(k=>root.querySelector('#'+k).oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();});
+  const subtitleOutlineWidthBeforeByElement=new WeakMap();
+const outlineWidthEl=root.querySelector('#outlineWidth');
+const rememberSubtitleOutlineWidthBefore=el=>{if(subtitleOutlineWidthBeforeByElement.has(el))return;subtitleOutlineWidthBeforeByElement.set(el,snapshotSubtitleOutlineWidth(el.value));};
+const commitSubtitleOutlineWidthDecision=el=>{if(!subtitleOutlineWidthBeforeByElement.has(el))return;const before=subtitleOutlineWidthBeforeByElement.get(el);subtitleOutlineWidthBeforeByElement.delete(el);const after=snapshotSubtitleOutlineWidth(el.value);const record=recordSubtitleOutlineWidthChange(project,{beforeState:before,afterState:after});if(record)save();};
+outlineWidthEl.onpointerdown=()=>rememberSubtitleOutlineWidthBefore(outlineWidthEl);
+outlineWidthEl.onfocus=()=>rememberSubtitleOutlineWidthBefore(outlineWidthEl);
+outlineWidthEl.onkeydown=()=>rememberSubtitleOutlineWidthBefore(outlineWidthEl);
+outlineWidthEl.oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();};
+outlineWidthEl.onpointerup=()=>commitSubtitleOutlineWidthDecision(outlineWidthEl);
+outlineWidthEl.onpointercancel=()=>subtitleOutlineWidthBeforeByElement.delete(outlineWidthEl);
+outlineWidthEl.onblur=()=>commitSubtitleOutlineWidthDecision(outlineWidthEl);
   const subtitleBackgroundEnabledBeforeByElement=new WeakMap();
 const backgroundEnabledEl=root.querySelector('#backgroundEnabled');
 const rememberSubtitleBackgroundEnabledBefore=el=>{if(subtitleBackgroundEnabledBeforeByElement.has(el))return;subtitleBackgroundEnabledBeforeByElement.set(el,snapshotSubtitleBackgroundEnabled(st.backgroundEnabled));};

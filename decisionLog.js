@@ -849,6 +849,65 @@ export function recordSubtitleMaxCharsChange(project, { beforeState, afterState 
   }, options);
 }
 
+export function normalizeSubtitleOutlineWidth(value) {
+  if (value === '' || value === null || value === undefined) return null;
+  const number = Number(value);
+  return Number.isInteger(number) && number >= 0 && number <= 8 ? number : null;
+}
+
+export function snapshotSubtitleOutlineWidth(value) {
+  return { outlineWidth: normalizeSubtitleOutlineWidth(value) };
+}
+
+export function recordSubtitleOutlineWidthChange(project, { beforeState, afterState }, options = {}) {
+  const beforeRaw = isRecord(beforeState) ? beforeState.outlineWidth : beforeState;
+  const afterRaw = isRecord(afterState) ? afterState.outlineWidth : afterState;
+  const before = normalizeSubtitleOutlineWidth(beforeRaw);
+  const after = normalizeSubtitleOutlineWidth(afterRaw);
+  if (after === null || before === after) return null;
+
+  const style = isRecord(project?.subtitleStyle) ? project.subtitleStyle : {};
+  const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+  const subtitleSceneCount = scenes.filter(scene => stringOr(scene?.subtitleText).trim()).length;
+  const fontSizePx = normalizeSubtitleFontSize(style.fontSize);
+  const positionValue = stringOr(style.position).trim();
+  const position = ['top', 'center', 'bottom'].includes(positionValue) ? positionValue : '';
+  const maxCharsPerLine = normalizeSubtitleMaxChars(style.maxCharsPerLine);
+  const maxLines = normalizeSubtitleMaxLines(style.maxLines);
+  const textColor = stringOr(style.textColor).trim();
+  const outlineColor = stringOr(style.outlineColor).trim();
+  const backgroundEnabled = normalizeSubtitleBackgroundEnabled(style.backgroundEnabled);
+
+  return appendDecision(project, {
+    decisionType: 'subtitle-outline-width',
+    sceneId: '',
+    context: {
+      platform: stringOr(project?.platform),
+      aspectRatio: stringOr(project?.aspectRatio),
+      subtitlePreset: stringOr(style.preset).trim() || 'standard',
+      subtitleEnabled: style.enabled !== false,
+      fontSizePx,
+      position,
+      maxCharsPerLine,
+      maxLines,
+      textColor,
+      outlineColor,
+      backgroundEnabled,
+      sceneCount: scenes.length,
+      subtitleSceneCount
+    },
+    proposal: { outlineWidth: before },
+    alternatives: [],
+    humanAction: { type: 'set-subtitle-outline-width' },
+    finalDecision: { outlineWidth: after },
+    reasonCode: '',
+    reasonNote: '',
+    source: { type: 'human', feature: 'subtitle-editor', version: '0.20' },
+    assetIds: [],
+    rights: {}
+  }, options);
+}
+
 export function normalizeSubtitleBackgroundEnabled(value) {
   return typeof value === 'boolean' ? value : null;
 }
