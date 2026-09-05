@@ -9,11 +9,13 @@ import {
   normalizeDecisionRecord,
   normalizeLearningState,
   normalizeBgmVolume,
+  normalizeSubtitleFontSize,
   normalizeNarrationVoiceId,
   recordBgmSelectionChange,
   recordBgmVolumeChange,
   recordNarrationVoiceDecision,
   recordGlobalSubtitlePositionChange,
+  recordSubtitleFontSizeChange,
   recordSubtitlePresetChange,
   recordSubtitleSceneSyncDecision,
   recordSceneDurationChange,
@@ -23,6 +25,7 @@ import {
   recordSceneTransitionChange,
   snapshotGlobalSubtitlePosition,
   snapshotSceneSubtitlePosition,
+  snapshotSubtitleFontSize,
   snapshotSubtitlePresetState,
   recordSceneOrderChange,
   recordSubtitleContentChange,
@@ -833,4 +836,63 @@ test('subtitle-preset ignores same preset and invalid final preset', () => {
   assert.equal(recordSubtitlePresetChange(project,{beforeState:standard,afterState:standard}),null);
   assert.equal(recordSubtitlePresetChange(project,{beforeState:standard,afterState:{preset:'invalid',style:{fontSize:1}}}),null);
   assert.equal(project.learning.decisions.length,0);
+});
+
+
+test('subtitle-font-size records one committed direct size adjustment with layout context', () => {
+  const project={
+    id:'p-font',platform:'youtube-shorts',aspectRatio:'9:16',learning:{decisions:[]},
+    subtitleStyle:{preset:'standard',enabled:true,position:'bottom',positionOffsetPercent:3,maxCharsPerLine:16,maxLines:2},
+    scenes:[{id:'s1',subtitleText:'字幕あり'},{id:'s2',subtitleText:''},{id:'s3',subtitleText:'別字幕'}]
+  };
+  const record=recordSubtitleFontSizeChange(project,{
+    beforeState:snapshotSubtitleFontSize('54'),
+    afterState:snapshotSubtitleFontSize('68')
+  },{createId:()=> 'd-font-1',now:()=> '2026-09-05T00:30:00.000Z'});
+  assert.equal(record.decisionType,'subtitle-font-size');
+  assert.equal(record.sceneId,'');
+  assert.deepEqual(record.proposal,{fontSizePx:54});
+  assert.deepEqual(record.finalDecision,{fontSizePx:68});
+  assert.deepEqual(record.alternatives,[]);
+  assert.deepEqual(record.humanAction,{type:'set-subtitle-font-size'});
+  assert.deepEqual(record.source,{type:'human',feature:'subtitle-editor',version:'0.14'});
+  assert.deepEqual(record.context,{
+    platform:'youtube-shorts',aspectRatio:'9:16',subtitlePreset:'standard',subtitleEnabled:true,
+    position:'bottom',positionOffsetPercent:3,maxCharsPerLine:16,maxLines:2,sceneCount:3,subtitleSceneCount:2
+  });
+  assert.deepEqual(record.assetIds,[]);
+  assert.deepEqual(record.rights,{});
+  assert.equal(project.learning.decisions.length,1);
+});
+
+test('subtitle font size normalization clamps to the visible 32..84 integer range', () => {
+  assert.equal(normalizeSubtitleFontSize(32),32);
+  assert.equal(normalizeSubtitleFontSize('54'),54);
+  assert.equal(normalizeSubtitleFontSize(67.6),68);
+  assert.equal(normalizeSubtitleFontSize(1),32);
+  assert.equal(normalizeSubtitleFontSize(999),84);
+  assert.deepEqual(snapshotSubtitleFontSize('84'),{fontSizePx:84});
+});
+
+test('subtitle font size rejects invalid values and same normalized value without noise', () => {
+  const project={id:'p-font',learning:{decisions:[]},subtitleStyle:{},scenes:[]};
+  assert.equal(normalizeSubtitleFontSize(''),null);
+  assert.equal(normalizeSubtitleFontSize('bad'),null);
+  assert.equal(normalizeSubtitleFontSize(Number.NaN),null);
+  assert.equal(snapshotSubtitleFontSize(undefined),null);
+  assert.equal(recordSubtitleFontSizeChange(project,{beforeState:{fontSizePx:54},afterState:{fontSizePx:54}}),null);
+  assert.equal(recordSubtitleFontSizeChange(project,{beforeState:{fontSizePx:'bad'},afterState:{fontSizePx:54}}),null);
+  assert.equal(project.learning.decisions.length,0);
+});
+
+test('subtitle font size context uses UI-effective defaults without capturing preset alternatives', () => {
+  const project={id:'p-font-default',platform:'instagram-reels',aspectRatio:'9:16',learning:{decisions:[]},subtitleStyle:{enabled:false,position:'invalid',maxCharsPerLine:'bad',maxLines:2},scenes:[]};
+  const record=recordSubtitleFontSizeChange(project,{beforeState:40,afterState:41});
+  assert.equal(record.context.subtitlePreset,'standard');
+  assert.equal(record.context.subtitleEnabled,false);
+  assert.equal(record.context.position,'');
+  assert.equal(record.context.positionOffsetPercent,0);
+  assert.equal(record.context.maxCharsPerLine,null);
+  assert.equal(record.context.maxLines,2);
+  assert.deepEqual(record.alternatives,[]);
 });
