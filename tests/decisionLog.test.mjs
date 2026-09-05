@@ -11,6 +11,7 @@ import {
   normalizeBgmVolume,
   normalizeSubtitleFontSize,
   normalizeNarrationVoiceId,
+  recordBgmDuckingChange,
   recordBgmSelectionChange,
   recordBgmVolumeChange,
   recordNarrationVoiceDecision,
@@ -895,4 +896,52 @@ test('subtitle font size context uses UI-effective defaults without capturing pr
   assert.equal(record.context.maxCharsPerLine,null);
   assert.equal(record.context.maxLines,2);
   assert.deepEqual(record.alternatives,[]);
+});
+
+
+test('bgm-ducking records explicit true to false decision with compact mix context', () => {
+  const audioAssetId='audio-sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
+  const project={id:'p-duck',platform:'youtube-shorts',aspectRatio:'9:16',learning:{decisions:[]},bgm:{source:'upload',category:'calm',volume:0.12,loop:true,audioAssetId,audioData:'data:audio/wav;base64,SECRET',fileName:'private.wav',title:'private title',license:'private license',credit:'private credit'},scenes:[{id:'s1',narration:{audioData:'data:audio/wav;base64,AA=='}},{id:'s2'}]};
+  const record=recordBgmDuckingChange(project,{beforeDucking:true,afterDucking:false,bgmSource:'upload',bgmCategory:'history',bgmVolume:'0.18',loop:false,hasBgm:true},{createId:()=> 'd-duck-1',now:()=> '2026-09-05T01:00:00.000Z'});
+  assert.equal(record.decisionType,'bgm-ducking');
+  assert.equal(record.sceneId,'');
+  assert.deepEqual(record.proposal,{ducking:true});
+  assert.deepEqual(record.finalDecision,{ducking:false});
+  assert.deepEqual(record.alternatives,[{ducking:true}]);
+  assert.deepEqual(record.humanAction,{type:'set-bgm-ducking'});
+  assert.deepEqual(record.source,{type:'human',feature:'bgm-editor',version:'0.15'});
+  assert.deepEqual(record.assetIds,[audioAssetId]);
+  assert.deepEqual(record.rights,{});
+  assert.deepEqual(record.context,{platform:'youtube-shorts',aspectRatio:'9:16',bgmSource:'upload',bgmCategory:'history',bgmVolume:0.18,loop:false,hasBgm:true,hasNarration:true,sceneCount:2});
+  const serialized=JSON.stringify(record);
+  for(const secret of ['SECRET','private.wav','private title','private license','private credit']) assert.equal(serialized.includes(secret),false);
+});
+
+test('bgm-ducking records explicit false to true decision', () => {
+  const project={id:'p-duck-on',platform:'instagram-reels',aspectRatio:'1:1',learning:{decisions:[]},bgm:{source:'none',category:'sleep',volume:0.08,loop:true},scenes:[]};
+  const record=recordBgmDuckingChange(project,{beforeDucking:false,afterDucking:true,bgmSource:'none',bgmCategory:'sleep',bgmVolume:0.08,loop:true,hasBgm:false});
+  assert.deepEqual(record.proposal,{ducking:false});
+  assert.deepEqual(record.finalDecision,{ducking:true});
+  assert.deepEqual(record.alternatives,[{ducking:false}]);
+  assert.equal(record.context.hasBgm,false);
+  assert.equal(record.context.hasNarration,false);
+  assert.deepEqual(record.assetIds,[]);
+});
+
+test('bgm-ducking ignores same and non-boolean states without noise', () => {
+  const project={id:'p-duck-invalid',learning:{decisions:[]},bgm:{},scenes:[]};
+  assert.equal(recordBgmDuckingChange(project,{beforeDucking:true,afterDucking:true}),null);
+  assert.equal(recordBgmDuckingChange(project,{beforeDucking:'true',afterDucking:false}),null);
+  assert.equal(recordBgmDuckingChange(project,{beforeDucking:false,afterDucking:1}),null);
+  assert.equal(recordBgmDuckingChange(project,{beforeDucking:null,afterDucking:true}),null);
+  assert.equal(project.learning.decisions.length,0);
+});
+
+test('bgm-ducking only links a valid current audio asset id and normalizes volume context', () => {
+  const project={id:'p-duck-asset',learning:{decisions:[]},bgm:{audioAssetId:'legacy.mp3',source:'upload',category:'calm',volume:9,loop:false,audioData:'data:audio/wav;base64,AA=='},scenes:[]};
+  const record=recordBgmDuckingChange(project,{beforeDucking:true,afterDucking:false});
+  assert.deepEqual(record.assetIds,[]);
+  assert.equal(record.context.bgmVolume,0.5);
+  assert.equal(record.context.hasBgm,true);
+  assert.equal(record.context.loop,false);
 });
