@@ -1,0 +1,98 @@
+name: Issue 84 iPhone Safari Fix
+
+on:
+  push:
+    branches:
+      - issue-84-subtitle-text-color-v025
+
+permissions:
+  contents: write
+
+jobs:
+  fix-test-commit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply iPhone Safari color-picker fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('main.js')
+          text=p.read_text()
+          old="""  const subtitleTextColorBeforeByElement=new WeakMap();
+const textColorEl=root.querySelector('#textColor');
+const supportsOpenPickerState=(()=>{try{return Boolean(globalThis.CSS?.supports?.('selector(input:open)'));}catch{return false;}})();
+const isColorPickerOpen=el=>{if(!supportsOpenPickerState)return false;try{return el.matches(':open');}catch{return false;}};
+let textColorCloseCheck=0;
+const rememberSubtitleTextColorBefore=el=>{if(subtitleTextColorBeforeByElement.has(el))return;subtitleTextColorBeforeByElement.set(el,snapshotSubtitleTextColor(el.value));};
+const commitSubtitleTextColorDecision=el=>{if(!subtitleTextColorBeforeByElement.has(el))return;clearTimeout(textColorCloseCheck);textColorCloseCheck=0;const before=subtitleTextColorBeforeByElement.get(el);subtitleTextColorBeforeByElement.delete(el);const after=snapshotSubtitleTextColor(el.value);const record=recordSubtitleTextColorChange(project,{beforeState:before,afterState:after});if(record)save();};
+const scheduleSubtitleTextColorCloseCheck=el=>{if(!supportsOpenPickerState)return;clearTimeout(textColorCloseCheck);textColorCloseCheck=setTimeout(()=>{textColorCloseCheck=0;if(!isColorPickerOpen(el))commitSubtitleTextColorDecision(el);},300);};
+textColorEl.onpointerdown=()=>rememberSubtitleTextColorBefore(textColorEl);
+textColorEl.onfocus=()=>rememberSubtitleTextColorBefore(textColorEl);
+textColorEl.onkeydown=()=>rememberSubtitleTextColorBefore(textColorEl);
+textColorEl.oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();scheduleSubtitleTextColorCloseCheck(textColorEl);};
+textColorEl.onchange=()=>{if(isColorPickerOpen(textColorEl))return;commitSubtitleTextColorDecision(textColorEl);};
+textColorEl.onpointercancel=()=>{clearTimeout(textColorCloseCheck);textColorCloseCheck=0;subtitleTextColorBeforeByElement.delete(textColorEl);};
+textColorEl.onblur=()=>{if(isColorPickerOpen(textColorEl))return;commitSubtitleTextColorDecision(textColorEl);};
+"""
+          new="""  const subtitleTextColorBeforeByElement=new WeakMap();
+const textColorEl=root.querySelector('#textColor');
+const supportsOpenPickerState=(()=>{try{return Boolean(globalThis.CSS?.supports?.('selector(input:open)'));}catch{return false;}})();
+const isColorPickerOpen=el=>{if(!supportsOpenPickerState)return false;try{return el.matches(':open');}catch{return false;}};
+let textColorCloseCheck=0;
+let textColorOutsideCommitArmed=false;
+const rememberSubtitleTextColorBefore=el=>{if(subtitleTextColorBeforeByElement.has(el))return;subtitleTextColorBeforeByElement.set(el,snapshotSubtitleTextColor(st.textColor));};
+const commitSubtitleTextColorDecision=el=>{if(!subtitleTextColorBeforeByElement.has(el))return;clearTimeout(textColorCloseCheck);textColorCloseCheck=0;const before=subtitleTextColorBeforeByElement.get(el);subtitleTextColorBeforeByElement.delete(el);const after=snapshotSubtitleTextColor(el.value);const record=recordSubtitleTextColorChange(project,{beforeState:before,afterState:after});if(record)save();};
+const scheduleSubtitleTextColorCloseCheck=el=>{if(!supportsOpenPickerState)return;clearTimeout(textColorCloseCheck);textColorCloseCheck=setTimeout(()=>{textColorCloseCheck=0;if(!isColorPickerOpen(el))commitSubtitleTextColorDecision(el);},300);};
+const armSubtitleTextColorOutsideCommit=()=>{if(textColorOutsideCommitArmed)return;textColorOutsideCommitArmed=true;document.addEventListener('pointerdown',()=>{textColorOutsideCommitArmed=false;commitSubtitleTextColorDecision(textColorEl);},{capture:true,once:true});};
+textColorEl.onpointerdown=()=>rememberSubtitleTextColorBefore(textColorEl);
+textColorEl.onfocus=()=>rememberSubtitleTextColorBefore(textColorEl);
+textColorEl.onkeydown=()=>rememberSubtitleTextColorBefore(textColorEl);
+textColorEl.oninput=()=>{rememberSubtitleTextColorBefore(textColorEl);armSubtitleTextColorOutsideCommit();readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();scheduleSubtitleTextColorCloseCheck(textColorEl);};
+textColorEl.onchange=()=>{if(isColorPickerOpen(textColorEl))return;commitSubtitleTextColorDecision(textColorEl);};
+textColorEl.onblur=()=>{if(isColorPickerOpen(textColorEl))return;commitSubtitleTextColorDecision(textColorEl);};
+"""
+          if text.count(old)!=1:
+              raise SystemExit(f'expected one subtitle text color handler block, got {text.count(old)}')
+          p.write_text(text.replace(old,new,1))
+          PY
+      - name: Install dependencies without repository artifacts
+        run: npm install --package-lock=false --no-audit --no-fund
+      - name: Test
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Diff and scope checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=403986814a1d961d05fec9d3d313b5520bfc611e
+          git diff --check
+          git diff --exit-code "$BASE" -- videoRenderer.js db.js projectFactory.js subtitlePosition.js qualityLogic.js projectBackup.js audioAssetIdentity.js voice-lab.html styles.css
+          test "$(grep -F -o "snapshotSubtitleTextColor(st.textColor)" main.js | wc -l)" -eq 1
+          test "$(grep -F -o "armSubtitleTextColorOutsideCommit();readGlobalSettings()" main.js | wc -l)" -eq 1
+          test "$(grep -F -o "document.addEventListener('pointerdown'" main.js | wc -l)" -eq 1
+          test "$(grep -F -o "textColorEl.onpointercancel" main.js | wc -l)" -eq 0
+      - name: Commit intended changes and remove runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/issue84-safari-fix.yml
+          rm -rf dist node_modules package-lock.json
+          git clean -fdx
+          changed="$(git status --short | awk '{print $2}' | sort)"
+          expected="$(printf '%s\n' .github/workflows/issue84-safari-fix.yml main.js | sort)"
+          printf 'changed:\n%s\nexpected:\n%s\n' "$changed" "$expected"
+          test "$changed" = "$expected"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add main.js .github/workflows/issue84-safari-fix.yml
+          git commit -m "Fix iPhone Safari subtitle color commit"
+          git push origin HEAD:issue-84-subtitle-text-color-v025
