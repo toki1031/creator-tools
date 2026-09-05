@@ -1,0 +1,218 @@
+name: Issue 68 Implementation Runner
+
+on:
+  push:
+    branches:
+      - issue-68-subtitle-max-chars-v017
+
+permissions:
+  contents: write
+
+jobs:
+  implement-test-commit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply Dataset v0.17 patch
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          BASE='4f07345f54cc4fcbc6d710a7cba3b7c10624e2af'
+
+          def rep(path, old, new):
+              p=Path(path)
+              text=p.read_text()
+              count=text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected one match, got {count}: {old[:120]!r}')
+              p.write_text(text.replace(old,new,1))
+
+          # decisionLog.js
+          marker="const SUBTITLE_PRESET_IDS = ['standard', 'large', 'minimal', 'boxed'];"
+          helper=r'''export function normalizeSubtitleMaxChars(value) {
+            if (value === '' || value === null || value === undefined) return null;
+            const number = Number(value);
+            if (!Number.isFinite(number) || !Number.isInteger(number) || number < 6 || number > 30) return null;
+            return number;
+          }
+
+          export function snapshotSubtitleMaxChars(value) {
+            const maxCharsPerLine = normalizeSubtitleMaxChars(value);
+            return { maxCharsPerLine };
+          }
+
+          export function recordSubtitleMaxCharsChange(project, { beforeState, afterState }, options = {}) {
+            const beforeRaw = isRecord(beforeState) ? beforeState.maxCharsPerLine : beforeState;
+            const afterRaw = isRecord(afterState) ? afterState.maxCharsPerLine : afterState;
+            const before = normalizeSubtitleMaxChars(beforeRaw);
+            const after = normalizeSubtitleMaxChars(afterRaw);
+            if (after === null || before === after) return null;
+
+            const style = isRecord(project?.subtitleStyle) ? project.subtitleStyle : {};
+            const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+            const subtitleSceneCount = scenes.filter(scene => stringOr(scene?.subtitleText).trim()).length;
+            const fontSizePx = normalizeSubtitleFontSize(style.fontSize);
+            const positionValue = stringOr(style.position).trim();
+            const position = ['top', 'center', 'bottom'].includes(positionValue) ? positionValue : '';
+            const maxLines = Number(style.maxLines);
+
+            return appendDecision(project, {
+              decisionType: 'subtitle-max-chars',
+              sceneId: '',
+              context: {
+                platform: stringOr(project?.platform),
+                aspectRatio: stringOr(project?.aspectRatio),
+                subtitlePreset: stringOr(style.preset).trim() || 'standard',
+                subtitleEnabled: style.enabled !== false,
+                fontSizePx,
+                position,
+                maxLines: Number.isFinite(maxLines) ? maxLines : null,
+                sceneCount: scenes.length,
+                subtitleSceneCount
+              },
+              proposal: { maxCharsPerLine: before },
+              alternatives: [],
+              humanAction: { type: 'set-subtitle-max-chars' },
+              finalDecision: { maxCharsPerLine: after },
+              reasonCode: '',
+              reasonNote: '',
+              source: { type: 'human', feature: 'subtitle-editor', version: '0.17' },
+              assetIds: [],
+              rights: {}
+            }, options);
+          }
+
+          '''+marker
+          rep('decisionLog.js',marker,helper)
+
+          # main.js imports
+          rep(
+              'main.js',
+              'recordSubtitleFontSizeChange, recordSubtitlePresetChange',
+              'recordSubtitleFontSizeChange, recordSubtitleMaxCharsChange, recordSubtitlePresetChange'
+          )
+          rep(
+              'main.js',
+              'snapshotSubtitleFontSize, snapshotSubtitlePresetState',
+              'snapshotSubtitleFontSize, snapshotSubtitleMaxChars, snapshotSubtitlePresetState'
+          )
+
+          # Keep all existing generic handlers except maxChars; give it a dedicated decision-aware handler.
+          rep(
+              'main.js',
+              "['subtitleEnabled','maxChars','maxLines','textColor','outlineColor','outlineWidth','backgroundEnabled','backgroundColor','backgroundOpacity'].forEach(k=>root.querySelector('#'+k).oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();});",
+              "['subtitleEnabled','maxLines','textColor','outlineColor','outlineWidth','backgroundEnabled','backgroundColor','backgroundOpacity'].forEach(k=>root.querySelector('#'+k).oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();});"
+          )
+
+          marker_main="  const subtitleFontSizeBeforeByElement=new WeakMap();"
+          block=r'''  const subtitleMaxCharsBeforeByElement=new WeakMap();
+          const maxCharsEl=root.querySelector('#maxChars');
+          const rememberSubtitleMaxCharsBefore=el=>{if(subtitleMaxCharsBeforeByElement.has(el))return;subtitleMaxCharsBeforeByElement.set(el,snapshotSubtitleMaxChars(el.value));};
+          const commitSubtitleMaxCharsDecision=el=>{if(!subtitleMaxCharsBeforeByElement.has(el))return;const before=subtitleMaxCharsBeforeByElement.get(el);subtitleMaxCharsBeforeByElement.delete(el);const after=snapshotSubtitleMaxChars(el.value);const record=recordSubtitleMaxCharsChange(project,{beforeState:before,afterState:after});if(record)save();};
+          maxCharsEl.onpointerdown=()=>rememberSubtitleMaxCharsBefore(maxCharsEl);
+          maxCharsEl.onfocus=()=>rememberSubtitleMaxCharsBefore(maxCharsEl);
+          maxCharsEl.onkeydown=()=>rememberSubtitleMaxCharsBefore(maxCharsEl);
+          maxCharsEl.oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();};
+          maxCharsEl.onchange=()=>commitSubtitleMaxCharsDecision(maxCharsEl);
+          maxCharsEl.onpointercancel=()=>subtitleMaxCharsBeforeByElement.delete(maxCharsEl);
+          maxCharsEl.onblur=()=>commitSubtitleMaxCharsDecision(maxCharsEl);
+          '''+marker_main
+          rep('main.js',marker_main,block)
+
+          # tests imports
+          rep('tests/decisionLog.test.mjs','  normalizeSubtitleFontSize,\n','  normalizeSubtitleFontSize,\n  normalizeSubtitleMaxChars,\n')
+          rep('tests/decisionLog.test.mjs','  recordSubtitleFontSizeChange,\n','  recordSubtitleFontSizeChange,\n  recordSubtitleMaxCharsChange,\n')
+          rep('tests/decisionLog.test.mjs','  snapshotSubtitleFontSize,\n','  snapshotSubtitleFontSize,\n  snapshotSubtitleMaxChars,\n')
+
+          p=Path('tests/decisionLog.test.mjs')
+          tests=p.read_text()
+          tests += r'''
+
+          test('subtitle-max-chars records a direct valid adjustment with compact context', () => {
+            const project={
+              id:'p-max-chars',platform:'youtube-shorts',aspectRatio:'9:16',learning:{decisions:[]},
+              subtitleStyle:{preset:'standard',enabled:true,fontSize:54,position:'bottom',maxCharsPerLine:18,maxLines:2},
+              scenes:[{id:'s1',subtitleText:'字幕あり'},{id:'s2',subtitleText:''}]
+            };
+            const record=recordSubtitleMaxCharsChange(project,{beforeState:{maxCharsPerLine:16},afterState:{maxCharsPerLine:18}},{createId:()=> 'd-max-chars',now:()=> '2026-09-05T00:00:00.000Z'});
+            assert.equal(record.decisionType,'subtitle-max-chars');
+            assert.equal(record.sceneId,'');
+            assert.deepEqual(record.proposal,{maxCharsPerLine:16});
+            assert.deepEqual(record.finalDecision,{maxCharsPerLine:18});
+            assert.deepEqual(record.alternatives,[]);
+            assert.deepEqual(record.humanAction,{type:'set-subtitle-max-chars'});
+            assert.deepEqual(record.source,{type:'human',feature:'subtitle-editor',version:'0.17'});
+            assert.deepEqual(record.assetIds,[]);
+            assert.deepEqual(record.rights,{});
+            assert.deepEqual(record.context,{platform:'youtube-shorts',aspectRatio:'9:16',subtitlePreset:'standard',subtitleEnabled:true,fontSizePx:54,position:'bottom',maxLines:2,sceneCount:2,subtitleSceneCount:1});
+          });
+
+          test('subtitle-max-chars normalization accepts only integer UI values 6 through 30', () => {
+            assert.equal(normalizeSubtitleMaxChars(6),6);
+            assert.equal(normalizeSubtitleMaxChars('16'),16);
+            assert.equal(normalizeSubtitleMaxChars(30),30);
+            for(const value of ['',null,undefined,5,31,16.5,'abc']) assert.equal(normalizeSubtitleMaxChars(value),null);
+            assert.deepEqual(snapshotSubtitleMaxChars('20'),{maxCharsPerLine:20});
+            assert.deepEqual(snapshotSubtitleMaxChars(''),{maxCharsPerLine:null});
+          });
+
+          test('subtitle-max-chars records a valid final value even when previous value is legacy or invalid', () => {
+            const project={id:'p',platform:'instagram-reels',aspectRatio:'1:1',learning:{decisions:[]},subtitleStyle:{preset:'legacy',enabled:false,fontSize:68,position:'center',maxCharsPerLine:14,maxLines:1},scenes:[]};
+            const record=recordSubtitleMaxCharsChange(project,{beforeState:{maxCharsPerLine:99},afterState:{maxCharsPerLine:14}});
+            assert.deepEqual(record.proposal,{maxCharsPerLine:null});
+            assert.deepEqual(record.finalDecision,{maxCharsPerLine:14});
+            assert.equal(record.context.subtitlePreset,'legacy');
+            assert.equal(record.context.subtitleEnabled,false);
+            assert.equal(record.context.fontSizePx,68);
+            assert.equal(record.context.position,'center');
+            assert.equal(record.context.maxLines,1);
+          });
+
+          test('subtitle-max-chars ignores same values and invalid final values', () => {
+            const project={id:'p',learning:{decisions:[]},subtitleStyle:{},scenes:[]};
+            assert.equal(recordSubtitleMaxCharsChange(project,{beforeState:{maxCharsPerLine:16},afterState:{maxCharsPerLine:16}}),null);
+            assert.equal(recordSubtitleMaxCharsChange(project,{beforeState:{maxCharsPerLine:16},afterState:{maxCharsPerLine:31}}),null);
+            assert.equal(recordSubtitleMaxCharsChange(project,{beforeState:{maxCharsPerLine:16},afterState:{maxCharsPerLine:12.5}}),null);
+            assert.equal(recordSubtitleMaxCharsChange(project,{beforeState:null,afterState:null}),null);
+            assert.equal(project.learning.decisions.length,0);
+          });
+          '''
+          p.write_text(tests)
+          PY
+      - name: Install dependencies without repository artifacts
+        run: npm install --package-lock=false --no-audit --no-fund
+      - name: Test
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Diff checks
+        shell: bash
+        run: |
+          git diff --check
+          git diff --exit-code 4f07345f54cc4fcbc6d710a7cba3b7c10624e2af -- videoRenderer.js db.js projectFactory.js subtitlePosition.js qualityLogic.js projectBackup.js audioAssetIdentity.js voice-lab.html
+          test "$(grep -o 'recordSubtitleMaxCharsChange(project' main.js | wc -l)" -eq 1
+          changed="$({ git diff --name-only 4f07345f54cc4fcbc6d710a7cba3b7c10624e2af; git ls-files --others --exclude-standard; } | grep -v '^.github/workflows/issue68-runner.yml$' | sort -u)"
+          expected="$(printf '%s\n' decisionLog.js main.js tests/decisionLog.test.mjs | sort)"
+          test "$changed" = "$expected"
+      - name: Commit intended changes and remove runner
+        shell: bash
+        run: |
+          rm .github/workflows/issue68-runner.yml
+          rm -rf dist node_modules package-lock.json
+          git clean -fdx
+          changed="$(git status --short | awk '{print $2}' | sort)"
+          expected="$(printf '%s\n' .github/workflows/issue68-runner.yml decisionLog.js main.js tests/decisionLog.test.mjs | sort)"
+          printf 'changed:\n%s\nexpected:\n%s\n' "$changed" "$expected"
+          test "$changed" = "$expected"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add decisionLog.js main.js tests/decisionLog.test.mjs .github/workflows/issue68-runner.yml
+          git commit -m "Capture subtitle max chars decisions"
+          git push origin HEAD:issue-68-subtitle-max-chars-v017
