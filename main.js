@@ -10,7 +10,7 @@ import { normalizeSubtitleOffset, resolveEffectiveSubtitlePosition, resolveSubti
 import { assessMvpVideoResult, describeVideoExportFailure, isMvpShortsProject, validateMvpShortsOutput } from "./videoMvp.js";
 import { createGenerationStartController, projectExpectsVideoAudio } from "./videoGenerationStart.js";
 import { applyDictionaryEntries, normalizeSubtitleContentForSync, splitIntoScenes, splitSubtitleCards, subtitleContentChanged } from "./qualityLogic.js";
-import { ensureLearningState, moveSceneWithDecision, recordBgmVolumeChange, recordGlobalSubtitlePositionChange, recordSceneDurationChange, recordSceneImageSelection, recordSceneMotionChange, recordSceneSubtitlePositionChange, recordSceneTransitionChange, recordSubtitleContentChange, recordSubtitleSceneSyncDecision, snapshotGlobalSubtitlePosition, snapshotSceneSubtitlePosition } from "./decisionLog.js";
+import { ensureLearningState, moveSceneWithDecision, recordBgmSelectionChange, recordBgmVolumeChange, recordGlobalSubtitlePositionChange, recordSceneDurationChange, recordSceneImageSelection, recordSceneMotionChange, recordSceneSubtitlePositionChange, recordSceneTransitionChange, recordSubtitleContentChange, recordSubtitleSceneSyncDecision, snapshotGlobalSubtitlePosition, snapshotSceneSubtitlePosition } from "./decisionLog.js";
 
 const rootElement = document.querySelector("#app");
 if (!rootElement) throw new Error("#app がありません。");
@@ -789,7 +789,8 @@ async function renderBgm(id) {
     }
     if(file.size>12_000_000&&!confirm('音源が大きいため端末保存容量を圧迫します。続けますか？')){e.target.value='';return;}
     root.querySelector('#source').value='upload';
-    pendingAsset=(async()=>{const audioAssetId=await createAudioAssetIdFromFile(file);const data=await fileToDataUrl(file);b.audioData=data;b.fileName=file.name;b.source='upload';b.audioAssetId=audioAssetId;})();
+    const beforeAudioAssetId=b.audioAssetId;const hadBgmBefore=Boolean(b.audioData);
+    pendingAsset=(async()=>{const audioAssetId=await createAudioAssetIdFromFile(file);const data=await fileToDataUrl(file);b.audioData=data;b.fileName=file.name;b.source='upload';b.audioAssetId=audioAssetId;recordBgmSelectionChange(project,{beforeAudioAssetId,afterAudioAssetId:audioAssetId,selectionMethod:'upload',hadBgmBefore,bgmCategory:root.querySelector('#category').value,ducking:root.querySelector('#ducking').checked,loop:root.querySelector('#loop').checked});})();
     save();await pendingAsset;root.querySelector('#fileName').textContent=file.name;root.querySelector('#audioPreview').src=b.audioData;
   };
 
