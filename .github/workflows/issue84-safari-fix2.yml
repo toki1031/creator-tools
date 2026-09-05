@@ -1,0 +1,57 @@
+name: Issue 84 Safari Fix 2
+
+on:
+  push:
+    branches:
+      - issue-84-subtitle-text-color-v025
+
+permissions:
+  contents: write
+
+jobs:
+  fix-test-commit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply iPhone Safari color-picker fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -c "import base64;exec(base64.b64decode('ZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCnAgPSBQYXRoKCJtYWluLmpzIikKdGV4dCA9IHAucmVhZF90ZXh0KCkKb2xkID0gIiIiICBjb25zdCBzdWJ0aXRsZVRleHRDb2xvckJlZm9yZUJ5RWxlbWVudD1uZXcgV2Vha01hcCgpOwpjb25zdCB0ZXh0Q29sb3JFbD1yb290LnF1ZXJ5U2VsZWN0b3IoJyN0ZXh0Q29sb3InKTsKY29uc3Qgc3VwcG9ydHNPcGVuUGlja2VyU3RhdGU9KCgpPT57dHJ5e3JldHVybiBCb29sZWFuKGdsb2JhbFRoaXMuQ1NTPy5zdXBwb3J0cz8uKCdzZWxlY3RvcihpbnB1dDpvcGVuKScpKTt9Y2F0Y2h7cmV0dXJuIGZhbHNlO319KSgpOwpjb25zdCBpc0NvbG9yUGlja2VyT3Blbj1lbD0+e2lmKCFzdXBwb3J0c09wZW5QaWNrZXJTdGF0ZSlyZXR1cm4gZmFsc2U7dHJ5e3JldHVybiBlbC5tYXRjaGVzKCc6b3BlbicpO31jYXRjaHtyZXR1cm4gZmFsc2U7fX07CmxldCB0ZXh0Q29sb3JDbG9zZUNoZWNrPTA7CmNvbnN0IHJlbWVtYmVyU3VidGl0bGVUZXh0Q29sb3JCZWZvcmU9ZWw9PntpZihzdWJ0aXRsZVRleHRDb2xvckJlZm9yZUJ5RWxlbWVudC5oYXMoZWwpKXJldHVybjtzdWJ0aXRsZVRleHRDb2xvckJlZm9yZUJ5RWxlbWVudC5zZXQoZWwsc25hcHNob3RTdWJ0aXRsZVRleHRDb2xvcihlbC52YWx1ZSkpO307CmNvbnN0IGNvbW1pdFN1YnRpdGxlVGV4dENvbG9yRGVjaXNpb249ZWw9PntpZighc3VidGl0bGVUZXh0Q29sb3JCZWZvcmVCeUVsZW1lbnQuaGFzKGVsKSlyZXR1cm47Y2xlYXJUaW1lb3V0KHRleHRDb2xvckNsb3NlQ2hlY2spO3RleHRDb2xvckNsb3NlQ2hlY2s9MDtjb25zdCBiZWZvcmU9c3VidGl0bGVUZXh0Q29sb3JCZWZvcmVCeUVsZW1lbnQuZ2V0KGVsKTtzdWJ0aXRsZVRleHRDb2xvckJlZm9yZUJ5RWxlbWVudC5kZWxldGUoZWwpO2NvbnN0IGFmdGVyPXNuYXBzaG90U3VidGl0bGVUZXh0Q29sb3IoZWwudmFsdWUpO2NvbnN0IHJlY29yZD1yZWNvcmRTdWJ0aXRsZVRleHRDb2xvckNoYW5nZShwcm9qZWN0LHtiZWZvcmVTdGF0ZTpiZWZvcmUsYWZ0ZXJTdGF0ZTphZnRlcn0pO2lmKHJlY29yZClzYXZlKCk7fTsKY29uc3Qgc2NoZWR1bGVTdWJ0aXRsZVRleHRDb2xvckNsb3NlQ2hlY2s9ZWw9PntpZighc3VwcG9ydHNPcGVuUGlja2VyU3RhdGUpcmV0dXJuO2NsZWFyVGltZW91dCh0ZXh0Q29sb3JDbG9zZUNoZWNrKTt0ZXh0Q29sb3JDbG9zZUNoZWNrPXNldFRpbWVvdXQoKCk9Pnt0ZXh0Q29sb3JDbG9zZUNoZWNrPTA7aWYoIWlzQ29sb3JQaWNrZXJPcGVuKGVsKSljb21taXRTdWJ0aXRsZVRleHRDb2xvckRlY2lzaW9uKGVsKTt9LDMwMCk7fTsKdGV4dENvbG9yRWwub25wb2ludGVyZG93bj0oKT0+cmVtZW1iZXJTdWJ0aXRsZVRleHRDb2xvckJlZm9yZSh0ZXh0Q29sb3JFbCk7CnRleHRDb2xvckVsLm9uZm9jdXM9KCk9PnJlbWVtYmVyU3VidGl0bGVUZXh0Q29sb3JCZWZvcmUodGV4dENvbG9yRWwpOwp0ZXh0Q29sb3JFbC5vbmtleWRvd249KCk9PnJlbWVtYmVyU3VidGl0bGVUZXh0Q29sb3JCZWZvcmUodGV4dENvbG9yRWwpOwp0ZXh0Q29sb3JFbC5vbmlucHV0PSgpPT57cmVhZEdsb2JhbFNldHRpbmdzKCk7dXBkYXRlTGFiZWxzKCk7cmVuZGVyU3VidGl0bGVFZGl0b3IoKTtyZW5kZXJTdWJ0aXRsZVByZXZpZXcoKTtzYXZlKCk7c2NoZWR1bGVTdWJ0aXRsZVRleHRDb2xvckNsb3NlQ2hlY2sodGV4dENvbG9yRWwpO307CnRleHRDb2xvckVsLm9uY2hhbmdlPSgpPT57aWYoaXNDb2xvclBpY2tlck9wZW4odGV4dENvbG9yRWwpKXJldHVybjtjb21taXRTdWJ0aXRsZVRleHRDb2xvckRlY2lzaW9uKHRleHRDb2xvckVsKTt9Owp0ZXh0Q29sb3JFbC5vbnBvaW50ZXJjYW5jZWw9KCk9PntjbGVhclRpbWVvdXQodGV4dENvbG9yQ2xvc2VDaGVjayk7dGV4dENvbG9yQ2xvc2VDaGVjaz0wO3N1YnRpdGxlVGV4dENvbG9yQmVmb3JlQnlFbGVtZW50LmRlbGV0ZSh0ZXh0Q29sb3JFbCk7fTsKdGV4dENvbG9yRWwub25ibHVyPSgpPT57aWYoaXNDb2xvclBpY2tlck9wZW4odGV4dENvbG9yRWwpKXJldHVybjtjb21taXRTdWJ0aXRsZVRleHRDb2xvckRlY2lzaW9uKHRleHRDb2xvckVsKTt9OwoiIiIKbmV3ID0gIiIiICBjb25zdCBzdWJ0aXRsZVRleHRDb2xvckJlZm9yZUJ5RWxlbWVudD1uZXcgV2Vha01hcCgpOwpjb25zdCB0ZXh0Q29sb3JFbD1yb290LnF1ZXJ5U2VsZWN0b3IoJyN0ZXh0Q29sb3InKTsKY29uc3Qgc3VwcG9ydHNPcGVuUGlja2VyU3RhdGU9KCgpPT57dHJ5e3JldHVybiBCb29sZWFuKGdsb2JhbFRoaXMuQ1NTPy5zdXBwb3J0cz8uKCdzZWxlY3RvcihpbnB1dDpvcGVuKScpKTt9Y2F0Y2h7cmV0dXJuIGZhbHNlO319KSgpOwpjb25zdCBpc0NvbG9yUGlja2VyT3Blbj1lbD0+e2lmKCFzdXBwb3J0c09wZW5QaWNrZXJTdGF0ZSlyZXR1cm4gZmFsc2U7dHJ5e3JldHVybiBlbC5tYXRjaGVzKCc6b3BlbicpO31jYXRjaHtyZXR1cm4gZmFsc2U7fX07CmxldCB0ZXh0Q29sb3JDbG9zZUNoZWNrPTA7CmxldCB0ZXh0Q29sb3JPdXRzaWRlQ29tbWl0QXJtZWQ9ZmFsc2U7CmNvbnN0IHJlbWVtYmVyU3VidGl0bGVUZXh0Q29sb3JCZWZvcmU9ZWw9PntpZihzdWJ0aXRsZVRleHRDb2xvckJlZm9yZUJ5RWxlbWVudC5oYXMoZWwpKXJldHVybjtzdWJ0aXRsZVRleHRDb2xvckJlZm9yZUJ5RWxlbWVudC5zZXQoZWwsc25hcHNob3RTdWJ0aXRsZVRleHRDb2xvcihzdC50ZXh0Q29sb3IpKTt9Owpjb25zdCBjb21taXRTdWJ0aXRsZVRleHRDb2xvckRlY2lzaW9uPWVsPT57aWYoIXN1YnRpdGxlVGV4dENvbG9yQmVmb3JlQnlFbGVtZW50LmhhcyhlbCkpcmV0dXJuO2NsZWFyVGltZW91dCh0ZXh0Q29sb3JDbG9zZUNoZWNrKTt0ZXh0Q29sb3JDbG9zZUNoZWNrPTA7Y29uc3QgYmVmb3JlPXN1YnRpdGxlVGV4dENvbG9yQmVmb3JlQnlFbGVtZW50LmdldChlbCk7c3VidGl0bGVUZXh0Q29sb3JCZWZvcmVCeUVsZW1lbnQuZGVsZXRlKGVsKTtjb25zdCBhZnRlcj1zbmFwc2hvdFN1YnRpdGxlVGV4dENvbG9yKGVsLnZhbHVlKTtjb25zdCByZWNvcmQ9cmVjb3JkU3VidGl0bGVUZXh0Q29sb3JDaGFuZ2UocHJvamVjdCx7YmVmb3JlU3RhdGU6YmVmb3JlLGFmdGVyU3RhdGU6YWZ0ZXJ9KTtpZihyZWNvcmQpc2F2ZSgpO307CmNvbnN0IHNjaGVkdWxlU3VidGl0bGVUZXh0Q29sb3JDbG9zZUNoZWNrPWVsPT57aWYoIXN1cHBvcnRzT3BlblBpY2tlclN0YXRlKXJldHVybjtjbGVhclRpbWVvdXQodGV4dENvbG9yQ2xvc2VDaGVjayk7dGV4dENvbG9yQ2xvc2VDaGVjaz1zZXRUaW1lb3V0KCgpPT57dGV4dENvbG9yQ2xvc2VDaGVjaz0wO2lmKCFpc0NvbG9yUGlja2VyT3BlbihlbCkpY29tbWl0U3VidGl0bGVUZXh0Q29sb3JEZWNpc2lvbihlbCk7fSwzMDApO307CmNvbnN0IGFybVN1YnRpdGxlVGV4dENvbG9yT3V0c2lkZUNvbW1pdD0oKT0+e2lmKHRleHRDb2xvck91dHNpZGVDb21taXRBcm1lZClyZXR1cm47dGV4dENvbG9yT3V0c2lkZUNvbW1pdEFybWVkPXRydWU7ZG9jdW1lbnQuYWRkRXZlbnRMaXN0ZW5lcigncG9pbnRlcmRvd24nLCgpPT57dGV4dENvbG9yT3V0c2lkZUNvbW1pdEFybWVkPWZhbHNlO2NvbW1pdFN1YnRpdGxlVGV4dENvbG9yRGVjaXNpb24odGV4dENvbG9yRWwpO30se2NhcHR1cmU6dHJ1ZSxvbmNlOnRydWV9KTt9Owp0ZXh0Q29sb3JFbC5vbnBvaW50ZXJkb3duPSgpPT5yZW1lbWJlclN1YnRpdGxlVGV4dENvbG9yQmVmb3JlKHRleHRDb2xvckVsKTsKdGV4dENvbG9yRWwub25mb2N1cz0oKT0+cmVtZW1iZXJTdWJ0aXRsZVRleHRDb2xvckJlZm9yZSh0ZXh0Q29sb3JFbCk7CnRleHRDb2xvckVsLm9ua2V5ZG93bj0oKT0+cmVtZW1iZXJTdWJ0aXRsZVRleHRDb2xvckJlZm9yZSh0ZXh0Q29sb3JFbCk7CnRleHRDb2xvckVsLm9uaW5wdXQ9KCk9PntyZW1lbWJlclN1YnRpdGxlVGV4dENvbG9yQmVmb3JlKHRleHRDb2xvckVsKTthcm1TdWJ0aXRsZVRleHRDb2xvck91dHNpZGVDb21taXQoKTtyZWFkR2xvYmFsU2V0dGluZ3MoKTt1cGRhdGVMYWJlbHMoKTtyZW5kZXJTdWJ0aXRsZUVkaXRvcigpO3JlbmRlclN1YnRpdGxlUHJldmlldygpO3NhdmUoKTtzY2hlZHVsZVN1YnRpdGxlVGV4dENvbG9yQ2xvc2VDaGVjayh0ZXh0Q29sb3JFbCk7fTsKdGV4dENvbG9yRWwub25jaGFuZ2U9KCk9PntpZihpc0NvbG9yUGlja2VyT3Blbih0ZXh0Q29sb3JFbCkpcmV0dXJuO2NvbW1pdFN1YnRpdGxlVGV4dENvbG9yRGVjaXNpb24odGV4dENvbG9yRWwpO307CnRleHRDb2xvckVsLm9uYmx1cj0oKT0+e2lmKGlzQ29sb3JQaWNrZXJPcGVuKHRleHRDb2xvckVsKSlyZXR1cm47Y29tbWl0U3VidGl0bGVUZXh0Q29sb3JEZWNpc2lvbih0ZXh0Q29sb3JFbCk7fTsKIiIiCmNvdW50ID0gdGV4dC5jb3VudChvbGQpCmlmIGNvdW50ICE9IDE6CiAgICByYWlzZSBTeXN0ZW1FeGl0KGYiZXhwZWN0ZWQgb25lIHN1YnRpdGxlIHRleHQgY29sb3IgaGFuZGxlciBibG9jaywgZ290IHtjb3VudH0iKQpwLndyaXRlX3RleHQodGV4dC5yZXBsYWNlKG9sZCwgbmV3LCAxKSkK'))"
+      - name: Install dependencies without repository artifacts
+        run: npm install --package-lock=false --no-audit --no-fund
+      - name: Test
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Diff and scope checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=403986814a1d961d05fec9d3d313b5520bfc611e
+          git diff --check
+          git diff --exit-code "$BASE" -- videoRenderer.js db.js projectFactory.js subtitlePosition.js qualityLogic.js projectBackup.js audioAssetIdentity.js voice-lab.html styles.css
+          grep -F -q "snapshotSubtitleTextColor(st.textColor)" main.js
+          grep -F -q "armSubtitleTextColorOutsideCommit();readGlobalSettings()" main.js
+          if grep -F -q "textColorEl.onpointercancel" main.js; then exit 1; fi
+      - name: Commit intended changes and remove runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/issue84-safari-fix2.yml
+          rm -rf dist node_modules package-lock.json
+          git clean -fdx
+          changed="$(git status --short | awk '{print $2}' | sort)"
+          expected="$(printf '%s\n' .github/workflows/issue84-safari-fix2.yml main.js | sort)"
+          printf 'changed:\n%s\nexpected:\n%s\n' "$changed" "$expected"
+          test "$changed" = "$expected"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add main.js .github/workflows/issue84-safari-fix2.yml
+          git commit -m "Fix iPhone Safari subtitle color commit"
+          git push origin HEAD:issue-84-subtitle-text-color-v025
