@@ -1,0 +1,236 @@
+name: Issue 74 Implementation Runner
+
+on:
+  push:
+    branches:
+      - issue-74-subtitle-outline-width-v020
+
+permissions:
+  contents: write
+
+jobs:
+  implement-test-commit:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply Dataset v0.20 patch
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected one match, got {count}: {old[:140]!r}')
+              p.write_text(text.replace(old, new, 1))
+
+          marker = "export function normalizeSubtitleBackgroundEnabled(value) {"
+          helper = r'''export function normalizeSubtitleOutlineWidth(value) {
+            if (value === '' || value === null || value === undefined) return null;
+            const number = Number(value);
+            return Number.isInteger(number) && number >= 0 && number <= 8 ? number : null;
+          }
+
+          export function snapshotSubtitleOutlineWidth(value) {
+            return { outlineWidth: normalizeSubtitleOutlineWidth(value) };
+          }
+
+          export function recordSubtitleOutlineWidthChange(project, { beforeState, afterState }, options = {}) {
+            const beforeRaw = isRecord(beforeState) ? beforeState.outlineWidth : beforeState;
+            const afterRaw = isRecord(afterState) ? afterState.outlineWidth : afterState;
+            const before = normalizeSubtitleOutlineWidth(beforeRaw);
+            const after = normalizeSubtitleOutlineWidth(afterRaw);
+            if (after === null || before === after) return null;
+
+            const style = isRecord(project?.subtitleStyle) ? project.subtitleStyle : {};
+            const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+            const subtitleSceneCount = scenes.filter(scene => stringOr(scene?.subtitleText).trim()).length;
+            const fontSizePx = normalizeSubtitleFontSize(style.fontSize);
+            const positionValue = stringOr(style.position).trim();
+            const position = ['top', 'center', 'bottom'].includes(positionValue) ? positionValue : '';
+            const maxCharsPerLine = normalizeSubtitleMaxChars(style.maxCharsPerLine);
+            const maxLines = normalizeSubtitleMaxLines(style.maxLines);
+            const textColor = stringOr(style.textColor).trim();
+            const outlineColor = stringOr(style.outlineColor).trim();
+            const backgroundEnabled = normalizeSubtitleBackgroundEnabled(style.backgroundEnabled);
+
+            return appendDecision(project, {
+              decisionType: 'subtitle-outline-width',
+              sceneId: '',
+              context: {
+                platform: stringOr(project?.platform),
+                aspectRatio: stringOr(project?.aspectRatio),
+                subtitlePreset: stringOr(style.preset).trim() || 'standard',
+                subtitleEnabled: style.enabled !== false,
+                fontSizePx,
+                position,
+                maxCharsPerLine,
+                maxLines,
+                textColor,
+                outlineColor,
+                backgroundEnabled,
+                sceneCount: scenes.length,
+                subtitleSceneCount
+              },
+              proposal: { outlineWidth: before },
+              alternatives: [],
+              humanAction: { type: 'set-subtitle-outline-width' },
+              finalDecision: { outlineWidth: after },
+              reasonCode: '',
+              reasonNote: '',
+              source: { type: 'human', feature: 'subtitle-editor', version: '0.20' },
+              assetIds: [],
+              rights: {}
+            }, options);
+          }
+
+          ''' + marker
+          replace_once('decisionLog.js', marker, helper)
+
+          replace_once(
+              'main.js',
+              'recordSubtitleBackgroundEnabledChange, recordSubtitleFontSizeChange, recordSubtitleMaxCharsChange, recordSubtitleMaxLinesChange',
+              'recordSubtitleBackgroundEnabledChange, recordSubtitleFontSizeChange, recordSubtitleMaxCharsChange, recordSubtitleMaxLinesChange, recordSubtitleOutlineWidthChange'
+          )
+          replace_once(
+              'main.js',
+              'snapshotSubtitleBackgroundEnabled, snapshotSubtitleFontSize, snapshotSubtitleMaxChars, snapshotSubtitleMaxLines, snapshotSubtitlePresetState',
+              'snapshotSubtitleBackgroundEnabled, snapshotSubtitleFontSize, snapshotSubtitleMaxChars, snapshotSubtitleMaxLines, snapshotSubtitleOutlineWidth, snapshotSubtitlePresetState'
+          )
+          replace_once(
+              'main.js',
+              "['subtitleEnabled','textColor','outlineColor','outlineWidth','backgroundColor','backgroundOpacity']",
+              "['subtitleEnabled','textColor','outlineColor','backgroundColor','backgroundOpacity']"
+          )
+
+          bg_marker = "  const subtitleBackgroundEnabledBeforeByElement=new WeakMap();\n"
+          outline_handler = r'''  const subtitleOutlineWidthBeforeByElement=new WeakMap();
+          const outlineWidthEl=root.querySelector('#outlineWidth');
+          const rememberSubtitleOutlineWidthBefore=el=>{if(subtitleOutlineWidthBeforeByElement.has(el))return;subtitleOutlineWidthBeforeByElement.set(el,snapshotSubtitleOutlineWidth(el.value));};
+          const commitSubtitleOutlineWidthDecision=el=>{if(!subtitleOutlineWidthBeforeByElement.has(el))return;const before=subtitleOutlineWidthBeforeByElement.get(el);subtitleOutlineWidthBeforeByElement.delete(el);const after=snapshotSubtitleOutlineWidth(el.value);const record=recordSubtitleOutlineWidthChange(project,{beforeState:before,afterState:after});if(record)save();};
+          outlineWidthEl.onpointerdown=()=>rememberSubtitleOutlineWidthBefore(outlineWidthEl);
+          outlineWidthEl.onfocus=()=>rememberSubtitleOutlineWidthBefore(outlineWidthEl);
+          outlineWidthEl.onkeydown=()=>rememberSubtitleOutlineWidthBefore(outlineWidthEl);
+          outlineWidthEl.oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();};
+          outlineWidthEl.onpointerup=()=>commitSubtitleOutlineWidthDecision(outlineWidthEl);
+          outlineWidthEl.onpointercancel=()=>subtitleOutlineWidthBeforeByElement.delete(outlineWidthEl);
+          outlineWidthEl.onblur=()=>commitSubtitleOutlineWidthDecision(outlineWidthEl);
+          ''' + bg_marker
+          replace_once('main.js', bg_marker, outline_handler)
+
+          replace_once(
+              'tests/decisionLog.test.mjs',
+              '  normalizeSubtitleMaxChars,\n  normalizeSubtitleBackgroundEnabled,\n',
+              '  normalizeSubtitleMaxChars,\n  normalizeSubtitleOutlineWidth,\n  normalizeSubtitleBackgroundEnabled,\n'
+          )
+          replace_once(
+              'tests/decisionLog.test.mjs',
+              '  recordSubtitleMaxCharsChange,\n  recordSubtitleBackgroundEnabledChange,\n',
+              '  recordSubtitleMaxCharsChange,\n  recordSubtitleOutlineWidthChange,\n  recordSubtitleBackgroundEnabledChange,\n'
+          )
+          replace_once(
+              'tests/decisionLog.test.mjs',
+              '  snapshotSubtitleMaxChars,\n  snapshotSubtitleBackgroundEnabled,\n',
+              '  snapshotSubtitleMaxChars,\n  snapshotSubtitleOutlineWidth,\n  snapshotSubtitleBackgroundEnabled,\n'
+          )
+
+          tests_path = Path('tests/decisionLog.test.mjs')
+          tests = tests_path.read_text()
+          tests += r'''
+
+          test('subtitle outline width normalization accepts only integer UI values 0 through 8', () => {
+            assert.equal(normalizeSubtitleOutlineWidth(0), 0);
+            assert.equal(normalizeSubtitleOutlineWidth('4'), 4);
+            assert.equal(normalizeSubtitleOutlineWidth(8), 8);
+            assert.equal(normalizeSubtitleOutlineWidth(-1), null);
+            assert.equal(normalizeSubtitleOutlineWidth(9), null);
+            assert.equal(normalizeSubtitleOutlineWidth(2.5), null);
+            assert.equal(normalizeSubtitleOutlineWidth('legacy'), null);
+            assert.deepEqual(snapshotSubtitleOutlineWidth(5), {outlineWidth:5});
+            assert.deepEqual(snapshotSubtitleOutlineWidth('legacy'), {outlineWidth:null});
+          });
+
+          test('subtitle-outline-width records one committed direct adjustment with compact style context', () => {
+            const project = {
+              id:'p-outline', platform:'youtube-shorts', aspectRatio:'9:16', learning:{decisions:[]},
+              subtitleStyle:{preset:'standard',enabled:true,fontSize:54,position:'bottom',maxCharsPerLine:16,maxLines:2,outlineWidth:0,textColor:'#ffffff',outlineColor:'#000000',backgroundEnabled:false},
+              scenes:[{id:'s1',subtitleText:'字幕あり'},{id:'s2',subtitleText:'二つ目'}]
+            };
+            const record = recordSubtitleOutlineWidthChange(project, {
+              beforeState:{outlineWidth:4}, afterState:{outlineWidth:0}
+            }, {createId:()=> 'd-outline-1', now:()=> '2026-09-05T05:35:00.000Z'});
+            assert.equal(record.decisionType, 'subtitle-outline-width');
+            assert.deepEqual(record.proposal, {outlineWidth:4});
+            assert.deepEqual(record.finalDecision, {outlineWidth:0});
+            assert.deepEqual(record.alternatives, []);
+            assert.deepEqual(record.humanAction, {type:'set-subtitle-outline-width'});
+            assert.deepEqual(record.source, {type:'human',feature:'subtitle-editor',version:'0.20'});
+            assert.deepEqual(record.assetIds, []);
+            assert.deepEqual(record.rights, {});
+            assert.deepEqual(record.context, {
+              platform:'youtube-shorts', aspectRatio:'9:16', subtitlePreset:'standard', subtitleEnabled:true,
+              fontSizePx:54, position:'bottom', maxCharsPerLine:16, maxLines:2,
+              textColor:'#ffffff', outlineColor:'#000000', backgroundEnabled:false,
+              sceneCount:2, subtitleSceneCount:2
+            });
+            assert.equal(project.learning.decisions.length, 1);
+          });
+
+          test('subtitle-outline-width records a valid final value when previous state is legacy or invalid', () => {
+            const project={id:'p',learning:{decisions:[]},subtitleStyle:{preset:'minimal',enabled:true,fontSize:48,position:'center',maxCharsPerLine:18,maxLines:2,outlineWidth:6,textColor:'#fff',outlineColor:'#000',backgroundEnabled:false},scenes:[]};
+            const record=recordSubtitleOutlineWidthChange(project,{beforeState:{outlineWidth:'legacy'},afterState:{outlineWidth:6}});
+            assert.deepEqual(record.proposal,{outlineWidth:null});
+            assert.deepEqual(record.finalDecision,{outlineWidth:6});
+            assert.equal(project.learning.decisions.length,1);
+          });
+
+          test('subtitle-outline-width ignores unchanged and invalid final values without noise', () => {
+            const project={id:'p',learning:{decisions:[]},subtitleStyle:{},scenes:[]};
+            assert.equal(recordSubtitleOutlineWidthChange(project,{beforeState:{outlineWidth:4},afterState:{outlineWidth:4}}),null);
+            assert.equal(recordSubtitleOutlineWidthChange(project,{beforeState:{outlineWidth:4},afterState:{outlineWidth:9}}),null);
+            assert.equal(recordSubtitleOutlineWidthChange(project,{beforeState:{outlineWidth:4},afterState:{outlineWidth:2.5}}),null);
+            assert.equal(recordSubtitleOutlineWidthChange(project,{beforeState:{outlineWidth:4},afterState:{outlineWidth:'bad'}}),null);
+            assert.equal(project.learning.decisions.length,0);
+          });
+          '''
+          tests_path.write_text(tests)
+          PY
+      - name: Install dependencies without repository artifacts
+        run: npm install --package-lock=false --no-audit --no-fund
+      - name: Test
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Diff and scope checks
+        shell: bash
+        run: |
+          git diff --check
+          git diff --exit-code 05ec29b49a60347ecd8a7bea95f8ae63ee62d6d8 -- videoRenderer.js db.js projectFactory.js subtitlePosition.js qualityLogic.js projectBackup.js audioAssetIdentity.js voice-lab.html
+          test "$(grep -o 'recordSubtitleOutlineWidthChange(' main.js | wc -l)" -eq 1
+          test "$(grep -o "outlineWidthEl.onpointerup=()=>commitSubtitleOutlineWidthDecision(outlineWidthEl)" main.js | wc -l)" -eq 1
+          if grep -F "['subtitleEnabled','textColor','outlineColor','outlineWidth','backgroundColor','backgroundOpacity']" main.js; then exit 1; fi
+          test "$(grep -o "root.querySelector('#outlineWidth').value=st.outlineWidth" main.js | wc -l)" -eq 1
+      - name: Commit intended changes and remove runner
+        shell: bash
+        run: |
+          rm .github/workflows/issue74-runner.yml
+          rm -rf dist node_modules package-lock.json
+          git clean -fdx
+          changed="$(git status --short | awk '{print $2}' | sort)"
+          expected="$(printf '%s\n' .github/workflows/issue74-runner.yml decisionLog.js main.js tests/decisionLog.test.mjs | sort)"
+          printf 'changed:\n%s\nexpected:\n%s\n' "$changed" "$expected"
+          test "$changed" = "$expected"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add decisionLog.js main.js tests/decisionLog.test.mjs .github/workflows/issue74-runner.yml
+          git commit -m "Capture subtitle outline width decisions"
+          git push origin HEAD:issue-74-subtitle-outline-width-v020
