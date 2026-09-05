@@ -10,7 +10,7 @@ import { normalizeSubtitleOffset, resolveEffectiveSubtitlePosition, resolveSubti
 import { assessMvpVideoResult, describeVideoExportFailure, isMvpShortsProject, validateMvpShortsOutput } from "./videoMvp.js";
 import { createGenerationStartController, projectExpectsVideoAudio } from "./videoGenerationStart.js";
 import { applyDictionaryEntries, normalizeSubtitleContentForSync, splitIntoScenes, splitSubtitleCards, subtitleContentChanged } from "./qualityLogic.js";
-import { ensureLearningState, moveSceneWithDecision, recordBgmSelectionChange, recordBgmVolumeChange, recordGlobalSubtitlePositionChange, recordSceneDurationChange, recordSceneImageSelection, recordSceneMotionChange, recordSceneSubtitlePositionChange, recordSceneTransitionChange, recordSubtitleContentChange, recordSubtitleSceneSyncDecision, snapshotGlobalSubtitlePosition, snapshotSceneSubtitlePosition } from "./decisionLog.js";
+import { ensureLearningState, moveSceneWithDecision, recordBgmSelectionChange, recordBgmVolumeChange, recordGlobalSubtitlePositionChange, recordSceneDurationChange, recordSceneImageSelection, recordSceneMotionChange, recordSceneSubtitlePositionChange, recordSceneTransitionChange, recordSubtitleContentChange, recordSubtitlePresetChange, recordSubtitleSceneSyncDecision, snapshotGlobalSubtitlePosition, snapshotSceneSubtitlePosition, snapshotSubtitlePresetState } from "./decisionLog.js";
 
 const rootElement = document.querySelector("#app");
 if (!rootElement) throw new Error("#app がありません。");
@@ -775,7 +775,7 @@ async function renderBgm(id) {
     minimal:{fontSize:48,position:'center',maxCharsPerLine:18,maxLines:2,outlineWidth:2,backgroundEnabled:false,backgroundOpacity:.35},
     boxed:{fontSize:52,position:'bottom',maxCharsPerLine:16,maxLines:2,outlineWidth:0,backgroundEnabled:true,backgroundOpacity:.58}
   };
-  root.querySelector('#subtitlePreset').onchange=()=>{const p=presets[root.querySelector('#subtitlePreset').value];Object.assign(st,p,{preset:root.querySelector('#subtitlePreset').value});root.querySelector('#fontSize').value=st.fontSize;root.querySelector('#subtitlePosition').value=st.position;root.querySelector('#maxChars').value=st.maxCharsPerLine;root.querySelector('#maxLines').value=String(st.maxLines);root.querySelector('#outlineWidth').value=st.outlineWidth;root.querySelector('#backgroundEnabled').checked=st.backgroundEnabled;root.querySelector('#backgroundOpacity').value=st.backgroundOpacity;updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();};
+  root.querySelector('#subtitlePreset').onchange=()=>{const beforePresetState=snapshotSubtitlePresetState(st);const p=presets[root.querySelector('#subtitlePreset').value];Object.assign(st,p,{preset:root.querySelector('#subtitlePreset').value});root.querySelector('#fontSize').value=st.fontSize;root.querySelector('#subtitlePosition').value=st.position;root.querySelector('#maxChars').value=st.maxCharsPerLine;root.querySelector('#maxLines').value=String(st.maxLines);root.querySelector('#outlineWidth').value=st.outlineWidth;root.querySelector('#backgroundEnabled').checked=st.backgroundEnabled;root.querySelector('#backgroundOpacity').value=st.backgroundOpacity;const afterPresetState=snapshotSubtitlePresetState(st);recordSubtitlePresetChange(project,{beforeState:beforePresetState,afterState:afterPresetState});updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();};
 
   root.querySelector('#audioFile').onchange=async e=>{
     const file=e.target.files?.[0];if(!file)return;
