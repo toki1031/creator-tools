@@ -10,7 +10,7 @@ import { normalizeSubtitleOffset, resolveEffectiveSubtitlePosition, resolveSubti
 import { assessMvpVideoResult, describeVideoExportFailure, isMvpShortsProject, validateMvpShortsOutput } from "./videoMvp.js";
 import { createGenerationStartController, projectExpectsVideoAudio } from "./videoGenerationStart.js";
 import { applyDictionaryEntries, normalizeSubtitleContentForSync, splitIntoScenes, splitSubtitleCards, subtitleContentChanged } from "./qualityLogic.js";
-import { ensureLearningState, moveSceneWithDecision, recordBgmDuckingChange, recordBgmLoopChange, recordBgmSelectionChange, recordBgmVolumeChange, recordGlobalSubtitlePositionChange, recordSceneDurationChange, recordSceneImageSelection, recordSceneMotionChange, recordSceneSubtitlePositionChange, recordSceneTransitionChange, recordSubtitleContentChange, recordSubtitleFontSizeChange, recordSubtitleMaxCharsChange, recordSubtitleMaxLinesChange, recordSubtitlePresetChange, recordSubtitleSceneSyncDecision, snapshotGlobalSubtitlePosition, snapshotSceneSubtitlePosition, snapshotSubtitleFontSize, snapshotSubtitleMaxChars, snapshotSubtitleMaxLines, snapshotSubtitlePresetState } from "./decisionLog.js";
+import { ensureLearningState, moveSceneWithDecision, recordBgmDuckingChange, recordBgmLoopChange, recordBgmSelectionChange, recordBgmVolumeChange, recordGlobalSubtitlePositionChange, recordSceneDurationChange, recordSceneImageSelection, recordSceneMotionChange, recordSceneSubtitlePositionChange, recordSceneTransitionChange, recordSubtitleContentChange, recordSubtitleBackgroundEnabledChange, recordSubtitleFontSizeChange, recordSubtitleMaxCharsChange, recordSubtitleMaxLinesChange, recordSubtitlePresetChange, recordSubtitleSceneSyncDecision, snapshotGlobalSubtitlePosition, snapshotSceneSubtitlePosition, snapshotSubtitleBackgroundEnabled, snapshotSubtitleFontSize, snapshotSubtitleMaxChars, snapshotSubtitleMaxLines, snapshotSubtitlePresetState } from "./decisionLog.js";
 
 const rootElement = document.querySelector("#app");
 if (!rootElement) throw new Error("#app がありません。");
@@ -776,7 +776,18 @@ loopEl.onblur=()=>commitBgmLoopDecision(loopEl);
   volumeEl.onpointerup=()=>commitBgmVolumeDecision(volumeEl);
   volumeEl.onpointercancel=()=>bgmVolumeBeforeByElement.delete(volumeEl);
   volumeEl.onblur=()=>commitBgmVolumeDecision(volumeEl);
-  ['subtitleEnabled','textColor','outlineColor','outlineWidth','backgroundEnabled','backgroundColor','backgroundOpacity'].forEach(k=>root.querySelector('#'+k).oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();});
+  ['subtitleEnabled','textColor','outlineColor','outlineWidth','backgroundColor','backgroundOpacity'].forEach(k=>root.querySelector('#'+k).oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();});
+  const subtitleBackgroundEnabledBeforeByElement=new WeakMap();
+const backgroundEnabledEl=root.querySelector('#backgroundEnabled');
+const rememberSubtitleBackgroundEnabledBefore=el=>{if(subtitleBackgroundEnabledBeforeByElement.has(el))return;subtitleBackgroundEnabledBeforeByElement.set(el,snapshotSubtitleBackgroundEnabled(st.backgroundEnabled));};
+const commitSubtitleBackgroundEnabledDecision=el=>{if(!subtitleBackgroundEnabledBeforeByElement.has(el))return;const before=subtitleBackgroundEnabledBeforeByElement.get(el);subtitleBackgroundEnabledBeforeByElement.delete(el);const after=snapshotSubtitleBackgroundEnabled(Boolean(el.checked));const record=recordSubtitleBackgroundEnabledChange(project,{beforeState:before,afterState:after});if(record)save();};
+backgroundEnabledEl.onpointerdown=()=>rememberSubtitleBackgroundEnabledBefore(backgroundEnabledEl);
+backgroundEnabledEl.onfocus=()=>rememberSubtitleBackgroundEnabledBefore(backgroundEnabledEl);
+backgroundEnabledEl.onkeydown=()=>rememberSubtitleBackgroundEnabledBefore(backgroundEnabledEl);
+backgroundEnabledEl.oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();};
+backgroundEnabledEl.onchange=()=>commitSubtitleBackgroundEnabledDecision(backgroundEnabledEl);
+backgroundEnabledEl.onpointercancel=()=>subtitleBackgroundEnabledBeforeByElement.delete(backgroundEnabledEl);
+backgroundEnabledEl.onblur=()=>commitSubtitleBackgroundEnabledDecision(backgroundEnabledEl);
   const subtitleMaxLinesBeforeByElement=new WeakMap();
 const maxLinesEl=root.querySelector('#maxLines');
 const rememberSubtitleMaxLinesBefore=el=>{if(subtitleMaxLinesBeforeByElement.has(el))return;subtitleMaxLinesBeforeByElement.set(el,snapshotSubtitleMaxLines(st.maxLines));};
