@@ -1,0 +1,224 @@
+name: Issue 72 Implementation Runner
+on:
+  push:
+    branches: [issue-72-subtitle-background-v019]
+permissions:
+  contents: write
+jobs:
+  implement-test-commit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply Dataset v0.19 patch
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected one match, got {count}: {old[:120]!r}')
+              p.write_text(text.replace(old, new, 1))
+
+          marker = "export function normalizeSubtitleMaxLines(value) {"
+          helper = r'''export function normalizeSubtitleBackgroundEnabled(value) {
+            return typeof value === 'boolean' ? value : null;
+          }
+
+          export function snapshotSubtitleBackgroundEnabled(value) {
+            return { backgroundEnabled: normalizeSubtitleBackgroundEnabled(value) };
+          }
+
+          export function recordSubtitleBackgroundEnabledChange(project, { beforeState, afterState }, options = {}) {
+            const beforeRaw = isRecord(beforeState) ? beforeState.backgroundEnabled : beforeState;
+            const afterRaw = isRecord(afterState) ? afterState.backgroundEnabled : afterState;
+            const before = normalizeSubtitleBackgroundEnabled(beforeRaw);
+            const after = normalizeSubtitleBackgroundEnabled(afterRaw);
+            if (after === null || before === after) return null;
+
+            const style = isRecord(project?.subtitleStyle) ? project.subtitleStyle : {};
+            const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+            const subtitleSceneCount = scenes.filter(scene => stringOr(scene?.subtitleText).trim()).length;
+            const fontSizePx = normalizeSubtitleFontSize(style.fontSize);
+            const positionValue = stringOr(style.position).trim();
+            const position = ['top', 'center', 'bottom'].includes(positionValue) ? positionValue : '';
+            const maxCharsPerLine = normalizeSubtitleMaxChars(style.maxCharsPerLine);
+            const maxLines = normalizeSubtitleMaxLines(style.maxLines);
+            const backgroundColor = stringOr(style.backgroundColor).trim();
+            const rawOpacity = Number(style.backgroundOpacity);
+            const backgroundOpacity = Number.isFinite(rawOpacity) ? Math.min(0.9, Math.max(0, rawOpacity)) : null;
+
+            return appendDecision(project, {
+              decisionType: 'subtitle-background-enabled',
+              sceneId: '',
+              context: {
+                platform: stringOr(project?.platform),
+                aspectRatio: stringOr(project?.aspectRatio),
+                subtitlePreset: stringOr(style.preset).trim() || 'standard',
+                subtitleEnabled: style.enabled !== false,
+                fontSizePx,
+                position,
+                maxCharsPerLine,
+                maxLines,
+                backgroundColor,
+                backgroundOpacity,
+                sceneCount: scenes.length,
+                subtitleSceneCount
+              },
+              proposal: { backgroundEnabled: before },
+              alternatives: [{ backgroundEnabled: !after }],
+              humanAction: { type: 'set-subtitle-background-enabled' },
+              finalDecision: { backgroundEnabled: after },
+              reasonCode: '',
+              reasonNote: '',
+              source: { type: 'human', feature: 'subtitle-editor', version: '0.19' },
+              assetIds: [],
+              rights: {}
+            }, options);
+          }
+
+          ''' + marker
+          replace_once('decisionLog.js', marker, helper)
+
+          replace_once(
+              'main.js',
+              'recordSubtitleContentChange, recordSubtitleFontSizeChange, recordSubtitleMaxCharsChange, recordSubtitleMaxLinesChange, recordSubtitlePresetChange',
+              'recordSubtitleContentChange, recordSubtitleBackgroundEnabledChange, recordSubtitleFontSizeChange, recordSubtitleMaxCharsChange, recordSubtitleMaxLinesChange, recordSubtitlePresetChange'
+          )
+          replace_once(
+              'main.js',
+              'snapshotGlobalSubtitlePosition, snapshotSceneSubtitlePosition, snapshotSubtitleFontSize, snapshotSubtitleMaxChars, snapshotSubtitleMaxLines, snapshotSubtitlePresetState',
+              'snapshotGlobalSubtitlePosition, snapshotSceneSubtitlePosition, snapshotSubtitleBackgroundEnabled, snapshotSubtitleFontSize, snapshotSubtitleMaxChars, snapshotSubtitleMaxLines, snapshotSubtitlePresetState'
+          )
+          replace_once(
+              'main.js',
+              "['subtitleEnabled','textColor','outlineColor','outlineWidth','backgroundEnabled','backgroundColor','backgroundOpacity']",
+              "['subtitleEnabled','textColor','outlineColor','outlineWidth','backgroundColor','backgroundOpacity']"
+          )
+
+          max_lines_marker = "  const subtitleMaxLinesBeforeByElement=new WeakMap();\n"
+          background_handler = r'''  const subtitleBackgroundEnabledBeforeByElement=new WeakMap();
+          const backgroundEnabledEl=root.querySelector('#backgroundEnabled');
+          const rememberSubtitleBackgroundEnabledBefore=el=>{if(subtitleBackgroundEnabledBeforeByElement.has(el))return;subtitleBackgroundEnabledBeforeByElement.set(el,snapshotSubtitleBackgroundEnabled(st.backgroundEnabled));};
+          const commitSubtitleBackgroundEnabledDecision=el=>{if(!subtitleBackgroundEnabledBeforeByElement.has(el))return;const before=subtitleBackgroundEnabledBeforeByElement.get(el);subtitleBackgroundEnabledBeforeByElement.delete(el);const after=snapshotSubtitleBackgroundEnabled(Boolean(el.checked));const record=recordSubtitleBackgroundEnabledChange(project,{beforeState:before,afterState:after});if(record)save();};
+          backgroundEnabledEl.onpointerdown=()=>rememberSubtitleBackgroundEnabledBefore(backgroundEnabledEl);
+          backgroundEnabledEl.onfocus=()=>rememberSubtitleBackgroundEnabledBefore(backgroundEnabledEl);
+          backgroundEnabledEl.onkeydown=()=>rememberSubtitleBackgroundEnabledBefore(backgroundEnabledEl);
+          backgroundEnabledEl.oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();};
+          backgroundEnabledEl.onchange=()=>commitSubtitleBackgroundEnabledDecision(backgroundEnabledEl);
+          backgroundEnabledEl.onpointercancel=()=>subtitleBackgroundEnabledBeforeByElement.delete(backgroundEnabledEl);
+          backgroundEnabledEl.onblur=()=>commitSubtitleBackgroundEnabledDecision(backgroundEnabledEl);
+          ''' + max_lines_marker
+          replace_once('main.js', max_lines_marker, background_handler)
+
+          replace_once(
+              'tests/decisionLog.test.mjs',
+              '  normalizeSubtitleMaxChars,\n',
+              '  normalizeSubtitleMaxChars,\n  normalizeSubtitleBackgroundEnabled,\n'
+          )
+          replace_once(
+              'tests/decisionLog.test.mjs',
+              '  recordSubtitleMaxCharsChange,\n',
+              '  recordSubtitleMaxCharsChange,\n  recordSubtitleBackgroundEnabledChange,\n'
+          )
+          replace_once(
+              'tests/decisionLog.test.mjs',
+              '  snapshotSubtitleMaxChars,\n',
+              '  snapshotSubtitleMaxChars,\n  snapshotSubtitleBackgroundEnabled,\n'
+          )
+
+          tests_path = Path('tests/decisionLog.test.mjs')
+          tests = tests_path.read_text()
+          tests += r'''
+
+          test('subtitle background enabled normalization accepts booleans only', () => {
+            assert.equal(normalizeSubtitleBackgroundEnabled(true), true);
+            assert.equal(normalizeSubtitleBackgroundEnabled(false), false);
+            assert.equal(normalizeSubtitleBackgroundEnabled(1), null);
+            assert.equal(normalizeSubtitleBackgroundEnabled(0), null);
+            assert.equal(normalizeSubtitleBackgroundEnabled('true'), null);
+            assert.equal(normalizeSubtitleBackgroundEnabled(null), null);
+            assert.deepEqual(snapshotSubtitleBackgroundEnabled(true), {backgroundEnabled:true});
+            assert.deepEqual(snapshotSubtitleBackgroundEnabled('legacy'), {backgroundEnabled:null});
+          });
+
+          test('subtitle-background-enabled records explicit on to off selection with compact style context', () => {
+            const project = {
+              id:'p-bg', platform:'youtube-shorts', aspectRatio:'9:16', learning:{decisions:[]},
+              subtitleStyle:{preset:'boxed',enabled:true,fontSize:52,position:'bottom',maxCharsPerLine:16,maxLines:2,backgroundEnabled:false,backgroundColor:'#112233',backgroundOpacity:0.58},
+              scenes:[{id:'s1',subtitleText:'字幕あり'},{id:'s2',subtitleText:''}]
+            };
+            const record = recordSubtitleBackgroundEnabledChange(project, {
+              beforeState:{backgroundEnabled:true}, afterState:{backgroundEnabled:false}
+            }, {createId:()=> 'd-bg-1', now:()=> '2026-09-05T04:20:00.000Z'});
+            assert.equal(record.decisionType, 'subtitle-background-enabled');
+            assert.deepEqual(record.proposal, {backgroundEnabled:true});
+            assert.deepEqual(record.finalDecision, {backgroundEnabled:false});
+            assert.deepEqual(record.alternatives, [{backgroundEnabled:true}]);
+            assert.deepEqual(record.humanAction, {type:'set-subtitle-background-enabled'});
+            assert.deepEqual(record.source, {type:'human',feature:'subtitle-editor',version:'0.19'});
+            assert.deepEqual(record.assetIds, []);
+            assert.deepEqual(record.rights, {});
+            assert.deepEqual(record.context, {
+              platform:'youtube-shorts', aspectRatio:'9:16', subtitlePreset:'boxed', subtitleEnabled:true,
+              fontSizePx:52, position:'bottom', maxCharsPerLine:16, maxLines:2,
+              backgroundColor:'#112233', backgroundOpacity:0.58, sceneCount:2, subtitleSceneCount:1
+            });
+          });
+
+          test('subtitle-background-enabled records legacy prior state as null when user explicitly enables background', () => {
+            const project={id:'p',learning:{decisions:[]},subtitleStyle:{preset:'standard',enabled:true,fontSize:54,position:'bottom',maxCharsPerLine:16,maxLines:2,backgroundEnabled:true,backgroundColor:'#000000',backgroundOpacity:0.45},scenes:[]};
+            const record=recordSubtitleBackgroundEnabledChange(project,{beforeState:{backgroundEnabled:null},afterState:{backgroundEnabled:true}});
+            assert.deepEqual(record.proposal,{backgroundEnabled:null});
+            assert.deepEqual(record.finalDecision,{backgroundEnabled:true});
+            assert.deepEqual(record.alternatives,[{backgroundEnabled:false}]);
+          });
+
+          test('subtitle-background-enabled ignores unchanged and invalid final states', () => {
+            const project={id:'p',learning:{decisions:[]},subtitleStyle:{},scenes:[]};
+            assert.equal(recordSubtitleBackgroundEnabledChange(project,{beforeState:{backgroundEnabled:true},afterState:{backgroundEnabled:true}}),null);
+            assert.equal(recordSubtitleBackgroundEnabledChange(project,{beforeState:{backgroundEnabled:false},afterState:{backgroundEnabled:'true'}}),null);
+            assert.equal(recordSubtitleBackgroundEnabledChange(project,{beforeState:{backgroundEnabled:false},afterState:{backgroundEnabled:null}}),null);
+            assert.equal(project.learning.decisions.length,0);
+          });
+          '''
+          tests_path.write_text(tests)
+          PY
+      - name: Install dependencies without repository artifacts
+        run: npm install --package-lock=false --no-audit --no-fund
+      - name: Test
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Diff and scope checks
+        shell: bash
+        run: |
+          git diff --check
+          git diff --exit-code 01952d42a3c27eaf5f43554528fdf738643983c1 -- videoRenderer.js db.js projectFactory.js subtitlePosition.js qualityLogic.js projectBackup.js audioAssetIdentity.js voice-lab.html
+          test "$(grep -o 'recordSubtitleBackgroundEnabledChange(' main.js | wc -l)" -eq 1
+          test "$(grep -o "backgroundEnabledEl.onchange=()=>commitSubtitleBackgroundEnabledDecision(backgroundEnabledEl)" main.js | wc -l)" -eq 1
+          if grep -F "['subtitleEnabled','textColor','outlineColor','outlineWidth','backgroundEnabled','backgroundColor','backgroundOpacity']" main.js; then exit 1; fi
+          test "$(grep -o "root.querySelector('#backgroundEnabled').checked=st.backgroundEnabled" main.js | wc -l)" -eq 1
+      - name: Commit intended changes and remove runner
+        shell: bash
+        run: |
+          rm .github/workflows/issue72-runner.yml
+          rm -rf dist node_modules package-lock.json
+          git clean -fdx
+          changed="$(git status --short | awk '{print $2}' | sort)"
+          expected="$(printf '%s\n' .github/workflows/issue72-runner.yml decisionLog.js main.js tests/decisionLog.test.mjs | sort)"
+          printf 'changed:\n%s\nexpected:\n%s\n' "$changed" "$expected"
+          test "$changed" = "$expected"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add decisionLog.js main.js tests/decisionLog.test.mjs .github/workflows/issue72-runner.yml
+          git commit -m "Capture subtitle background decisions"
+          git push origin HEAD:issue-72-subtitle-background-v019
