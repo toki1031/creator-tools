@@ -23,7 +23,6 @@ jobs:
             if n!=1: raise SystemExit(f'{path}: expected 1 match, got {n}: {old[:180]!r}')
             p.write_text(t.replace(old,new,1))
 
-          # decisionLog.js: add BGM ducking DecisionRecord helper before BGM volume normalization.
           marker='export function normalizeBgmVolume(value) {'
           helper=r'''export function recordBgmDuckingChange(project, {
             beforeDucking,
@@ -35,7 +34,6 @@ jobs:
             hasBgm
           }, options = {}) {
             if (typeof beforeDucking !== 'boolean' || typeof afterDucking !== 'boolean' || beforeDucking === afterDucking) return null;
-
             const bgm = isRecord(project?.bgm) ? project.bgm : {};
             const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
             const currentVolume = normalizeBgmVolume(bgmVolume ?? bgm.volume);
@@ -43,7 +41,6 @@ jobs:
             const hasNarration = Boolean(project?.narration?.audioData) || scenes.some(scene => Boolean(scene?.narration?.audioData));
             const currentHasBgm = typeof hasBgm === 'boolean' ? hasBgm : Boolean(bgm.audioData);
             const currentLoop = typeof loop === 'boolean' ? loop : Boolean(bgm.loop);
-
             return appendDecision(project, {
               decisionType: 'bgm-ducking',
               sceneId: '',
@@ -73,14 +70,12 @@ jobs:
           '''+marker
           rep('decisionLog.js', marker, helper)
 
-          # main.js import.
           rep(
             'main.js',
             'recordBgmSelectionChange, recordBgmVolumeChange, recordGlobalSubtitlePositionChange',
             'recordBgmDuckingChange, recordBgmSelectionChange, recordBgmVolumeChange, recordGlobalSubtitlePositionChange'
           )
 
-          # Keep existing generic BGM behavior for all controls except ducking, which gets a dedicated explicit-decision handler.
           old_generic="  ['source','category','bgmTitle','fadeIn','fadeOut','ducking','loop','license','credit'].forEach(k=>root.querySelector('#'+k).oninput=()=>{updateLabels();save();});\n"
           new_generic="  ['source','category','bgmTitle','fadeIn','fadeOut','loop','license','credit'].forEach(k=>root.querySelector('#'+k).oninput=()=>{updateLabels();save();});\n"
           rep('main.js', old_generic, new_generic)
@@ -96,21 +91,16 @@ jobs:
           duckingEl.onchange=()=>commitBgmDuckingDecision(duckingEl);
           duckingEl.onpointercancel=()=>bgmDuckingBeforeByElement.delete(duckingEl);
           duckingEl.onblur=()=>commitBgmDuckingDecision(duckingEl);
-'''
+          '''
           rep('main.js', new_generic, new_generic+ducking_handler)
 
-          # Test imports.
           rep('tests/decisionLog.test.mjs','  recordBgmSelectionChange,\n','  recordBgmDuckingChange,\n  recordBgmSelectionChange,\n')
 
           p=Path('tests/decisionLog.test.mjs'); t=p.read_text(); t+=r'''
 
           test('bgm-ducking records explicit true to false decision with compact mix context', () => {
             const audioAssetId='audio-sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
-            const project={
-              id:'p-duck',platform:'youtube-shorts',aspectRatio:'9:16',learning:{decisions:[]},
-              bgm:{source:'upload',category:'calm',volume:0.12,loop:true,audioAssetId,audioData:'data:audio/wav;base64,SECRET',fileName:'private.wav',title:'private title',license:'private license',credit:'private credit'},
-              scenes:[{id:'s1',narration:{audioData:'data:audio/wav;base64,AA=='}},{id:'s2'}]
-            };
+            const project={id:'p-duck',platform:'youtube-shorts',aspectRatio:'9:16',learning:{decisions:[]},bgm:{source:'upload',category:'calm',volume:0.12,loop:true,audioAssetId,audioData:'data:audio/wav;base64,SECRET',fileName:'private.wav',title:'private title',license:'private license',credit:'private credit'},scenes:[{id:'s1',narration:{audioData:'data:audio/wav;base64,AA=='}},{id:'s2'}]};
             const record=recordBgmDuckingChange(project,{beforeDucking:true,afterDucking:false,bgmSource:'upload',bgmCategory:'history',bgmVolume:'0.18',loop:false,hasBgm:true},{createId:()=> 'd-duck-1',now:()=> '2026-09-05T01:00:00.000Z'});
             assert.equal(record.decisionType,'bgm-ducking');
             assert.equal(record.sceneId,'');
@@ -154,9 +144,8 @@ jobs:
             assert.equal(record.context.hasBgm,true);
             assert.equal(record.context.loop,false);
           });
-'''; p.write_text(t)
+          '''; p.write_text(t)
 
-          # Static assurances for direct-only capture and preserved autosave.
           main=Path('main.js').read_text()
           generic_start=main.index("['source','category','bgmTitle','fadeIn','fadeOut','loop'")
           duck_start=main.index('const bgmDuckingBeforeByElement',generic_start)
