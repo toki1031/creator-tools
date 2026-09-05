@@ -172,7 +172,7 @@ jobs:
         run: |
           git diff --check
           git diff --exit-code efaa5e8bf1c8598ccd4d93deb42253d963987101 -- videoRenderer.js db.js projectFactory.js subtitlePosition.js qualityLogic.js projectBackup.js audioAssetIdentity.js voice-lab.html
-          changed="$(git status --short | awk '{print $2}' | grep -v '^.github/workflows/issue58-runner.yml$' | sort)"
+          changed="$({ git diff --name-only efaa5e8bf1c8598ccd4d93deb42253d963987101; git ls-files --others --exclude-standard; } | grep -v '^.github/workflows/issue58-runner.yml$' | sort -u)"
           expected="$(printf '%s\n' decisionLog.js main.js tests/decisionLog.test.mjs | sort)"
           test "$changed" = "$expected"
       - name: Commit only intended source changes and remove runner
