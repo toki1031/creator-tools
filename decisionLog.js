@@ -656,6 +656,58 @@ export function recordBgmVolumeChange(project, {
   }, options);
 }
 
+export function normalizeSubtitleFontSize(value) {
+  if (value === '' || value === null || value === undefined) return null;
+  const number = Number(value);
+  if (!Number.isFinite(number)) return null;
+  return Math.min(84, Math.max(32, Math.round(number)));
+}
+
+export function snapshotSubtitleFontSize(value) {
+  const fontSizePx = normalizeSubtitleFontSize(value);
+  return fontSizePx === null ? null : { fontSizePx };
+}
+
+export function recordSubtitleFontSizeChange(project, { beforeState, afterState }, options = {}) {
+  const before = normalizeSubtitleFontSize(isRecord(beforeState) ? beforeState.fontSizePx : beforeState);
+  const after = normalizeSubtitleFontSize(isRecord(afterState) ? afterState.fontSizePx : afterState);
+  if (before === null || after === null || before === after) return null;
+
+  const style = isRecord(project?.subtitleStyle) ? project.subtitleStyle : {};
+  const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+  const subtitleSceneCount = scenes.filter(scene => stringOr(scene?.subtitleText).trim()).length;
+  const positionValue = stringOr(style.position).trim();
+  const position = ['top', 'center', 'bottom'].includes(positionValue) ? positionValue : '';
+  const maxCharsPerLine = Number(style.maxCharsPerLine);
+  const maxLines = Number(style.maxLines);
+
+  return appendDecision(project, {
+    decisionType: 'subtitle-font-size',
+    sceneId: '',
+    context: {
+      platform: stringOr(project?.platform),
+      aspectRatio: stringOr(project?.aspectRatio),
+      subtitlePreset: stringOr(style.preset).trim() || 'standard',
+      subtitleEnabled: style.enabled !== false,
+      position,
+      positionOffsetPercent: normalizeSubtitleOffset(style.positionOffsetPercent),
+      maxCharsPerLine: Number.isFinite(maxCharsPerLine) ? maxCharsPerLine : null,
+      maxLines: Number.isFinite(maxLines) ? maxLines : null,
+      sceneCount: scenes.length,
+      subtitleSceneCount
+    },
+    proposal: { fontSizePx: before },
+    alternatives: [],
+    humanAction: { type: 'set-subtitle-font-size' },
+    finalDecision: { fontSizePx: after },
+    reasonCode: '',
+    reasonNote: '',
+    source: { type: 'human', feature: 'subtitle-editor', version: '0.14' },
+    assetIds: [],
+    rights: {}
+  }, options);
+}
+
 const SUBTITLE_PRESET_IDS = ['standard', 'large', 'minimal', 'boxed'];
 const SUBTITLE_PRESET_SET = new Set(SUBTITLE_PRESET_IDS);
 const SUBTITLE_POSITIONS = new Set(['top', 'center', 'bottom']);

@@ -10,7 +10,7 @@ import { normalizeSubtitleOffset, resolveEffectiveSubtitlePosition, resolveSubti
 import { assessMvpVideoResult, describeVideoExportFailure, isMvpShortsProject, validateMvpShortsOutput } from "./videoMvp.js";
 import { createGenerationStartController, projectExpectsVideoAudio } from "./videoGenerationStart.js";
 import { applyDictionaryEntries, normalizeSubtitleContentForSync, splitIntoScenes, splitSubtitleCards, subtitleContentChanged } from "./qualityLogic.js";
-import { ensureLearningState, moveSceneWithDecision, recordBgmSelectionChange, recordBgmVolumeChange, recordGlobalSubtitlePositionChange, recordSceneDurationChange, recordSceneImageSelection, recordSceneMotionChange, recordSceneSubtitlePositionChange, recordSceneTransitionChange, recordSubtitleContentChange, recordSubtitlePresetChange, recordSubtitleSceneSyncDecision, snapshotGlobalSubtitlePosition, snapshotSceneSubtitlePosition, snapshotSubtitlePresetState } from "./decisionLog.js";
+import { ensureLearningState, moveSceneWithDecision, recordBgmSelectionChange, recordBgmVolumeChange, recordGlobalSubtitlePositionChange, recordSceneDurationChange, recordSceneImageSelection, recordSceneMotionChange, recordSceneSubtitlePositionChange, recordSceneTransitionChange, recordSubtitleContentChange, recordSubtitleFontSizeChange, recordSubtitlePresetChange, recordSubtitleSceneSyncDecision, snapshotGlobalSubtitlePosition, snapshotSceneSubtitlePosition, snapshotSubtitleFontSize, snapshotSubtitlePresetState } from "./decisionLog.js";
 
 const rootElement = document.querySelector("#app");
 if (!rootElement) throw new Error("#app がありません。");
@@ -754,7 +754,18 @@ async function renderBgm(id) {
   volumeEl.onpointerup=()=>commitBgmVolumeDecision(volumeEl);
   volumeEl.onpointercancel=()=>bgmVolumeBeforeByElement.delete(volumeEl);
   volumeEl.onblur=()=>commitBgmVolumeDecision(volumeEl);
-  ['subtitleEnabled','fontSize','maxChars','maxLines','textColor','outlineColor','outlineWidth','backgroundEnabled','backgroundColor','backgroundOpacity'].forEach(k=>root.querySelector('#'+k).oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();});
+  ['subtitleEnabled','maxChars','maxLines','textColor','outlineColor','outlineWidth','backgroundEnabled','backgroundColor','backgroundOpacity'].forEach(k=>root.querySelector('#'+k).oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();});
+  const subtitleFontSizeBeforeByElement=new WeakMap();
+const rememberSubtitleFontSizeBefore=el=>{if(subtitleFontSizeBeforeByElement.has(el))return;const before=snapshotSubtitleFontSize(el.value);if(before)subtitleFontSizeBeforeByElement.set(el,before);};
+const commitSubtitleFontSizeDecision=el=>{if(!subtitleFontSizeBeforeByElement.has(el))return;const before=subtitleFontSizeBeforeByElement.get(el);subtitleFontSizeBeforeByElement.delete(el);const after=snapshotSubtitleFontSize(el.value);const record=recordSubtitleFontSizeChange(project,{beforeState:before,afterState:after});if(record)save();};
+const fontSizeEl=root.querySelector('#fontSize');
+fontSizeEl.onpointerdown=()=>rememberSubtitleFontSizeBefore(fontSizeEl);
+fontSizeEl.onfocus=()=>rememberSubtitleFontSizeBefore(fontSizeEl);
+fontSizeEl.onkeydown=()=>rememberSubtitleFontSizeBefore(fontSizeEl);
+fontSizeEl.oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();};
+fontSizeEl.onpointerup=()=>commitSubtitleFontSizeDecision(fontSizeEl);
+fontSizeEl.onpointercancel=()=>subtitleFontSizeBeforeByElement.delete(fontSizeEl);
+fontSizeEl.onblur=()=>commitSubtitleFontSizeDecision(fontSizeEl);
   const globalSubtitlePositionBeforeByElement=new WeakMap();
   const rememberGlobalSubtitlePositionBefore=el=>{if(globalSubtitlePositionBeforeByElement.has(el))return;globalSubtitlePositionBeforeByElement.set(el,snapshotGlobalSubtitlePosition(project));};
   const commitGlobalSubtitlePositionDecision=el=>{if(!globalSubtitlePositionBeforeByElement.has(el))return;const before=globalSubtitlePositionBeforeByElement.get(el);globalSubtitlePositionBeforeByElement.delete(el);const after=snapshotGlobalSubtitlePosition(project);const record=recordGlobalSubtitlePositionChange(project,{beforeState:before,afterState:after});if(record)save();};
