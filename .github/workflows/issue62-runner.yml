@@ -1,0 +1,228 @@
+name: Issue 62 Implementation Runner
+
+on:
+  push:
+    branches:
+      - issue-62-subtitle-font-size-v014
+
+permissions:
+  contents: write
+
+jobs:
+  implement-test-commit:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply Dataset v0.14 patch
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          BASE='119051f720e2ab0f28da6c61cb671199ba7582d5'
+
+          def rep(path, old, new):
+            p=Path(path); t=p.read_text(); n=t.count(old)
+            if n!=1: raise SystemExit(f'{path}: expected 1 match, got {n}: {old[:160]!r}')
+            p.write_text(t.replace(old,new,1))
+
+          # decisionLog.js: add pure normalization/snapshot/record helpers before subtitle preset helpers.
+          marker="const SUBTITLE_PRESET_IDS = ['standard', 'large', 'minimal', 'boxed'];"
+          helper=r'''export function normalizeSubtitleFontSize(value) {
+            if (value === '' || value === null || value === undefined) return null;
+            const number = Number(value);
+            if (!Number.isFinite(number)) return null;
+            return Math.min(84, Math.max(32, Math.round(number)));
+          }
+
+          export function snapshotSubtitleFontSize(value) {
+            const fontSizePx = normalizeSubtitleFontSize(value);
+            return fontSizePx === null ? null : { fontSizePx };
+          }
+
+          export function recordSubtitleFontSizeChange(project, { beforeState, afterState }, options = {}) {
+            const before = normalizeSubtitleFontSize(isRecord(beforeState) ? beforeState.fontSizePx : beforeState);
+            const after = normalizeSubtitleFontSize(isRecord(afterState) ? afterState.fontSizePx : afterState);
+            if (before === null || after === null || before === after) return null;
+
+            const style = isRecord(project?.subtitleStyle) ? project.subtitleStyle : {};
+            const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+            const subtitleSceneCount = scenes.filter(scene => stringOr(scene?.subtitleText).trim()).length;
+            const positionValue = stringOr(style.position).trim();
+            const position = ['top', 'center', 'bottom'].includes(positionValue) ? positionValue : '';
+            const maxCharsPerLine = Number(style.maxCharsPerLine);
+            const maxLines = Number(style.maxLines);
+
+            return appendDecision(project, {
+              decisionType: 'subtitle-font-size',
+              sceneId: '',
+              context: {
+                platform: stringOr(project?.platform),
+                aspectRatio: stringOr(project?.aspectRatio),
+                subtitlePreset: stringOr(style.preset).trim() || 'standard',
+                subtitleEnabled: style.enabled !== false,
+                position,
+                positionOffsetPercent: normalizeSubtitleOffset(style.positionOffsetPercent),
+                maxCharsPerLine: Number.isFinite(maxCharsPerLine) ? maxCharsPerLine : null,
+                maxLines: Number.isFinite(maxLines) ? maxLines : null,
+                sceneCount: scenes.length,
+                subtitleSceneCount
+              },
+              proposal: { fontSizePx: before },
+              alternatives: [],
+              humanAction: { type: 'set-subtitle-font-size' },
+              finalDecision: { fontSizePx: after },
+              reasonCode: '',
+              reasonNote: '',
+              source: { type: 'human', feature: 'subtitle-editor', version: '0.14' },
+              assetIds: [],
+              rights: {}
+            }, options);
+          }
+
+          '''+marker
+          rep('decisionLog.js', marker, helper)
+
+          # main.js import additions.
+          rep(
+            'main.js',
+            'recordSubtitleContentChange, recordSubtitlePresetChange, recordSubtitleSceneSyncDecision, snapshotGlobalSubtitlePosition, snapshotSceneSubtitlePosition, snapshotSubtitlePresetState',
+            'recordSubtitleContentChange, recordSubtitleFontSizeChange, recordSubtitlePresetChange, recordSubtitleSceneSyncDecision, snapshotGlobalSubtitlePosition, snapshotSceneSubtitlePosition, snapshotSubtitleFontSize, snapshotSubtitlePresetState'
+          )
+
+          # Remove fontSize from generic input logging path but preserve all other controls.
+          old_generic="  ['subtitleEnabled','fontSize','maxChars','maxLines','textColor','outlineColor','outlineWidth','backgroundEnabled','backgroundColor','backgroundOpacity'].forEach(k=>root.querySelector('#'+k).oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();});\n"
+          new_generic="  ['subtitleEnabled','maxChars','maxLines','textColor','outlineColor','outlineWidth','backgroundEnabled','backgroundColor','backgroundOpacity'].forEach(k=>root.querySelector('#'+k).oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();});\n"
+          rep('main.js', old_generic, new_generic)
+
+          # Add a dedicated font size commit path. Live UI behavior remains identical on every input.
+          anchor=new_generic
+          dedicated=r'''  const subtitleFontSizeBeforeByElement=new WeakMap();
+          const rememberSubtitleFontSizeBefore=el=>{if(subtitleFontSizeBeforeByElement.has(el))return;const before=snapshotSubtitleFontSize(el.value);if(before)subtitleFontSizeBeforeByElement.set(el,before);};
+          const commitSubtitleFontSizeDecision=el=>{if(!subtitleFontSizeBeforeByElement.has(el))return;const before=subtitleFontSizeBeforeByElement.get(el);subtitleFontSizeBeforeByElement.delete(el);const after=snapshotSubtitleFontSize(el.value);const record=recordSubtitleFontSizeChange(project,{beforeState:before,afterState:after});if(record)save();};
+          const fontSizeEl=root.querySelector('#fontSize');
+          fontSizeEl.onpointerdown=()=>rememberSubtitleFontSizeBefore(fontSizeEl);
+          fontSizeEl.onfocus=()=>rememberSubtitleFontSizeBefore(fontSizeEl);
+          fontSizeEl.onkeydown=()=>rememberSubtitleFontSizeBefore(fontSizeEl);
+          fontSizeEl.oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();};
+          fontSizeEl.onpointerup=()=>commitSubtitleFontSizeDecision(fontSizeEl);
+          fontSizeEl.onpointercancel=()=>subtitleFontSizeBeforeByElement.delete(fontSizeEl);
+          fontSizeEl.onblur=()=>commitSubtitleFontSizeDecision(fontSizeEl);
+          '''
+          rep('main.js', anchor, anchor+dedicated)
+
+          # tests imports.
+          rep('tests/decisionLog.test.mjs','  normalizeBgmVolume,\n','  normalizeBgmVolume,\n  normalizeSubtitleFontSize,\n')
+          rep('tests/decisionLog.test.mjs','  recordSubtitlePresetChange,\n','  recordSubtitleFontSizeChange,\n  recordSubtitlePresetChange,\n')
+          rep('tests/decisionLog.test.mjs','  snapshotSubtitlePresetState,\n','  snapshotSubtitleFontSize,\n  snapshotSubtitlePresetState,\n')
+
+          p=Path('tests/decisionLog.test.mjs'); t=p.read_text(); t+=r'''
+
+          test('subtitle-font-size records one committed direct size adjustment with layout context', () => {
+            const project={
+              id:'p-font',platform:'youtube-shorts',aspectRatio:'9:16',learning:{decisions:[]},
+              subtitleStyle:{preset:'standard',enabled:true,position:'bottom',positionOffsetPercent:3,maxCharsPerLine:16,maxLines:2},
+              scenes:[{id:'s1',subtitleText:'字幕あり'},{id:'s2',subtitleText:''},{id:'s3',subtitleText:'別字幕'}]
+            };
+            const record=recordSubtitleFontSizeChange(project,{
+              beforeState:snapshotSubtitleFontSize('54'),
+              afterState:snapshotSubtitleFontSize('68')
+            },{createId:()=> 'd-font-1',now:()=> '2026-09-05T00:30:00.000Z'});
+            assert.equal(record.decisionType,'subtitle-font-size');
+            assert.equal(record.sceneId,'');
+            assert.deepEqual(record.proposal,{fontSizePx:54});
+            assert.deepEqual(record.finalDecision,{fontSizePx:68});
+            assert.deepEqual(record.alternatives,[]);
+            assert.deepEqual(record.humanAction,{type:'set-subtitle-font-size'});
+            assert.deepEqual(record.source,{type:'human',feature:'subtitle-editor',version:'0.14'});
+            assert.deepEqual(record.context,{
+              platform:'youtube-shorts',aspectRatio:'9:16',subtitlePreset:'standard',subtitleEnabled:true,
+              position:'bottom',positionOffsetPercent:3,maxCharsPerLine:16,maxLines:2,sceneCount:3,subtitleSceneCount:2
+            });
+            assert.deepEqual(record.assetIds,[]);
+            assert.deepEqual(record.rights,{});
+            assert.equal(project.learning.decisions.length,1);
+          });
+
+          test('subtitle font size normalization clamps to the visible 32..84 integer range', () => {
+            assert.equal(normalizeSubtitleFontSize(32),32);
+            assert.equal(normalizeSubtitleFontSize('54'),54);
+            assert.equal(normalizeSubtitleFontSize(67.6),68);
+            assert.equal(normalizeSubtitleFontSize(1),32);
+            assert.equal(normalizeSubtitleFontSize(999),84);
+            assert.deepEqual(snapshotSubtitleFontSize('84'),{fontSizePx:84});
+          });
+
+          test('subtitle font size rejects invalid values and same normalized value without noise', () => {
+            const project={id:'p-font',learning:{decisions:[]},subtitleStyle:{},scenes:[]};
+            assert.equal(normalizeSubtitleFontSize(''),null);
+            assert.equal(normalizeSubtitleFontSize('bad'),null);
+            assert.equal(normalizeSubtitleFontSize(Number.NaN),null);
+            assert.equal(snapshotSubtitleFontSize(undefined),null);
+            assert.equal(recordSubtitleFontSizeChange(project,{beforeState:{fontSizePx:54},afterState:{fontSizePx:54}}),null);
+            assert.equal(recordSubtitleFontSizeChange(project,{beforeState:{fontSizePx:'bad'},afterState:{fontSizePx:54}}),null);
+            assert.equal(project.learning.decisions.length,0);
+          });
+
+          test('subtitle font size context uses UI-effective defaults without capturing preset alternatives', () => {
+            const project={id:'p-font-default',platform:'instagram-reels',aspectRatio:'9:16',learning:{decisions:[]},subtitleStyle:{enabled:false,position:'invalid',maxCharsPerLine:'bad',maxLines:2},scenes:[]};
+            const record=recordSubtitleFontSizeChange(project,{beforeState:40,afterState:41});
+            assert.equal(record.context.subtitlePreset,'standard');
+            assert.equal(record.context.subtitleEnabled,false);
+            assert.equal(record.context.position,'');
+            assert.equal(record.context.positionOffsetPercent,0);
+            assert.equal(record.context.maxCharsPerLine,null);
+            assert.equal(record.context.maxLines,2);
+            assert.deepEqual(record.alternatives,[]);
+          });
+          '''; p.write_text(t)
+
+          # Static assurance: preset changes must not create v0.14 records and fontSize must have its own live handler.
+          main=Path('main.js').read_text()
+          preset_start=main.index("root.querySelector('#subtitlePreset').onchange")
+          preset_end=main.index("root.querySelector('#audioFile').onchange",preset_start)
+          preset_handler=main[preset_start:preset_end]
+          if 'recordSubtitleFontSizeChange' in preset_handler:
+            raise SystemExit('preset handler would duplicate v0.14 font-size record')
+          generic_start=main.index("['subtitleEnabled','maxChars'")
+          generic_end=main.index('const subtitleFontSizeBeforeByElement',generic_start)
+          if "'fontSize'" in main[generic_start:generic_end]:
+            raise SystemExit('fontSize still exists in generic input handler')
+          font_start=main.index('const subtitleFontSizeBeforeByElement')
+          font_end=main.index('const globalSubtitlePositionBeforeByElement',font_start)
+          font_handler=main[font_start:font_end]
+          for token in ['recordSubtitleFontSizeChange','readGlobalSettings()','updateLabels()','renderSubtitleEditor()','renderSubtitlePreview()','save()']:
+            if token not in font_handler: raise SystemExit(f'font size handler missing {token}')
+          PY
+      - name: Install dependencies without repository artifacts
+        run: npm install --package-lock=false --no-audit --no-fund
+      - name: Test
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Protected diff check
+        shell: bash
+        run: |
+          git diff --check
+          git diff --exit-code 119051f720e2ab0f28da6c61cb671199ba7582d5 -- videoRenderer.js db.js projectFactory.js subtitlePosition.js qualityLogic.js projectBackup.js audioAssetIdentity.js voice-lab.html
+      - name: Commit intended changes
+        shell: bash
+        run: |
+          rm .github/workflows/issue62-runner.yml
+          rm -rf dist node_modules package-lock.json
+          git clean -fdx
+          changed="$(git status --short | awk '{print $2}' | sort)"
+          expected="$(printf '%s\n' .github/workflows/issue62-runner.yml decisionLog.js main.js tests/decisionLog.test.mjs | sort)"
+          printf 'changed:\n%s\nexpected:\n%s\n' "$changed" "$expected"
+          test "$changed" = "$expected"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add decisionLog.js main.js tests/decisionLog.test.mjs .github/workflows/issue62-runner.yml
+          git commit -m "Capture subtitle font size decisions"
+          git push origin HEAD:issue-62-subtitle-font-size-v014
