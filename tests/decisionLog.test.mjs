@@ -11,6 +11,7 @@ import {
   normalizeBgmVolume,
   normalizeSubtitleFontSize,
   normalizeSubtitleMaxChars,
+  normalizeSubtitleOutlineWidth,
   normalizeSubtitleBackgroundEnabled,
   normalizeSubtitleMaxLines,
   normalizeNarrationVoiceId,
@@ -22,6 +23,7 @@ import {
   recordGlobalSubtitlePositionChange,
   recordSubtitleFontSizeChange,
   recordSubtitleMaxCharsChange,
+  recordSubtitleOutlineWidthChange,
   recordSubtitleBackgroundEnabledChange,
   recordSubtitleMaxLinesChange,
   recordSubtitlePresetChange,
@@ -35,6 +37,7 @@ import {
   snapshotSceneSubtitlePosition,
   snapshotSubtitleFontSize,
   snapshotSubtitleMaxChars,
+  snapshotSubtitleOutlineWidth,
   snapshotSubtitleBackgroundEnabled,
   snapshotSubtitleMaxLines,
   snapshotSubtitlePresetState,
@@ -1152,5 +1155,61 @@ test('subtitle-background-enabled ignores unchanged and invalid final states', (
   assert.equal(recordSubtitleBackgroundEnabledChange(project,{beforeState:{backgroundEnabled:true},afterState:{backgroundEnabled:true}}),null);
   assert.equal(recordSubtitleBackgroundEnabledChange(project,{beforeState:{backgroundEnabled:false},afterState:{backgroundEnabled:'true'}}),null);
   assert.equal(recordSubtitleBackgroundEnabledChange(project,{beforeState:{backgroundEnabled:false},afterState:{backgroundEnabled:null}}),null);
+  assert.equal(project.learning.decisions.length,0);
+});
+
+
+test('subtitle outline width normalization accepts only integer UI values 0 through 8', () => {
+  assert.equal(normalizeSubtitleOutlineWidth(0), 0);
+  assert.equal(normalizeSubtitleOutlineWidth('4'), 4);
+  assert.equal(normalizeSubtitleOutlineWidth(8), 8);
+  assert.equal(normalizeSubtitleOutlineWidth(-1), null);
+  assert.equal(normalizeSubtitleOutlineWidth(9), null);
+  assert.equal(normalizeSubtitleOutlineWidth(2.5), null);
+  assert.equal(normalizeSubtitleOutlineWidth('legacy'), null);
+  assert.deepEqual(snapshotSubtitleOutlineWidth(5), {outlineWidth:5});
+  assert.deepEqual(snapshotSubtitleOutlineWidth('legacy'), {outlineWidth:null});
+});
+
+test('subtitle-outline-width records one committed direct adjustment with compact style context', () => {
+  const project = {
+    id:'p-outline', platform:'youtube-shorts', aspectRatio:'9:16', learning:{decisions:[]},
+    subtitleStyle:{preset:'standard',enabled:true,fontSize:54,position:'bottom',maxCharsPerLine:16,maxLines:2,outlineWidth:0,textColor:'#ffffff',outlineColor:'#000000',backgroundEnabled:false},
+    scenes:[{id:'s1',subtitleText:'字幕あり'},{id:'s2',subtitleText:'二つ目'}]
+  };
+  const record = recordSubtitleOutlineWidthChange(project, {
+    beforeState:{outlineWidth:4}, afterState:{outlineWidth:0}
+  }, {createId:()=> 'd-outline-1', now:()=> '2026-09-05T05:35:00.000Z'});
+  assert.equal(record.decisionType, 'subtitle-outline-width');
+  assert.deepEqual(record.proposal, {outlineWidth:4});
+  assert.deepEqual(record.finalDecision, {outlineWidth:0});
+  assert.deepEqual(record.alternatives, []);
+  assert.deepEqual(record.humanAction, {type:'set-subtitle-outline-width'});
+  assert.deepEqual(record.source, {type:'human',feature:'subtitle-editor',version:'0.20'});
+  assert.deepEqual(record.assetIds, []);
+  assert.deepEqual(record.rights, {});
+  assert.deepEqual(record.context, {
+    platform:'youtube-shorts', aspectRatio:'9:16', subtitlePreset:'standard', subtitleEnabled:true,
+    fontSizePx:54, position:'bottom', maxCharsPerLine:16, maxLines:2,
+    textColor:'#ffffff', outlineColor:'#000000', backgroundEnabled:false,
+    sceneCount:2, subtitleSceneCount:2
+  });
+  assert.equal(project.learning.decisions.length, 1);
+});
+
+test('subtitle-outline-width records a valid final value when previous state is legacy or invalid', () => {
+  const project={id:'p',learning:{decisions:[]},subtitleStyle:{preset:'minimal',enabled:true,fontSize:48,position:'center',maxCharsPerLine:18,maxLines:2,outlineWidth:6,textColor:'#fff',outlineColor:'#000',backgroundEnabled:false},scenes:[]};
+  const record=recordSubtitleOutlineWidthChange(project,{beforeState:{outlineWidth:'legacy'},afterState:{outlineWidth:6}});
+  assert.deepEqual(record.proposal,{outlineWidth:null});
+  assert.deepEqual(record.finalDecision,{outlineWidth:6});
+  assert.equal(project.learning.decisions.length,1);
+});
+
+test('subtitle-outline-width ignores unchanged and invalid final values without noise', () => {
+  const project={id:'p',learning:{decisions:[]},subtitleStyle:{},scenes:[]};
+  assert.equal(recordSubtitleOutlineWidthChange(project,{beforeState:{outlineWidth:4},afterState:{outlineWidth:4}}),null);
+  assert.equal(recordSubtitleOutlineWidthChange(project,{beforeState:{outlineWidth:4},afterState:{outlineWidth:9}}),null);
+  assert.equal(recordSubtitleOutlineWidthChange(project,{beforeState:{outlineWidth:4},afterState:{outlineWidth:2.5}}),null);
+  assert.equal(recordSubtitleOutlineWidthChange(project,{beforeState:{outlineWidth:4},afterState:{outlineWidth:'bad'}}),null);
   assert.equal(project.learning.decisions.length,0);
 });
