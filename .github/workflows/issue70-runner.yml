@@ -1,0 +1,224 @@
+name: Issue 70 Implementation Runner
+
+on:
+  push:
+    branches:
+      - issue-70-subtitle-max-lines-v018
+
+permissions:
+  contents: write
+
+jobs:
+  implement-test-commit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Apply Dataset v0.18 patch
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected one match, got {count}: {old[:120]!r}')
+              p.write_text(text.replace(old, new, 1))
+
+          marker = "const SUBTITLE_PRESET_IDS = ['standard', 'large', 'minimal', 'boxed'];"
+          helper = r'''export function normalizeSubtitleMaxLines(value) {
+            if (value === '' || value === null || value === undefined) return null;
+            const number = Number(value);
+            return Number.isInteger(number) && (number === 1 || number === 2) ? number : null;
+          }
+
+          export function snapshotSubtitleMaxLines(value) {
+            return { maxLines: normalizeSubtitleMaxLines(value) };
+          }
+
+          export function recordSubtitleMaxLinesChange(project, { beforeState, afterState }, options = {}) {
+            const beforeRaw = isRecord(beforeState) ? beforeState.maxLines : beforeState;
+            const afterRaw = isRecord(afterState) ? afterState.maxLines : afterState;
+            const before = normalizeSubtitleMaxLines(beforeRaw);
+            const after = normalizeSubtitleMaxLines(afterRaw);
+            if (after === null || before === after) return null;
+
+            const style = isRecord(project?.subtitleStyle) ? project.subtitleStyle : {};
+            const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+            const subtitleSceneCount = scenes.filter(scene => stringOr(scene?.subtitleText).trim()).length;
+            const fontSizePx = normalizeSubtitleFontSize(style.fontSize);
+            const positionValue = stringOr(style.position).trim();
+            const position = ['top', 'center', 'bottom'].includes(positionValue) ? positionValue : '';
+            const maxCharsPerLine = normalizeSubtitleMaxChars(style.maxCharsPerLine);
+
+            return appendDecision(project, {
+              decisionType: 'subtitle-max-lines',
+              sceneId: '',
+              context: {
+                platform: stringOr(project?.platform),
+                aspectRatio: stringOr(project?.aspectRatio),
+                subtitlePreset: stringOr(style.preset).trim() || 'standard',
+                subtitleEnabled: style.enabled !== false,
+                fontSizePx,
+                position,
+                maxCharsPerLine,
+                sceneCount: scenes.length,
+                subtitleSceneCount
+              },
+              proposal: { maxLines: before },
+              alternatives: [{ maxLines: after === 1 ? 2 : 1 }],
+              humanAction: { type: 'set-subtitle-max-lines' },
+              finalDecision: { maxLines: after },
+              reasonCode: '',
+              reasonNote: '',
+              source: { type: 'human', feature: 'subtitle-editor', version: '0.18' },
+              assetIds: [],
+              rights: {}
+            }, options);
+          }
+
+          ''' + marker
+          replace_once('decisionLog.js', marker, helper)
+
+          replace_once(
+              'main.js',
+              'recordSubtitleFontSizeChange, recordSubtitleMaxCharsChange, recordSubtitlePresetChange',
+              'recordSubtitleFontSizeChange, recordSubtitleMaxCharsChange, recordSubtitleMaxLinesChange, recordSubtitlePresetChange'
+          )
+          replace_once(
+              'main.js',
+              'snapshotSubtitleFontSize, snapshotSubtitleMaxChars, snapshotSubtitlePresetState',
+              'snapshotSubtitleFontSize, snapshotSubtitleMaxChars, snapshotSubtitleMaxLines, snapshotSubtitlePresetState'
+          )
+          replace_once(
+              'main.js',
+              "['subtitleEnabled','maxLines','textColor','outlineColor','outlineWidth','backgroundEnabled','backgroundColor','backgroundOpacity']",
+              "['subtitleEnabled','textColor','outlineColor','outlineWidth','backgroundEnabled','backgroundColor','backgroundOpacity']"
+          )
+
+          max_chars_marker = "  const subtitleMaxCharsBeforeByElement=new WeakMap();\n"
+          max_lines_handler = r'''  const subtitleMaxLinesBeforeByElement=new WeakMap();
+          const maxLinesEl=root.querySelector('#maxLines');
+          const rememberSubtitleMaxLinesBefore=el=>{if(subtitleMaxLinesBeforeByElement.has(el))return;subtitleMaxLinesBeforeByElement.set(el,snapshotSubtitleMaxLines(st.maxLines));};
+          const commitSubtitleMaxLinesDecision=el=>{if(!subtitleMaxLinesBeforeByElement.has(el))return;const before=subtitleMaxLinesBeforeByElement.get(el);subtitleMaxLinesBeforeByElement.delete(el);const after=snapshotSubtitleMaxLines(el.value);const record=recordSubtitleMaxLinesChange(project,{beforeState:before,afterState:after});if(record)save();};
+          maxLinesEl.onpointerdown=()=>rememberSubtitleMaxLinesBefore(maxLinesEl);
+          maxLinesEl.onfocus=()=>rememberSubtitleMaxLinesBefore(maxLinesEl);
+          maxLinesEl.onkeydown=()=>rememberSubtitleMaxLinesBefore(maxLinesEl);
+          maxLinesEl.oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();};
+          maxLinesEl.onchange=()=>commitSubtitleMaxLinesDecision(maxLinesEl);
+          maxLinesEl.onpointercancel=()=>subtitleMaxLinesBeforeByElement.delete(maxLinesEl);
+          maxLinesEl.onblur=()=>commitSubtitleMaxLinesDecision(maxLinesEl);
+          ''' + max_chars_marker
+          replace_once('main.js', max_chars_marker, max_lines_handler)
+
+          replace_once(
+              'tests/decisionLog.test.mjs',
+              '  normalizeSubtitleMaxChars,\n',
+              '  normalizeSubtitleMaxChars,\n  normalizeSubtitleMaxLines,\n'
+          )
+          replace_once(
+              'tests/decisionLog.test.mjs',
+              '  recordSubtitleMaxCharsChange,\n',
+              '  recordSubtitleMaxCharsChange,\n  recordSubtitleMaxLinesChange,\n'
+          )
+          replace_once(
+              'tests/decisionLog.test.mjs',
+              '  snapshotSubtitleMaxChars,\n',
+              '  snapshotSubtitleMaxChars,\n  snapshotSubtitleMaxLines,\n'
+          )
+
+          tests_path = Path('tests/decisionLog.test.mjs')
+          tests = tests_path.read_text()
+          tests += r'''
+
+          test('subtitle max lines normalization accepts only 1 or 2', () => {
+            assert.equal(normalizeSubtitleMaxLines(1), 1);
+            assert.equal(normalizeSubtitleMaxLines('2'), 2);
+            assert.equal(normalizeSubtitleMaxLines(''), null);
+            assert.equal(normalizeSubtitleMaxLines(0), null);
+            assert.equal(normalizeSubtitleMaxLines(3), null);
+            assert.equal(normalizeSubtitleMaxLines(1.5), null);
+            assert.deepEqual(snapshotSubtitleMaxLines('2'), { maxLines: 2 });
+            assert.deepEqual(snapshotSubtitleMaxLines('legacy'), { maxLines: null });
+          });
+
+          test('subtitle-max-lines records explicit 2 to 1 selection with compact context', () => {
+            const project = {
+              id:'p-lines', platform:'youtube-shorts', aspectRatio:'9:16', learning:{decisions:[]},
+              subtitleStyle:{preset:'standard',enabled:true,fontSize:54,position:'bottom',maxCharsPerLine:16,maxLines:1},
+              scenes:[{id:'s1',subtitleText:'字幕あり'},{id:'s2',subtitleText:''}]
+            };
+            const record = recordSubtitleMaxLinesChange(project, {
+              beforeState:{maxLines:2}, afterState:{maxLines:1}
+            }, {createId:()=> 'd-lines-1', now:()=> '2026-09-05T04:00:00.000Z'});
+            assert.equal(record.decisionType, 'subtitle-max-lines');
+            assert.deepEqual(record.proposal, {maxLines:2});
+            assert.deepEqual(record.finalDecision, {maxLines:1});
+            assert.deepEqual(record.alternatives, [{maxLines:2}]);
+            assert.deepEqual(record.humanAction, {type:'set-subtitle-max-lines'});
+            assert.deepEqual(record.source, {type:'human',feature:'subtitle-editor',version:'0.18'});
+            assert.deepEqual(record.assetIds, []);
+            assert.deepEqual(record.rights, {});
+            assert.deepEqual(record.context, {
+              platform:'youtube-shorts', aspectRatio:'9:16', subtitlePreset:'standard', subtitleEnabled:true,
+              fontSizePx:54, position:'bottom', maxCharsPerLine:16, sceneCount:2, subtitleSceneCount:1
+            });
+          });
+
+          test('subtitle-max-lines allows invalid legacy before as null proposal', () => {
+            const project={id:'p',learning:{decisions:[]},subtitleStyle:{preset:'minimal',enabled:true,fontSize:48,position:'center',maxCharsPerLine:18,maxLines:2},scenes:[]};
+            const record=recordSubtitleMaxLinesChange(project,{beforeState:{maxLines:null},afterState:{maxLines:2}});
+            assert.deepEqual(record.proposal,{maxLines:null});
+            assert.deepEqual(record.finalDecision,{maxLines:2});
+            assert.deepEqual(record.alternatives,[{maxLines:1}]);
+          });
+
+          test('subtitle-max-lines ignores same and invalid final values', () => {
+            const project={id:'p',learning:{decisions:[]},subtitleStyle:{},scenes:[]};
+            assert.equal(recordSubtitleMaxLinesChange(project,{beforeState:{maxLines:1},afterState:{maxLines:1}}),null);
+            assert.equal(recordSubtitleMaxLinesChange(project,{beforeState:{maxLines:2},afterState:{maxLines:3}}),null);
+            assert.equal(recordSubtitleMaxLinesChange(project,{beforeState:{maxLines:2},afterState:{maxLines:null}}),null);
+            assert.equal(project.learning.decisions.length,0);
+          });
+          '''
+          tests_path.write_text(tests)
+          PY
+
+      - name: Install dependencies without repository artifacts
+        run: npm install --package-lock=false --no-audit --no-fund
+      - name: Test
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Diff and scope checks
+        shell: bash
+        run: |
+          git diff --check
+          git diff --exit-code c47979c2bb06dc6c120c1d010b76fc03598df1dd -- videoRenderer.js db.js projectFactory.js subtitlePosition.js qualityLogic.js projectBackup.js audioAssetIdentity.js voice-lab.html
+          test "$(grep -o 'recordSubtitleMaxLinesChange(' main.js | wc -l)" -eq 1
+          test "$(grep -o "maxLinesEl.onchange=()=>commitSubtitleMaxLinesDecision(maxLinesEl)" main.js | wc -l)" -eq 1
+          if grep -F "['subtitleEnabled','maxLines','textColor'" main.js; then exit 1; fi
+
+      - name: Commit intended changes and remove runner
+        shell: bash
+        run: |
+          rm .github/workflows/issue70-runner.yml
+          rm -rf dist node_modules package-lock.json
+          git clean -fdx
+          changed="$(git status --short | awk '{print $2}' | sort)"
+          expected="$(printf '%s\n' .github/workflows/issue70-runner.yml decisionLog.js main.js tests/decisionLog.test.mjs | sort)"
+          printf 'changed:\n%s\nexpected:\n%s\n' "$changed" "$expected"
+          test "$changed" = "$expected"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add decisionLog.js main.js tests/decisionLog.test.mjs .github/workflows/issue70-runner.yml
+          git commit -m "Capture subtitle max lines decisions"
+          git push origin HEAD:issue-70-subtitle-max-lines-v018
