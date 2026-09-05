@@ -603,6 +603,76 @@ export function recordSubtitleSceneSyncDecision(project, {
   }, options);
 }
 
+export function normalizeBgmFadeSeconds(value) {
+  if (value === '' || value === null || value === undefined) return null;
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0 || number > 30) return null;
+  const doubled = number * 2;
+  if (Math.abs(doubled - Math.round(doubled)) > 1e-9) return null;
+  return Math.round(doubled) / 2;
+}
+
+export function snapshotBgmFadeIn(value) {
+  return { fadeInSec: normalizeBgmFadeSeconds(value) };
+}
+
+export function recordBgmFadeInChange(project, {
+  beforeState,
+  afterState,
+  bgmSource,
+  bgmCategory,
+  bgmVolume,
+  fadeOutSec,
+  ducking,
+  loop,
+  hasBgm
+}, options = {}) {
+  const beforeRaw = isRecord(beforeState) ? beforeState.fadeInSec : beforeState;
+  const afterRaw = isRecord(afterState) ? afterState.fadeInSec : afterState;
+  const before = normalizeBgmFadeSeconds(beforeRaw);
+  const after = normalizeBgmFadeSeconds(afterRaw);
+  if (after === null || before === after) return null;
+
+  const bgm = isRecord(project?.bgm) ? project.bgm : {};
+  const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+  const currentVolume = normalizeBgmVolume(bgmVolume ?? bgm.volume);
+  const currentFadeOut = normalizeBgmFadeSeconds(fadeOutSec ?? bgm.fadeOutSec);
+  const currentDucking = typeof ducking === 'boolean' ? ducking : Boolean(bgm.ducking);
+  const currentLoop = typeof loop === 'boolean' ? loop : Boolean(bgm.loop);
+  const currentHasBgm = typeof hasBgm === 'boolean' ? hasBgm : Boolean(bgm.audioData);
+  const hasNarration = Boolean(project?.narration?.audioData) || scenes.some(scene => Boolean(scene?.narration?.audioData));
+  const audioAssetId = normalizeAudioAssetId(bgm.audioAssetId);
+  const projectDurationSec = scenes.reduce((sum, scene) => sum + Math.max(0, Number(scene?.durationSec) || 0), 0);
+
+  return appendDecision(project, {
+    decisionType: 'bgm-fade-in',
+    sceneId: '',
+    context: {
+      platform: stringOr(project?.platform),
+      aspectRatio: stringOr(project?.aspectRatio),
+      bgmSource: typeof bgmSource === 'string' ? bgmSource.trim() : stringOr(bgm.source).trim(),
+      bgmCategory: typeof bgmCategory === 'string' ? bgmCategory.trim() : stringOr(bgm.category).trim(),
+      bgmVolume: currentVolume,
+      fadeOutSec: currentFadeOut,
+      ducking: currentDucking,
+      loop: currentLoop,
+      hasBgm: currentHasBgm,
+      hasNarration,
+      sceneCount: scenes.length,
+      projectDurationSec
+    },
+    proposal: { fadeInSec: before },
+    alternatives: [],
+    humanAction: { type: 'set-bgm-fade-in' },
+    finalDecision: { fadeInSec: after },
+    reasonCode: '',
+    reasonNote: '',
+    source: { type: 'human', feature: 'bgm-editor', version: '0.21' },
+    assetIds: audioAssetId ? [audioAssetId] : [],
+    rights: {}
+  }, options);
+}
+
 export function recordBgmLoopChange(project, {
   beforeLoop,
   afterLoop,

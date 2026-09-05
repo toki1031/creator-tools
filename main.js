@@ -10,7 +10,7 @@ import { normalizeSubtitleOffset, resolveEffectiveSubtitlePosition, resolveSubti
 import { assessMvpVideoResult, describeVideoExportFailure, isMvpShortsProject, validateMvpShortsOutput } from "./videoMvp.js";
 import { createGenerationStartController, projectExpectsVideoAudio } from "./videoGenerationStart.js";
 import { applyDictionaryEntries, normalizeSubtitleContentForSync, splitIntoScenes, splitSubtitleCards, subtitleContentChanged } from "./qualityLogic.js";
-import { ensureLearningState, moveSceneWithDecision, recordBgmDuckingChange, recordBgmLoopChange, recordBgmSelectionChange, recordBgmVolumeChange, recordGlobalSubtitlePositionChange, recordSceneDurationChange, recordSceneImageSelection, recordSceneMotionChange, recordSceneSubtitlePositionChange, recordSceneTransitionChange, recordSubtitleContentChange, recordSubtitleBackgroundEnabledChange, recordSubtitleFontSizeChange, recordSubtitleMaxCharsChange, recordSubtitleMaxLinesChange, recordSubtitleOutlineWidthChange, recordSubtitlePresetChange, recordSubtitleSceneSyncDecision, snapshotGlobalSubtitlePosition, snapshotSceneSubtitlePosition, snapshotSubtitleBackgroundEnabled, snapshotSubtitleFontSize, snapshotSubtitleMaxChars, snapshotSubtitleMaxLines, snapshotSubtitleOutlineWidth, snapshotSubtitlePresetState } from "./decisionLog.js";
+import { ensureLearningState, moveSceneWithDecision, recordBgmDuckingChange, recordBgmFadeInChange, recordBgmLoopChange, recordBgmSelectionChange, recordBgmVolumeChange, recordGlobalSubtitlePositionChange, recordSceneDurationChange, recordSceneImageSelection, recordSceneMotionChange, recordSceneSubtitlePositionChange, recordSceneTransitionChange, recordSubtitleContentChange, recordSubtitleBackgroundEnabledChange, recordSubtitleFontSizeChange, recordSubtitleMaxCharsChange, recordSubtitleMaxLinesChange, recordSubtitleOutlineWidthChange, recordSubtitlePresetChange, recordSubtitleSceneSyncDecision, snapshotBgmFadeIn, snapshotGlobalSubtitlePosition, snapshotSceneSubtitlePosition, snapshotSubtitleBackgroundEnabled, snapshotSubtitleFontSize, snapshotSubtitleMaxChars, snapshotSubtitleMaxLines, snapshotSubtitleOutlineWidth, snapshotSubtitlePresetState } from "./decisionLog.js";
 
 const rootElement = document.querySelector("#app");
 if (!rootElement) throw new Error("#app がありません。");
@@ -742,7 +742,19 @@ async function renderBgm(id) {
   bindSavedNavigation(root.querySelector('#nextOutput'),flushSave,()=>goOutput(id));
 
   const updateLabels=()=>{root.querySelector('#volumeValue').textContent=`${Math.round(Number(root.querySelector('#volume').value)*100)}%`;root.querySelector('#fontSizeValue').textContent=root.querySelector('#fontSize').value;const offset=normalizeSubtitleOffset(root.querySelector('#positionOffset').value);root.querySelector('#positionOffsetValue').textContent=`${offset>0?'+':''}${offset}%`;root.querySelector('#outlineWidthValue').textContent=root.querySelector('#outlineWidth').value;root.querySelector('#backgroundOpacityValue').textContent=`${Math.round(Number(root.querySelector('#backgroundOpacity').value)*100)}%`;};
-  ['source','category','bgmTitle','fadeIn','fadeOut','license','credit'].forEach(k=>root.querySelector('#'+k).oninput=()=>{updateLabels();save();});
+  ['source','category','bgmTitle','fadeOut','license','credit'].forEach(k=>root.querySelector('#'+k).oninput=()=>{updateLabels();save();});
+  const bgmFadeInBeforeByElement=new WeakMap();
+const fadeInEl=root.querySelector('#fadeIn');
+const rememberBgmFadeInBefore=el=>{if(bgmFadeInBeforeByElement.has(el))return;bgmFadeInBeforeByElement.set(el,snapshotBgmFadeIn(el.value));};
+const commitBgmFadeInDecision=el=>{if(!bgmFadeInBeforeByElement.has(el))return;const before=bgmFadeInBeforeByElement.get(el);bgmFadeInBeforeByElement.delete(el);const after=snapshotBgmFadeIn(el.value);const record=recordBgmFadeInChange(project,{beforeState:before,afterState:after,bgmSource:root.querySelector('#source').value,bgmCategory:root.querySelector('#category').value,bgmVolume:root.querySelector('#volume').value,fadeOutSec:root.querySelector('#fadeOut').value,ducking:root.querySelector('#ducking').checked,loop:root.querySelector('#loop').checked,hasBgm:Boolean(b.audioData)});if(record)save();};
+fadeInEl.onpointerdown=()=>rememberBgmFadeInBefore(fadeInEl);
+fadeInEl.onfocus=()=>rememberBgmFadeInBefore(fadeInEl);
+fadeInEl.onkeydown=()=>rememberBgmFadeInBefore(fadeInEl);
+fadeInEl.oninput=()=>{updateLabels();save();};
+fadeInEl.onchange=()=>commitBgmFadeInDecision(fadeInEl);
+fadeInEl.onpointerup=()=>commitBgmFadeInDecision(fadeInEl);
+fadeInEl.onpointercancel=()=>bgmFadeInBeforeByElement.delete(fadeInEl);
+fadeInEl.onblur=()=>commitBgmFadeInDecision(fadeInEl);
   const bgmDuckingBeforeByElement=new WeakMap();
 const duckingEl=root.querySelector('#ducking');
 const rememberBgmDuckingBefore=el=>{if(bgmDuckingBeforeByElement.has(el))return;bgmDuckingBeforeByElement.set(el,Boolean(el.checked));};

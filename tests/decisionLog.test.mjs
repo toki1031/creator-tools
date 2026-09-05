@@ -8,6 +8,7 @@ import {
   moveSceneWithDecision,
   normalizeDecisionRecord,
   normalizeLearningState,
+  normalizeBgmFadeSeconds,
   normalizeBgmVolume,
   normalizeSubtitleFontSize,
   normalizeSubtitleMaxChars,
@@ -16,6 +17,7 @@ import {
   normalizeSubtitleMaxLines,
   normalizeNarrationVoiceId,
   recordBgmDuckingChange,
+  recordBgmFadeInChange,
   recordBgmLoopChange,
   recordBgmSelectionChange,
   recordBgmVolumeChange,
@@ -33,6 +35,7 @@ import {
   recordSceneMotionChange,
   recordSceneSubtitlePositionChange,
   recordSceneTransitionChange,
+  snapshotBgmFadeIn,
   snapshotGlobalSubtitlePosition,
   snapshotSceneSubtitlePosition,
   snapshotSubtitleFontSize,
@@ -1211,5 +1214,63 @@ test('subtitle-outline-width ignores unchanged and invalid final values without 
   assert.equal(recordSubtitleOutlineWidthChange(project,{beforeState:{outlineWidth:4},afterState:{outlineWidth:9}}),null);
   assert.equal(recordSubtitleOutlineWidthChange(project,{beforeState:{outlineWidth:4},afterState:{outlineWidth:2.5}}),null);
   assert.equal(recordSubtitleOutlineWidthChange(project,{beforeState:{outlineWidth:4},afterState:{outlineWidth:'bad'}}),null);
+  assert.equal(project.learning.decisions.length,0);
+});
+
+
+test('BGM fade seconds normalization accepts only 0.5 second UI steps from 0 through 30', () => {
+  assert.equal(normalizeBgmFadeSeconds(0), 0);
+  assert.equal(normalizeBgmFadeSeconds('1.5'), 1.5);
+  assert.equal(normalizeBgmFadeSeconds(30), 30);
+  assert.equal(normalizeBgmFadeSeconds(-0.5), null);
+  assert.equal(normalizeBgmFadeSeconds(30.5), null);
+  assert.equal(normalizeBgmFadeSeconds(1.25), null);
+  assert.equal(normalizeBgmFadeSeconds('bad'), null);
+  assert.equal(normalizeBgmFadeSeconds(''), null);
+  assert.deepEqual(snapshotBgmFadeIn(3.5), {fadeInSec:3.5});
+  assert.deepEqual(snapshotBgmFadeIn('legacy'), {fadeInSec:null});
+});
+
+test('bgm-fade-in records one committed direct adjustment with mix and duration context', () => {
+  const audioAssetId=`audio-sha256:${'a'.repeat(64)}`;
+  const project={
+    id:'p-fade-in',platform:'youtube-shorts',aspectRatio:'9:16',learning:{decisions:[]},
+    bgm:{source:'upload',category:'calm',volume:0.12,fadeInSec:3.5,fadeOutSec:2,ducking:true,loop:true,audioData:'data:audio/wav;base64,AA==',audioAssetId},
+    narration:{audioData:''},
+    scenes:[{id:'s1',durationSec:4,narration:{audioData:'data:audio/wav;base64,AA=='}},{id:'s2',durationSec:6}]
+  };
+  const record=recordBgmFadeInChange(project,{
+    beforeState:{fadeInSec:1},afterState:{fadeInSec:3.5},bgmSource:'upload',bgmCategory:'calm',bgmVolume:'0.12',fadeOutSec:'2',ducking:true,loop:true,hasBgm:true
+  },{createId:()=> 'd-fade-in-1',now:()=> '2026-09-05T06:10:00.000Z'});
+  assert.equal(record.decisionType,'bgm-fade-in');
+  assert.deepEqual(record.proposal,{fadeInSec:1});
+  assert.deepEqual(record.finalDecision,{fadeInSec:3.5});
+  assert.deepEqual(record.alternatives,[]);
+  assert.deepEqual(record.humanAction,{type:'set-bgm-fade-in'});
+  assert.deepEqual(record.source,{type:'human',feature:'bgm-editor',version:'0.21'});
+  assert.deepEqual(record.assetIds,[audioAssetId]);
+  assert.deepEqual(record.rights,{});
+  assert.deepEqual(record.context,{
+    platform:'youtube-shorts',aspectRatio:'9:16',bgmSource:'upload',bgmCategory:'calm',bgmVolume:0.12,fadeOutSec:2,
+    ducking:true,loop:true,hasBgm:true,hasNarration:true,sceneCount:2,projectDurationSec:10
+  });
+  assert.equal(project.learning.decisions.length,1);
+});
+
+test('bgm-fade-in records a valid final value when previous value is legacy or invalid', () => {
+  const project={id:'p',learning:{decisions:[]},bgm:{fadeOutSec:2},scenes:[]};
+  const record=recordBgmFadeInChange(project,{beforeState:{fadeInSec:'legacy'},afterState:{fadeInSec:0.5}});
+  assert.deepEqual(record.proposal,{fadeInSec:null});
+  assert.deepEqual(record.finalDecision,{fadeInSec:0.5});
+  assert.equal(project.learning.decisions.length,1);
+});
+
+test('bgm-fade-in ignores unchanged, out-of-range and off-step final values without noise', () => {
+  const project={id:'p',learning:{decisions:[]},bgm:{},scenes:[]};
+  assert.equal(recordBgmFadeInChange(project,{beforeState:{fadeInSec:1},afterState:{fadeInSec:1}}),null);
+  assert.equal(recordBgmFadeInChange(project,{beforeState:{fadeInSec:1},afterState:{fadeInSec:-0.5}}),null);
+  assert.equal(recordBgmFadeInChange(project,{beforeState:{fadeInSec:1},afterState:{fadeInSec:30.5}}),null);
+  assert.equal(recordBgmFadeInChange(project,{beforeState:{fadeInSec:1},afterState:{fadeInSec:1.25}}),null);
+  assert.equal(recordBgmFadeInChange(project,{beforeState:{fadeInSec:1},afterState:{fadeInSec:'bad'}}),null);
   assert.equal(project.learning.decisions.length,0);
 });
