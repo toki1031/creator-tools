@@ -1,5 +1,6 @@
 import { consumePromotedLegacyAssetId, isImageDataUrl } from './mediaLibrary.js';
 import { normalizeSubtitleOffset } from './subtitlePosition.js';
+import { normalizeAudioAssetId } from './audioAssetIdentity.js';
 
 const isRecord = value => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const stringOr = (value, fallback = '') => typeof value === 'string' ? value : fallback;
@@ -652,6 +653,37 @@ export function recordBgmVolumeChange(project, {
     source: { type: 'human', feature: 'bgm-editor', version: '0.10' },
     assetIds: [],
     rights: {}
+  }, options);
+}
+
+export function recordBgmSelectionChange(project, {
+  beforeAudioAssetId,
+  afterAudioAssetId,
+  selectionMethod = 'upload',
+  hadBgmBefore,
+  bgmCategory,
+  ducking,
+  loop
+}, options = {}) {
+  const before = normalizeAudioAssetId(beforeAudioAssetId) || null;
+  const after = normalizeAudioAssetId(afterAudioAssetId) || null;
+  if (!after || before === after) return null;
+  if (selectionMethod !== 'upload') return null;
+  const bgm = isRecord(project?.bgm) ? project.bgm : {};
+  const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+  const currentCategory = typeof bgmCategory === 'string' ? bgmCategory.trim() : stringOr(bgm.category).trim();
+  const currentDucking = typeof ducking === 'boolean' ? ducking : Boolean(bgm.ducking);
+  const currentLoop = typeof loop === 'boolean' ? loop : Boolean(bgm.loop);
+  const hasNarration = Boolean(project?.narration?.audioData) || scenes.some(scene => Boolean(scene?.narration?.audioData));
+  const priorBgm = typeof hadBgmBefore === 'boolean' ? hadBgmBefore : Boolean(before);
+  return appendDecision(project, {
+    decisionType: 'bgm-selection', sceneId: '',
+    context: { platform:stringOr(project?.platform), aspectRatio:stringOr(project?.aspectRatio), selectionMethod:'upload', bgmCategory:currentCategory, hadBgmBefore:priorBgm, ducking:currentDucking, loop:currentLoop, sceneCount:scenes.length, hasNarration },
+    proposal: { audioAssetId: before }, alternatives: [],
+    humanAction: { type:'select-bgm-audio', selectionMethod:'upload' },
+    finalDecision: { audioAssetId: after }, reasonCode:'', reasonNote:'',
+    source: { type:'human', feature:'bgm-editor', version:'0.12' },
+    assetIds: [...new Set([before,after].filter(Boolean))], rights: {}
   }, options);
 }
 

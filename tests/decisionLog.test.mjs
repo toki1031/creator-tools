@@ -10,6 +10,7 @@ import {
   normalizeLearningState,
   normalizeBgmVolume,
   normalizeNarrationVoiceId,
+  recordBgmSelectionChange,
   recordBgmVolumeChange,
   recordNarrationVoiceDecision,
   recordGlobalSubtitlePositionChange,
@@ -758,4 +759,35 @@ test('narration-voice ignores same voice, invalid final voice and invalid genera
   assert.equal(recordNarrationVoiceDecision(project,{beforeVoiceId:null,afterVoiceId:'invalid',generationMode:'full'}),null);
   assert.equal(recordNarrationVoiceDecision(project,{beforeVoiceId:null,afterVoiceId:'jf_alpha',generationMode:'preview'}),null);
   assert.equal(project.learning.decisions.length,0);
+});
+
+
+test('bgm-selection records first uploaded audio asset with compact context', () => {
+  const after='audio-sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad';
+  const project={id:'p-bgm-select',platform:'youtube-shorts',aspectRatio:'9:16',learning:{decisions:[]},bgm:{audioAssetId:after,audioData:'data:audio/wav;base64,SECRET',fileName:'private.wav',title:'private title',category:'calm',ducking:true,loop:true,license:'private license',credit:'private credit'},scenes:[{id:'s1',narration:{audioData:'data:audio/wav;base64,AA=='}},{id:'s2'}]};
+  const record=recordBgmSelectionChange(project,{beforeAudioAssetId:null,afterAudioAssetId:after,selectionMethod:'upload',hadBgmBefore:false},{createId:()=> 'd-bgm-select',now:()=> '2026-09-05T00:00:00.000Z'});
+  assert.equal(record.decisionType,'bgm-selection'); assert.equal(record.sceneId,'');
+  assert.deepEqual(record.proposal,{audioAssetId:null}); assert.deepEqual(record.finalDecision,{audioAssetId:after}); assert.deepEqual(record.alternatives,[]);
+  assert.deepEqual(record.humanAction,{type:'select-bgm-audio',selectionMethod:'upload'}); assert.deepEqual(record.source,{type:'human',feature:'bgm-editor',version:'0.12'});
+  assert.deepEqual(record.assetIds,[after]); assert.deepEqual(record.rights,{});
+  assert.deepEqual(record.context,{platform:'youtube-shorts',aspectRatio:'9:16',selectionMethod:'upload',bgmCategory:'calm',hadBgmBefore:false,ducking:true,loop:true,sceneCount:2,hasNarration:true});
+  const serialized=JSON.stringify(record); for(const secret of ['SECRET','private.wav','private title','private license','private credit']) assert.equal(serialized.includes(secret),false);
+});
+test('bgm-selection records replacement and keeps both stable asset ids', () => {
+  const before='audio-sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', after='audio-sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+  const project={id:'p',platform:'instagram-reels',aspectRatio:'1:1',learning:{decisions:[]},bgm:{category:'history',ducking:false,loop:false},scenes:[]};
+  const record=recordBgmSelectionChange(project,{beforeAudioAssetId:before,afterAudioAssetId:after,selectionMethod:'upload',hadBgmBefore:true});
+  assert.deepEqual(record.proposal,{audioAssetId:before}); assert.deepEqual(record.finalDecision,{audioAssetId:after}); assert.deepEqual(record.assetIds,[before,after]); assert.equal(record.context.hadBgmBefore,true); assert.equal(record.context.bgmCategory,'history');
+});
+test('bgm-selection ignores same hash, missing hash, malformed id and unsupported method', () => {
+  const id='audio-sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc', project={id:'p',learning:{decisions:[]},bgm:{},scenes:[]};
+  assert.equal(recordBgmSelectionChange(project,{beforeAudioAssetId:id,afterAudioAssetId:id,selectionMethod:'upload'}),null);
+  assert.equal(recordBgmSelectionChange(project,{beforeAudioAssetId:null,afterAudioAssetId:'',selectionMethod:'upload'}),null);
+  assert.equal(recordBgmSelectionChange(project,{beforeAudioAssetId:null,afterAudioAssetId:'audio-sha256:bad',selectionMethod:'upload'}),null);
+  assert.equal(recordBgmSelectionChange(project,{beforeAudioAssetId:null,afterAudioAssetId:id,selectionMethod:'library'}),null); assert.equal(project.learning.decisions.length,0);
+});
+test('bgm-selection normalizes legacy/invalid previous id to null', () => {
+  const after='audio-sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd', project={id:'p',learning:{decisions:[]},bgm:{category:'calm'},scenes:[]};
+  const record=recordBgmSelectionChange(project,{beforeAudioAssetId:'legacy-file-name.mp3',afterAudioAssetId:after,selectionMethod:'upload',hadBgmBefore:true});
+  assert.deepEqual(record.proposal,{audioAssetId:null}); assert.equal(record.context.hadBgmBefore,true); assert.deepEqual(record.assetIds,[after]);
 });
