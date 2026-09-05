@@ -796,6 +796,59 @@ export function recordSubtitleFontSizeChange(project, { beforeState, afterState 
   }, options);
 }
 
+export function normalizeSubtitleMaxChars(value) {
+  if (value === '' || value === null || value === undefined) return null;
+  const number = Number(value);
+  if (!Number.isFinite(number) || !Number.isInteger(number) || number < 6 || number > 30) return null;
+  return number;
+}
+
+export function snapshotSubtitleMaxChars(value) {
+  const maxCharsPerLine = normalizeSubtitleMaxChars(value);
+  return { maxCharsPerLine };
+}
+
+export function recordSubtitleMaxCharsChange(project, { beforeState, afterState }, options = {}) {
+  const beforeRaw = isRecord(beforeState) ? beforeState.maxCharsPerLine : beforeState;
+  const afterRaw = isRecord(afterState) ? afterState.maxCharsPerLine : afterState;
+  const before = normalizeSubtitleMaxChars(beforeRaw);
+  const after = normalizeSubtitleMaxChars(afterRaw);
+  if (after === null || before === after) return null;
+
+  const style = isRecord(project?.subtitleStyle) ? project.subtitleStyle : {};
+  const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+  const subtitleSceneCount = scenes.filter(scene => stringOr(scene?.subtitleText).trim()).length;
+  const fontSizePx = normalizeSubtitleFontSize(style.fontSize);
+  const positionValue = stringOr(style.position).trim();
+  const position = ['top', 'center', 'bottom'].includes(positionValue) ? positionValue : '';
+  const maxLines = Number(style.maxLines);
+
+  return appendDecision(project, {
+    decisionType: 'subtitle-max-chars',
+    sceneId: '',
+    context: {
+      platform: stringOr(project?.platform),
+      aspectRatio: stringOr(project?.aspectRatio),
+      subtitlePreset: stringOr(style.preset).trim() || 'standard',
+      subtitleEnabled: style.enabled !== false,
+      fontSizePx,
+      position,
+      maxLines: Number.isFinite(maxLines) ? maxLines : null,
+      sceneCount: scenes.length,
+      subtitleSceneCount
+    },
+    proposal: { maxCharsPerLine: before },
+    alternatives: [],
+    humanAction: { type: 'set-subtitle-max-chars' },
+    finalDecision: { maxCharsPerLine: after },
+    reasonCode: '',
+    reasonNote: '',
+    source: { type: 'human', feature: 'subtitle-editor', version: '0.17' },
+    assetIds: [],
+    rights: {}
+  }, options);
+}
+
 const SUBTITLE_PRESET_IDS = ['standard', 'large', 'minimal', 'boxed'];
 const SUBTITLE_PRESET_SET = new Set(SUBTITLE_PRESET_IDS);
 const SUBTITLE_POSITIONS = new Set(['top', 'center', 'bottom']);
