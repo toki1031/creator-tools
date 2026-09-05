@@ -603,6 +603,49 @@ export function recordSubtitleSceneSyncDecision(project, {
   }, options);
 }
 
+export function recordBgmDuckingChange(project, {
+  beforeDucking,
+  afterDucking,
+  bgmSource,
+  bgmCategory,
+  bgmVolume,
+  loop,
+  hasBgm
+}, options = {}) {
+  if (typeof beforeDucking !== 'boolean' || typeof afterDucking !== 'boolean' || beforeDucking === afterDucking) return null;
+  const bgm = isRecord(project?.bgm) ? project.bgm : {};
+  const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+  const currentVolume = normalizeBgmVolume(bgmVolume ?? bgm.volume);
+  const audioAssetId = normalizeAudioAssetId(bgm.audioAssetId);
+  const hasNarration = Boolean(project?.narration?.audioData) || scenes.some(scene => Boolean(scene?.narration?.audioData));
+  const currentHasBgm = typeof hasBgm === 'boolean' ? hasBgm : Boolean(bgm.audioData);
+  const currentLoop = typeof loop === 'boolean' ? loop : Boolean(bgm.loop);
+  return appendDecision(project, {
+    decisionType: 'bgm-ducking',
+    sceneId: '',
+    context: {
+      platform: stringOr(project?.platform),
+      aspectRatio: stringOr(project?.aspectRatio),
+      bgmSource: typeof bgmSource === 'string' ? bgmSource.trim() : stringOr(bgm.source).trim(),
+      bgmCategory: typeof bgmCategory === 'string' ? bgmCategory.trim() : stringOr(bgm.category).trim(),
+      bgmVolume: currentVolume,
+      loop: currentLoop,
+      hasBgm: currentHasBgm,
+      hasNarration,
+      sceneCount: scenes.length
+    },
+    proposal: { ducking: beforeDucking },
+    alternatives: [{ ducking: !afterDucking }],
+    humanAction: { type: 'set-bgm-ducking' },
+    finalDecision: { ducking: afterDucking },
+    reasonCode: '',
+    reasonNote: '',
+    source: { type: 'human', feature: 'bgm-editor', version: '0.15' },
+    assetIds: audioAssetId ? [audioAssetId] : [],
+    rights: {}
+  }, options);
+}
+
 export function normalizeBgmVolume(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return null;
