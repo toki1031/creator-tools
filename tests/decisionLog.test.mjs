@@ -18,6 +18,7 @@ import {
   normalizeNarrationVoiceId,
   recordBgmDuckingChange,
   recordBgmFadeInChange,
+  recordBgmFadeOutChange,
   recordBgmLoopChange,
   recordBgmSelectionChange,
   recordBgmVolumeChange,
@@ -36,6 +37,7 @@ import {
   recordSceneSubtitlePositionChange,
   recordSceneTransitionChange,
   snapshotBgmFadeIn,
+  snapshotBgmFadeOut,
   snapshotGlobalSubtitlePosition,
   snapshotSceneSubtitlePosition,
   snapshotSubtitleFontSize,
@@ -1272,5 +1274,52 @@ test('bgm-fade-in ignores unchanged, out-of-range and off-step final values with
   assert.equal(recordBgmFadeInChange(project,{beforeState:{fadeInSec:1},afterState:{fadeInSec:30.5}}),null);
   assert.equal(recordBgmFadeInChange(project,{beforeState:{fadeInSec:1},afterState:{fadeInSec:1.25}}),null);
   assert.equal(recordBgmFadeInChange(project,{beforeState:{fadeInSec:1},afterState:{fadeInSec:'bad'}}),null);
+  assert.equal(project.learning.decisions.length,0);
+});
+
+
+test('bgm-fade-out records one committed direct adjustment with mix and duration context', () => {
+  const audioAssetId=`audio-sha256:${'b'.repeat(64)}`;
+  const project={
+    id:'p-fade-out',platform:'youtube-shorts',aspectRatio:'9:16',learning:{decisions:[]},
+    bgm:{source:'upload',category:'emotion',volume:0.18,fadeInSec:1.5,fadeOutSec:4.5,ducking:false,loop:true,audioData:'data:audio/wav;base64,AA==',audioAssetId},
+    narration:{audioData:''},
+    scenes:[{id:'s1',durationSec:7},{id:'s2',durationSec:8,narration:{audioData:'data:audio/wav;base64,AA=='}}]
+  };
+  const record=recordBgmFadeOutChange(project,{
+    beforeState:{fadeOutSec:2},afterState:{fadeOutSec:4.5},bgmSource:'upload',bgmCategory:'emotion',bgmVolume:'0.18',fadeInSec:'1.5',ducking:false,loop:true,hasBgm:true
+  },{createId:()=> 'd-fade-out-1',now:()=> '2026-09-05T08:40:00.000Z'});
+  assert.equal(record.decisionType,'bgm-fade-out');
+  assert.deepEqual(record.proposal,{fadeOutSec:2});
+  assert.deepEqual(record.finalDecision,{fadeOutSec:4.5});
+  assert.deepEqual(record.alternatives,[]);
+  assert.deepEqual(record.humanAction,{type:'set-bgm-fade-out'});
+  assert.deepEqual(record.source,{type:'human',feature:'bgm-editor',version:'0.22'});
+  assert.deepEqual(record.assetIds,[audioAssetId]);
+  assert.deepEqual(record.rights,{});
+  assert.deepEqual(record.context,{
+    platform:'youtube-shorts',aspectRatio:'9:16',bgmSource:'upload',bgmCategory:'emotion',bgmVolume:0.18,fadeInSec:1.5,
+    ducking:false,loop:true,hasBgm:true,hasNarration:true,sceneCount:2,projectDurationSec:15
+  });
+  assert.deepEqual(snapshotBgmFadeOut(4.5),{fadeOutSec:4.5});
+  assert.equal(project.learning.decisions.length,1);
+});
+
+test('bgm-fade-out records a valid final value when previous value is legacy or invalid', () => {
+  const project={id:'p',learning:{decisions:[]},bgm:{fadeInSec:1},scenes:[]};
+  const record=recordBgmFadeOutChange(project,{beforeState:{fadeOutSec:'legacy'},afterState:{fadeOutSec:0.5}});
+  assert.deepEqual(record.proposal,{fadeOutSec:null});
+  assert.deepEqual(record.finalDecision,{fadeOutSec:0.5});
+  assert.deepEqual(snapshotBgmFadeOut('legacy'),{fadeOutSec:null});
+  assert.equal(project.learning.decisions.length,1);
+});
+
+test('bgm-fade-out ignores unchanged, out-of-range and off-step final values without noise', () => {
+  const project={id:'p',learning:{decisions:[]},bgm:{},scenes:[]};
+  assert.equal(recordBgmFadeOutChange(project,{beforeState:{fadeOutSec:2},afterState:{fadeOutSec:2}}),null);
+  assert.equal(recordBgmFadeOutChange(project,{beforeState:{fadeOutSec:2},afterState:{fadeOutSec:-0.5}}),null);
+  assert.equal(recordBgmFadeOutChange(project,{beforeState:{fadeOutSec:2},afterState:{fadeOutSec:30.5}}),null);
+  assert.equal(recordBgmFadeOutChange(project,{beforeState:{fadeOutSec:2},afterState:{fadeOutSec:2.25}}),null);
+  assert.equal(recordBgmFadeOutChange(project,{beforeState:{fadeOutSec:2},afterState:{fadeOutSec:'bad'}}),null);
   assert.equal(project.learning.decisions.length,0);
 });
