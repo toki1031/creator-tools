@@ -34,6 +34,7 @@ import {
   recordSubtitleBackgroundOpacityChange,
   recordSubtitleEnabledChange,
   recordSubtitleTextColorChange,
+  recordSubtitleOutlineColorChange,
   recordSubtitleMaxLinesChange,
   recordSubtitlePresetChange,
   recordSubtitleSceneSyncDecision,
@@ -53,6 +54,7 @@ import {
   snapshotSubtitleBackgroundOpacity,
   snapshotSubtitleEnabled,
   snapshotSubtitleTextColor,
+  snapshotSubtitleOutlineColor,
   snapshotSubtitleMaxLines,
   snapshotSubtitlePresetState,
   recordSceneOrderChange,
@@ -1497,4 +1499,55 @@ test('subtitle-text-color allows invalid legacy before as null and ignores same 
   assert.equal(recordSubtitleTextColorChange(project,{beforeState:{textColor:'#AABBCC'},afterState:{textColor:'#aabbcc'}}),null);
   assert.equal(recordSubtitleTextColorChange(project,{beforeState:{textColor:'#ffffff'},afterState:{textColor:'red'}}),null);
   assert.equal(project.learning.decisions.length,1);
+});
+
+
+test('subtitle outline color snapshot reuses normalized six-digit hex colors', () => {
+  assert.deepEqual(snapshotSubtitleOutlineColor('#A1B2C3'), { outlineColor: '#a1b2c3' });
+  assert.deepEqual(snapshotSubtitleOutlineColor('#fff'), { outlineColor: null });
+});
+
+test('subtitle-outline-color records an explicit visible outline color choice', () => {
+  const project={
+    id:'p-outline-color',platform:'youtube-shorts',aspectRatio:'9:16',learning:{decisions:[]},
+    subtitleStyle:{enabled:true,preset:'standard',fontSize:54,position:'bottom',positionOffsetPercent:2,maxCharsPerLine:16,maxLines:2,textColor:'#ffffff',outlineColor:'#00ff00',outlineWidth:4,backgroundEnabled:true,backgroundColor:'#111111',backgroundOpacity:0.45},
+    scenes:[
+      {id:'s1',subtitleText:'字幕あり',narration:{audioData:'data:audio/wav;base64,QQ=='}},
+      {id:'s2',subtitleText:'個別OFF',subtitleEnabled:false}
+    ]
+  };
+  const record=recordSubtitleOutlineColorChange(project,{beforeState:{outlineColor:'#000000'},afterState:{outlineColor:'#00FF00'}},{createId:()=> 'd-outline-color-1',now:()=> '2026-09-05T15:30:00.000Z'});
+  assert.equal(record.decisionType,'subtitle-outline-color');
+  assert.deepEqual(record.proposal,{outlineColor:'#000000'});
+  assert.deepEqual(record.finalDecision,{outlineColor:'#00ff00'});
+  assert.deepEqual(record.alternatives,[]);
+  assert.deepEqual(record.humanAction,{type:'set-subtitle-outline-color'});
+  assert.deepEqual(record.source,{type:'human',feature:'subtitle-editor',version:'0.26'});
+  assert.deepEqual(record.assetIds,[]);
+  assert.deepEqual(record.rights,{});
+  assert.deepEqual(record.context,{
+    platform:'youtube-shorts',aspectRatio:'9:16',subtitleEnabled:true,subtitlePreset:'standard',fontSizePx:54,position:'bottom',positionOffsetPercent:2,
+    maxCharsPerLine:16,maxLines:2,textColor:'#ffffff',outlineWidth:4,backgroundEnabled:true,backgroundColor:'#111111',backgroundOpacity:0.45,
+    sceneCount:2,subtitleSceneCount:1,hasNarration:true
+  });
+  assert.equal(project.learning.decisions.length,1);
+});
+
+test('subtitle-outline-color allows invalid legacy before as null for a valid visible final', () => {
+  const project={id:'p',learning:{decisions:[]},subtitleStyle:{enabled:true,outlineWidth:3,textColor:'#ffffff'},scenes:[]};
+  const record=recordSubtitleOutlineColorChange(project,{beforeState:{outlineColor:'legacy'},afterState:{outlineColor:'#123456'}});
+  assert.deepEqual(record.proposal,{outlineColor:null});
+  assert.deepEqual(record.finalDecision,{outlineColor:'#123456'});
+  assert.equal(project.learning.decisions.length,1);
+});
+
+test('subtitle-outline-color ignores hidden, zero-width, same, and invalid final choices', () => {
+  const hidden={id:'hidden',learning:{decisions:[]},subtitleStyle:{enabled:false,outlineWidth:4},scenes:[]};
+  assert.equal(recordSubtitleOutlineColorChange(hidden,{beforeState:{outlineColor:'#000000'},afterState:{outlineColor:'#ffffff'}}),null);
+  const zero={id:'zero',learning:{decisions:[]},subtitleStyle:{enabled:true,outlineWidth:0},scenes:[]};
+  assert.equal(recordSubtitleOutlineColorChange(zero,{beforeState:{outlineColor:'#000000'},afterState:{outlineColor:'#ffffff'}}),null);
+  const visible={id:'visible',learning:{decisions:[]},subtitleStyle:{enabled:true,outlineWidth:2},scenes:[]};
+  assert.equal(recordSubtitleOutlineColorChange(visible,{beforeState:{outlineColor:'#abcdef'},afterState:{outlineColor:'#ABCDEF'}}),null);
+  assert.equal(recordSubtitleOutlineColorChange(visible,{beforeState:{outlineColor:'#000000'},afterState:{outlineColor:'rgb(1,2,3)'}}),null);
+  assert.equal(visible.learning.decisions.length,0);
 });
