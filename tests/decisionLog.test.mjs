@@ -11,6 +11,7 @@ import {
   normalizeBgmVolume,
   normalizeSubtitleFontSize,
   normalizeSubtitleMaxChars,
+  normalizeSubtitleMaxLines,
   normalizeNarrationVoiceId,
   recordBgmDuckingChange,
   recordBgmLoopChange,
@@ -20,6 +21,7 @@ import {
   recordGlobalSubtitlePositionChange,
   recordSubtitleFontSizeChange,
   recordSubtitleMaxCharsChange,
+  recordSubtitleMaxLinesChange,
   recordSubtitlePresetChange,
   recordSubtitleSceneSyncDecision,
   recordSceneDurationChange,
@@ -31,6 +33,7 @@ import {
   snapshotSceneSubtitlePosition,
   snapshotSubtitleFontSize,
   snapshotSubtitleMaxChars,
+  snapshotSubtitleMaxLines,
   snapshotSubtitlePresetState,
   recordSceneOrderChange,
   recordSubtitleContentChange,
@@ -1043,5 +1046,56 @@ test('subtitle-max-chars ignores same values and invalid final values', () => {
   assert.equal(recordSubtitleMaxCharsChange(project,{beforeState:{maxCharsPerLine:16},afterState:{maxCharsPerLine:31}}),null);
   assert.equal(recordSubtitleMaxCharsChange(project,{beforeState:{maxCharsPerLine:16},afterState:{maxCharsPerLine:12.5}}),null);
   assert.equal(recordSubtitleMaxCharsChange(project,{beforeState:null,afterState:null}),null);
+  assert.equal(project.learning.decisions.length,0);
+});
+
+
+test('subtitle max lines normalization accepts only 1 or 2', () => {
+  assert.equal(normalizeSubtitleMaxLines(1), 1);
+  assert.equal(normalizeSubtitleMaxLines('2'), 2);
+  assert.equal(normalizeSubtitleMaxLines(''), null);
+  assert.equal(normalizeSubtitleMaxLines(0), null);
+  assert.equal(normalizeSubtitleMaxLines(3), null);
+  assert.equal(normalizeSubtitleMaxLines(1.5), null);
+  assert.deepEqual(snapshotSubtitleMaxLines('2'), { maxLines: 2 });
+  assert.deepEqual(snapshotSubtitleMaxLines('legacy'), { maxLines: null });
+});
+
+test('subtitle-max-lines records explicit 2 to 1 selection with compact context', () => {
+  const project = {
+    id:'p-lines', platform:'youtube-shorts', aspectRatio:'9:16', learning:{decisions:[]},
+    subtitleStyle:{preset:'standard',enabled:true,fontSize:54,position:'bottom',maxCharsPerLine:16,maxLines:1},
+    scenes:[{id:'s1',subtitleText:'字幕あり'},{id:'s2',subtitleText:''}]
+  };
+  const record = recordSubtitleMaxLinesChange(project, {
+    beforeState:{maxLines:2}, afterState:{maxLines:1}
+  }, {createId:()=> 'd-lines-1', now:()=> '2026-09-05T04:00:00.000Z'});
+  assert.equal(record.decisionType, 'subtitle-max-lines');
+  assert.deepEqual(record.proposal, {maxLines:2});
+  assert.deepEqual(record.finalDecision, {maxLines:1});
+  assert.deepEqual(record.alternatives, [{maxLines:2}]);
+  assert.deepEqual(record.humanAction, {type:'set-subtitle-max-lines'});
+  assert.deepEqual(record.source, {type:'human',feature:'subtitle-editor',version:'0.18'});
+  assert.deepEqual(record.assetIds, []);
+  assert.deepEqual(record.rights, {});
+  assert.deepEqual(record.context, {
+    platform:'youtube-shorts', aspectRatio:'9:16', subtitlePreset:'standard', subtitleEnabled:true,
+    fontSizePx:54, position:'bottom', maxCharsPerLine:16, sceneCount:2, subtitleSceneCount:1
+  });
+});
+
+test('subtitle-max-lines allows invalid legacy before as null proposal', () => {
+  const project={id:'p',learning:{decisions:[]},subtitleStyle:{preset:'minimal',enabled:true,fontSize:48,position:'center',maxCharsPerLine:18,maxLines:2},scenes:[]};
+  const record=recordSubtitleMaxLinesChange(project,{beforeState:{maxLines:null},afterState:{maxLines:2}});
+  assert.deepEqual(record.proposal,{maxLines:null});
+  assert.deepEqual(record.finalDecision,{maxLines:2});
+  assert.deepEqual(record.alternatives,[{maxLines:1}]);
+});
+
+test('subtitle-max-lines ignores same and invalid final values', () => {
+  const project={id:'p',learning:{decisions:[]},subtitleStyle:{},scenes:[]};
+  assert.equal(recordSubtitleMaxLinesChange(project,{beforeState:{maxLines:1},afterState:{maxLines:1}}),null);
+  assert.equal(recordSubtitleMaxLinesChange(project,{beforeState:{maxLines:2},afterState:{maxLines:3}}),null);
+  assert.equal(recordSubtitleMaxLinesChange(project,{beforeState:{maxLines:2},afterState:{maxLines:null}}),null);
   assert.equal(project.learning.decisions.length,0);
 });
