@@ -1,0 +1,204 @@
+name: Issue 66 Implementation Runner
+on:
+  push:
+    branches: [issue-66-bgm-loop-v016]
+permissions:
+  contents: write
+jobs:
+  implement-test-commit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply Dataset v0.16 patch
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          BASE='5b8051274f1a0854db8151496277cd0a070c0b1b'
+          def rep(path, old, new):
+            p=Path(path); t=p.read_text(); n=t.count(old)
+            if n!=1: raise SystemExit(f'{path}: expected 1 match, got {n}: {old[:180]!r}')
+            p.write_text(t.replace(old,new,1))
+
+          # decisionLog.js: add BGM loop DecisionRecord helper before ducking helper.
+          marker='export function recordBgmDuckingChange(project, {'
+          helper=r'''export function recordBgmLoopChange(project, {
+            beforeLoop,
+            afterLoop,
+            bgmSource,
+            bgmCategory,
+            bgmVolume,
+            ducking,
+            hasBgm
+          }, options = {}) {
+            if (typeof beforeLoop !== 'boolean' || typeof afterLoop !== 'boolean' || beforeLoop === afterLoop) return null;
+
+            const bgm = isRecord(project?.bgm) ? project.bgm : {};
+            const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+            const currentVolume = normalizeBgmVolume(bgmVolume ?? bgm.volume);
+            const audioAssetId = normalizeAudioAssetId(bgm.audioAssetId);
+            const targetDuration = Number(project?.targetDurationSec);
+            const hasNarration = Boolean(project?.narration?.audioData) || scenes.some(scene => Boolean(scene?.narration?.audioData));
+            const currentHasBgm = typeof hasBgm === 'boolean' ? hasBgm : Boolean(bgm.audioData);
+            const currentDucking = typeof ducking === 'boolean' ? ducking : Boolean(bgm.ducking);
+
+            return appendDecision(project, {
+              decisionType: 'bgm-loop',
+              sceneId: '',
+              context: {
+                platform: stringOr(project?.platform),
+                aspectRatio: stringOr(project?.aspectRatio),
+                targetDurationSec: Number.isFinite(targetDuration) ? targetDuration : null,
+                bgmSource: typeof bgmSource === 'string' ? bgmSource.trim() : stringOr(bgm.source).trim(),
+                bgmCategory: typeof bgmCategory === 'string' ? bgmCategory.trim() : stringOr(bgm.category).trim(),
+                bgmVolume: currentVolume,
+                ducking: currentDucking,
+                hasBgm: currentHasBgm,
+                hasNarration,
+                sceneCount: scenes.length
+              },
+              proposal: { loop: beforeLoop },
+              alternatives: [{ loop: !afterLoop }],
+              humanAction: { type: 'set-bgm-loop' },
+              finalDecision: { loop: afterLoop },
+              reasonCode: '',
+              reasonNote: '',
+              source: { type: 'human', feature: 'bgm-editor', version: '0.16' },
+              assetIds: audioAssetId ? [audioAssetId] : [],
+              rights: {}
+            }, options);
+          }
+
+          '''+marker
+          rep('decisionLog.js', marker, helper)
+
+          # main.js import.
+          rep(
+            'main.js',
+            'recordBgmDuckingChange, recordBgmSelectionChange, recordBgmVolumeChange, recordGlobalSubtitlePositionChange',
+            'recordBgmDuckingChange, recordBgmLoopChange, recordBgmSelectionChange, recordBgmVolumeChange, recordGlobalSubtitlePositionChange'
+          )
+
+          # Keep existing generic BGM behavior for non-decision controls; loop gets a dedicated explicit-decision handler.
+          old_generic="  ['source','category','bgmTitle','fadeIn','fadeOut','loop','license','credit'].forEach(k=>root.querySelector('#'+k).oninput=()=>{updateLabels();save();});\n"
+          new_generic="  ['source','category','bgmTitle','fadeIn','fadeOut','license','credit'].forEach(k=>root.querySelector('#'+k).oninput=()=>{updateLabels();save();});\n"
+          rep('main.js', old_generic, new_generic)
+
+          anchor="duckingEl.onblur=()=>commitBgmDuckingDecision(duckingEl);\n"
+          loop_handler=r'''duckingEl.onblur=()=>commitBgmDuckingDecision(duckingEl);
+          const bgmLoopBeforeByElement=new WeakMap();
+          const loopEl=root.querySelector('#loop');
+          const rememberBgmLoopBefore=el=>{if(bgmLoopBeforeByElement.has(el))return;bgmLoopBeforeByElement.set(el,Boolean(el.checked));};
+          const commitBgmLoopDecision=el=>{if(!bgmLoopBeforeByElement.has(el))return;const before=bgmLoopBeforeByElement.get(el);bgmLoopBeforeByElement.delete(el);const record=recordBgmLoopChange(project,{beforeLoop:before,afterLoop:Boolean(el.checked),bgmSource:root.querySelector('#source').value,bgmCategory:root.querySelector('#category').value,bgmVolume:root.querySelector('#volume').value,ducking:root.querySelector('#ducking').checked,hasBgm:Boolean(b.audioData)});if(record)save();};
+          loopEl.onpointerdown=()=>rememberBgmLoopBefore(loopEl);
+          loopEl.onfocus=()=>rememberBgmLoopBefore(loopEl);
+          loopEl.onkeydown=()=>rememberBgmLoopBefore(loopEl);
+          loopEl.oninput=()=>{updateLabels();save();};
+          loopEl.onchange=()=>commitBgmLoopDecision(loopEl);
+          loopEl.onpointercancel=()=>bgmLoopBeforeByElement.delete(loopEl);
+          loopEl.onblur=()=>commitBgmLoopDecision(loopEl);
+'''
+          rep('main.js', anchor, loop_handler)
+
+          # Test imports.
+          rep('tests/decisionLog.test.mjs','  recordBgmDuckingChange,\n','  recordBgmDuckingChange,\n  recordBgmLoopChange,\n')
+
+          p=Path('tests/decisionLog.test.mjs'); t=p.read_text(); t+=r'''
+
+          test('bgm-loop records explicit true to false decision with duration and mix context', () => {
+            const audioAssetId='audio-sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
+            const project={
+              id:'p-loop',platform:'youtube-shorts',aspectRatio:'9:16',targetDurationSec:60,learning:{decisions:[]},
+              bgm:{source:'upload',category:'calm',volume:0.12,ducking:true,audioAssetId,audioData:'data:audio/wav;base64,SECRET',fileName:'private.wav',title:'private title',license:'private license',credit:'private credit'},
+              scenes:[{id:'s1',narration:{audioData:'data:audio/wav;base64,AA=='}},{id:'s2'}]
+            };
+            const record=recordBgmLoopChange(project,{beforeLoop:true,afterLoop:false,bgmSource:'upload',bgmCategory:'history',bgmVolume:'0.18',ducking:false,hasBgm:true},{createId:()=> 'd-loop-1',now:()=> '2026-09-05T01:20:00.000Z'});
+            assert.equal(record.decisionType,'bgm-loop');
+            assert.equal(record.sceneId,'');
+            assert.deepEqual(record.proposal,{loop:true});
+            assert.deepEqual(record.finalDecision,{loop:false});
+            assert.deepEqual(record.alternatives,[{loop:true}]);
+            assert.deepEqual(record.humanAction,{type:'set-bgm-loop'});
+            assert.deepEqual(record.source,{type:'human',feature:'bgm-editor',version:'0.16'});
+            assert.deepEqual(record.assetIds,[audioAssetId]);
+            assert.deepEqual(record.rights,{});
+            assert.deepEqual(record.context,{platform:'youtube-shorts',aspectRatio:'9:16',targetDurationSec:60,bgmSource:'upload',bgmCategory:'history',bgmVolume:0.18,ducking:false,hasBgm:true,hasNarration:true,sceneCount:2});
+            const serialized=JSON.stringify(record);
+            for(const secret of ['SECRET','private.wav','private title','private license','private credit']) assert.equal(serialized.includes(secret),false);
+          });
+
+          test('bgm-loop records explicit false to true decision', () => {
+            const project={id:'p-loop-on',platform:'instagram-reels',aspectRatio:'1:1',targetDurationSec:30,learning:{decisions:[]},bgm:{source:'none',category:'sleep',volume:0.08,ducking:true},scenes:[]};
+            const record=recordBgmLoopChange(project,{beforeLoop:false,afterLoop:true,bgmSource:'none',bgmCategory:'sleep',bgmVolume:0.08,ducking:true,hasBgm:false});
+            assert.deepEqual(record.proposal,{loop:false});
+            assert.deepEqual(record.finalDecision,{loop:true});
+            assert.deepEqual(record.alternatives,[{loop:false}]);
+            assert.equal(record.context.targetDurationSec,30);
+            assert.equal(record.context.hasBgm,false);
+            assert.equal(record.context.hasNarration,false);
+            assert.deepEqual(record.assetIds,[]);
+          });
+
+          test('bgm-loop ignores same and non-boolean states without noise', () => {
+            const project={id:'p-loop-invalid',learning:{decisions:[]},bgm:{},scenes:[]};
+            assert.equal(recordBgmLoopChange(project,{beforeLoop:true,afterLoop:true}),null);
+            assert.equal(recordBgmLoopChange(project,{beforeLoop:'true',afterLoop:false}),null);
+            assert.equal(recordBgmLoopChange(project,{beforeLoop:false,afterLoop:1}),null);
+            assert.equal(recordBgmLoopChange(project,{beforeLoop:null,afterLoop:true}),null);
+            assert.equal(project.learning.decisions.length,0);
+          });
+
+          test('bgm-loop only links a valid current audio asset id and safely normalizes context', () => {
+            const project={id:'p-loop-asset',targetDurationSec:'invalid',learning:{decisions:[]},bgm:{audioAssetId:'legacy.mp3',source:'upload',category:'calm',volume:9,ducking:false,audioData:'data:audio/wav;base64,AA=='},scenes:[]};
+            const record=recordBgmLoopChange(project,{beforeLoop:true,afterLoop:false});
+            assert.deepEqual(record.assetIds,[]);
+            assert.equal(record.context.targetDurationSec,null);
+            assert.equal(record.context.bgmVolume,0.5);
+            assert.equal(record.context.hasBgm,true);
+            assert.equal(record.context.ducking,false);
+          });
+'''; p.write_text(t)
+
+          # Static assurances for direct-only capture and preserved autosave.
+          main=Path('main.js').read_text()
+          generic_start=main.index("['source','category','bgmTitle','fadeIn','fadeOut','license','credit']")
+          duck_start=main.index('const bgmDuckingBeforeByElement',generic_start)
+          if "'loop'" in main[generic_start:duck_start]: raise SystemExit('loop still exists in generic BGM handler')
+          loop_start=main.index('const bgmLoopBeforeByElement',duck_start)
+          volume_start=main.index('const bgmVolumeBeforeByElement',loop_start)
+          loop_handler=main[loop_start:volume_start]
+          for token in ['recordBgmLoopChange','oninput','onchange','save()','bgmVolume','ducking','hasBgm']:
+            if token not in loop_handler: raise SystemExit(f'loop handler missing {token}')
+          if main.count('recordBgmLoopChange') != 2: raise SystemExit('unexpected BGM loop record call outside import + dedicated handler')
+          PY
+      - name: Install dependencies without repository artifacts
+        run: npm install --package-lock=false --no-audit --no-fund
+      - name: Test
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Protected diff check
+        shell: bash
+        run: |
+          git diff --check
+          git diff --exit-code 5b8051274f1a0854db8151496277cd0a070c0b1b -- videoRenderer.js db.js projectFactory.js subtitlePosition.js qualityLogic.js projectBackup.js audioAssetIdentity.js voice-lab.html
+      - name: Commit intended changes
+        shell: bash
+        run: |
+          rm .github/workflows/issue66-runner.yml
+          rm -rf dist node_modules package-lock.json
+          git clean -fdx
+          changed="$(git status --short | awk '{print $2}' | sort)"
+          expected="$(printf '%s\n' .github/workflows/issue66-runner.yml decisionLog.js main.js tests/decisionLog.test.mjs | sort)"
+          printf 'changed:\n%s\nexpected:\n%s\n' "$changed" "$expected"
+          test "$changed" = "$expected"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add decisionLog.js main.js tests/decisionLog.test.mjs .github/workflows/issue66-runner.yml
+          git commit -m "Capture BGM loop decisions"
+          git push origin HEAD:issue-66-bgm-loop-v016
