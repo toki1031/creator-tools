@@ -10,7 +10,7 @@ import { normalizeSubtitleOffset, resolveEffectiveSubtitlePosition, resolveSubti
 import { assessMvpVideoResult, describeVideoExportFailure, isMvpShortsProject, validateMvpShortsOutput } from "./videoMvp.js";
 import { createGenerationStartController, projectExpectsVideoAudio } from "./videoGenerationStart.js";
 import { applyDictionaryEntries, normalizeSubtitleContentForSync, splitIntoScenes, splitSubtitleCards, subtitleContentChanged } from "./qualityLogic.js";
-import { ensureLearningState, moveSceneWithDecision, recordBgmDuckingChange, recordBgmLoopChange, recordBgmSelectionChange, recordBgmVolumeChange, recordGlobalSubtitlePositionChange, recordSceneDurationChange, recordSceneImageSelection, recordSceneMotionChange, recordSceneSubtitlePositionChange, recordSceneTransitionChange, recordSubtitleContentChange, recordSubtitleFontSizeChange, recordSubtitleMaxCharsChange, recordSubtitlePresetChange, recordSubtitleSceneSyncDecision, snapshotGlobalSubtitlePosition, snapshotSceneSubtitlePosition, snapshotSubtitleFontSize, snapshotSubtitleMaxChars, snapshotSubtitlePresetState } from "./decisionLog.js";
+import { ensureLearningState, moveSceneWithDecision, recordBgmDuckingChange, recordBgmLoopChange, recordBgmSelectionChange, recordBgmVolumeChange, recordGlobalSubtitlePositionChange, recordSceneDurationChange, recordSceneImageSelection, recordSceneMotionChange, recordSceneSubtitlePositionChange, recordSceneTransitionChange, recordSubtitleContentChange, recordSubtitleFontSizeChange, recordSubtitleMaxCharsChange, recordSubtitleMaxLinesChange, recordSubtitlePresetChange, recordSubtitleSceneSyncDecision, snapshotGlobalSubtitlePosition, snapshotSceneSubtitlePosition, snapshotSubtitleFontSize, snapshotSubtitleMaxChars, snapshotSubtitleMaxLines, snapshotSubtitlePresetState } from "./decisionLog.js";
 
 const rootElement = document.querySelector("#app");
 if (!rootElement) throw new Error("#app がありません。");
@@ -776,7 +776,18 @@ loopEl.onblur=()=>commitBgmLoopDecision(loopEl);
   volumeEl.onpointerup=()=>commitBgmVolumeDecision(volumeEl);
   volumeEl.onpointercancel=()=>bgmVolumeBeforeByElement.delete(volumeEl);
   volumeEl.onblur=()=>commitBgmVolumeDecision(volumeEl);
-  ['subtitleEnabled','maxLines','textColor','outlineColor','outlineWidth','backgroundEnabled','backgroundColor','backgroundOpacity'].forEach(k=>root.querySelector('#'+k).oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();});
+  ['subtitleEnabled','textColor','outlineColor','outlineWidth','backgroundEnabled','backgroundColor','backgroundOpacity'].forEach(k=>root.querySelector('#'+k).oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();});
+  const subtitleMaxLinesBeforeByElement=new WeakMap();
+const maxLinesEl=root.querySelector('#maxLines');
+const rememberSubtitleMaxLinesBefore=el=>{if(subtitleMaxLinesBeforeByElement.has(el))return;subtitleMaxLinesBeforeByElement.set(el,snapshotSubtitleMaxLines(st.maxLines));};
+const commitSubtitleMaxLinesDecision=el=>{if(!subtitleMaxLinesBeforeByElement.has(el))return;const before=subtitleMaxLinesBeforeByElement.get(el);subtitleMaxLinesBeforeByElement.delete(el);const after=snapshotSubtitleMaxLines(el.value);const record=recordSubtitleMaxLinesChange(project,{beforeState:before,afterState:after});if(record)save();};
+maxLinesEl.onpointerdown=()=>rememberSubtitleMaxLinesBefore(maxLinesEl);
+maxLinesEl.onfocus=()=>rememberSubtitleMaxLinesBefore(maxLinesEl);
+maxLinesEl.onkeydown=()=>rememberSubtitleMaxLinesBefore(maxLinesEl);
+maxLinesEl.oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();};
+maxLinesEl.onchange=()=>commitSubtitleMaxLinesDecision(maxLinesEl);
+maxLinesEl.onpointercancel=()=>subtitleMaxLinesBeforeByElement.delete(maxLinesEl);
+maxLinesEl.onblur=()=>commitSubtitleMaxLinesDecision(maxLinesEl);
   const subtitleMaxCharsBeforeByElement=new WeakMap();
 const maxCharsEl=root.querySelector('#maxChars');
 const rememberSubtitleMaxCharsBefore=el=>{if(subtitleMaxCharsBeforeByElement.has(el))return;subtitleMaxCharsBeforeByElement.set(el,snapshotSubtitleMaxChars(el.value));};
