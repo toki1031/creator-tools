@@ -24,8 +24,6 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
-          BASE='4f07345f54cc4fcbc6d710a7cba3b7c10624e2af'
-
           def rep(path, old, new):
               p=Path(path)
               text=p.read_text()
@@ -34,7 +32,6 @@ jobs:
                   raise SystemExit(f'{path}: expected one match, got {count}: {old[:120]!r}')
               p.write_text(text.replace(old,new,1))
 
-          # decisionLog.js
           marker="const SUBTITLE_PRESET_IDS = ['standard', 'large', 'minimal', 'boxed'];"
           helper=r'''export function normalizeSubtitleMaxChars(value) {
             if (value === '' || value === null || value === undefined) return null;
@@ -92,24 +89,9 @@ jobs:
           '''+marker
           rep('decisionLog.js',marker,helper)
 
-          # main.js imports
-          rep(
-              'main.js',
-              'recordSubtitleFontSizeChange, recordSubtitlePresetChange',
-              'recordSubtitleFontSizeChange, recordSubtitleMaxCharsChange, recordSubtitlePresetChange'
-          )
-          rep(
-              'main.js',
-              'snapshotSubtitleFontSize, snapshotSubtitlePresetState',
-              'snapshotSubtitleFontSize, snapshotSubtitleMaxChars, snapshotSubtitlePresetState'
-          )
-
-          # Keep all existing generic handlers except maxChars; give it a dedicated decision-aware handler.
-          rep(
-              'main.js',
-              "['subtitleEnabled','maxChars','maxLines','textColor','outlineColor','outlineWidth','backgroundEnabled','backgroundColor','backgroundOpacity'].forEach(k=>root.querySelector('#'+k).oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();});",
-              "['subtitleEnabled','maxLines','textColor','outlineColor','outlineWidth','backgroundEnabled','backgroundColor','backgroundOpacity'].forEach(k=>root.querySelector('#'+k).oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();});"
-          )
+          rep('main.js','recordSubtitleFontSizeChange, recordSubtitlePresetChange','recordSubtitleFontSizeChange, recordSubtitleMaxCharsChange, recordSubtitlePresetChange')
+          rep('main.js','snapshotSubtitleFontSize, snapshotSubtitlePresetState','snapshotSubtitleFontSize, snapshotSubtitleMaxChars, snapshotSubtitlePresetState')
+          rep('main.js',"['subtitleEnabled','maxChars','maxLines','textColor','outlineColor','outlineWidth','backgroundEnabled','backgroundColor','backgroundOpacity'].forEach(k=>root.querySelector('#'+k).oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();});","['subtitleEnabled','maxLines','textColor','outlineColor','outlineWidth','backgroundEnabled','backgroundColor','backgroundOpacity'].forEach(k=>root.querySelector('#'+k).oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();});")
 
           marker_main="  const subtitleFontSizeBeforeByElement=new WeakMap();"
           block=r'''  const subtitleMaxCharsBeforeByElement=new WeakMap();
@@ -126,7 +108,6 @@ jobs:
           '''+marker_main
           rep('main.js',marker_main,block)
 
-          # tests imports
           rep('tests/decisionLog.test.mjs','  normalizeSubtitleFontSize,\n','  normalizeSubtitleFontSize,\n  normalizeSubtitleMaxChars,\n')
           rep('tests/decisionLog.test.mjs','  recordSubtitleFontSizeChange,\n','  recordSubtitleFontSizeChange,\n  recordSubtitleMaxCharsChange,\n')
           rep('tests/decisionLog.test.mjs','  snapshotSubtitleFontSize,\n','  snapshotSubtitleFontSize,\n  snapshotSubtitleMaxChars,\n')
@@ -136,11 +117,7 @@ jobs:
           tests += r'''
 
           test('subtitle-max-chars records a direct valid adjustment with compact context', () => {
-            const project={
-              id:'p-max-chars',platform:'youtube-shorts',aspectRatio:'9:16',learning:{decisions:[]},
-              subtitleStyle:{preset:'standard',enabled:true,fontSize:54,position:'bottom',maxCharsPerLine:18,maxLines:2},
-              scenes:[{id:'s1',subtitleText:'字幕あり'},{id:'s2',subtitleText:''}]
-            };
+            const project={id:'p-max-chars',platform:'youtube-shorts',aspectRatio:'9:16',learning:{decisions:[]},subtitleStyle:{preset:'standard',enabled:true,fontSize:54,position:'bottom',maxCharsPerLine:18,maxLines:2},scenes:[{id:'s1',subtitleText:'字幕あり'},{id:'s2',subtitleText:''}]};
             const record=recordSubtitleMaxCharsChange(project,{beforeState:{maxCharsPerLine:16},afterState:{maxCharsPerLine:18}},{createId:()=> 'd-max-chars',now:()=> '2026-09-05T00:00:00.000Z'});
             assert.equal(record.decisionType,'subtitle-max-chars');
             assert.equal(record.sceneId,'');
@@ -198,14 +175,16 @@ jobs:
           git diff --check
           git diff --exit-code 4f07345f54cc4fcbc6d710a7cba3b7c10624e2af -- videoRenderer.js db.js projectFactory.js subtitlePosition.js qualityLogic.js projectBackup.js audioAssetIdentity.js voice-lab.html
           test "$(grep -o 'recordSubtitleMaxCharsChange(project' main.js | wc -l)" -eq 1
+          rm -rf dist node_modules package-lock.json
+          git clean -fdx -e .github/workflows/issue68-runner.yml
           changed="$({ git diff --name-only 4f07345f54cc4fcbc6d710a7cba3b7c10624e2af; git ls-files --others --exclude-standard; } | grep -v '^.github/workflows/issue68-runner.yml$' | sort -u)"
           expected="$(printf '%s\n' decisionLog.js main.js tests/decisionLog.test.mjs | sort)"
+          printf 'changed:\n%s\nexpected:\n%s\n' "$changed" "$expected"
           test "$changed" = "$expected"
       - name: Commit intended changes and remove runner
         shell: bash
         run: |
           rm .github/workflows/issue68-runner.yml
-          rm -rf dist node_modules package-lock.json
           git clean -fdx
           changed="$(git status --short | awk '{print $2}' | sort)"
           expected="$(printf '%s\n' .github/workflows/issue68-runner.yml decisionLog.js main.js tests/decisionLog.test.mjs | sort)"
