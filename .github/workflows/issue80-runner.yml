@@ -1,0 +1,244 @@
+name: Issue 80 Implementation Runner
+
+on:
+  push:
+    branches:
+      - issue-80-subtitle-background-opacity-v023
+
+permissions:
+  contents: write
+
+jobs:
+  implement-test-commit:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply Dataset v0.23 patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected one match, got {count}: {old[:160]!r}')
+              p.write_text(text.replace(old, new, 1))
+
+          marker = "export function snapshotSubtitleBackgroundEnabled(value) {"
+          helper = r'''function normalizeSubtitleBackgroundOpacityDisplay(value) {
+            const raw = Number(value);
+            if (!Number.isFinite(raw) || raw < 0 || raw > 0.9) return null;
+            return Math.round(raw * 100) / 100;
+          }
+
+          export function normalizeSubtitleBackgroundOpacity(value) {
+            const normalized = normalizeSubtitleBackgroundOpacityDisplay(value);
+            if (normalized === null) return null;
+            const steps = normalized / 0.05;
+            if (Math.abs(steps - Math.round(steps)) > 1e-8) return null;
+            return Math.round(normalized * 100) / 100;
+          }
+
+          export function snapshotSubtitleBackgroundOpacity(value) {
+            return { backgroundOpacity: normalizeSubtitleBackgroundOpacityDisplay(value) };
+          }
+
+          export function recordSubtitleBackgroundOpacityChange(project, {
+            beforeState,
+            afterState,
+            backgroundEnabled
+          }, options = {}) {
+            const beforeRaw = isRecord(beforeState) ? beforeState.backgroundOpacity : beforeState;
+            const afterRaw = isRecord(afterState) ? afterState.backgroundOpacity : afterState;
+            const before = normalizeSubtitleBackgroundOpacityDisplay(beforeRaw);
+            const after = normalizeSubtitleBackgroundOpacity(afterRaw);
+            const style = isRecord(project?.subtitleStyle) ? project.subtitleStyle : {};
+            const enabled = typeof backgroundEnabled === 'boolean' ? backgroundEnabled : Boolean(style.backgroundEnabled);
+            if (!enabled || after === null || before === after) return null;
+
+            const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+            const subtitleSceneCount = scenes.filter(scene => scene?.subtitleEnabled !== false && stringOr(scene?.subtitleText).trim()).length;
+            const rawPosition = stringOr(style.position).trim();
+            const position = ['top', 'center', 'bottom'].includes(rawPosition) ? rawPosition : '';
+
+            return appendDecision(project, {
+              decisionType: 'subtitle-background-opacity',
+              sceneId: '',
+              context: {
+                platform: stringOr(project?.platform),
+                aspectRatio: stringOr(project?.aspectRatio),
+                subtitlePreset: stringOr(style.preset).trim() || 'standard',
+                backgroundEnabled: true,
+                backgroundColor: stringOr(style.backgroundColor).trim(),
+                fontSizePx: normalizeSubtitleFontSize(style.fontSize),
+                position,
+                maxCharsPerLine: normalizeSubtitleMaxChars(style.maxCharsPerLine),
+                maxLines: normalizeSubtitleMaxLines(style.maxLines),
+                outlineWidth: normalizeSubtitleOutlineWidth(style.outlineWidth),
+                sceneCount: scenes.length,
+                subtitleSceneCount
+              },
+              proposal: { backgroundOpacity: before },
+              alternatives: [],
+              humanAction: { type: 'set-subtitle-background-opacity' },
+              finalDecision: { backgroundOpacity: after },
+              reasonCode: '',
+              reasonNote: '',
+              source: { type: 'human', feature: 'subtitle-editor', version: '0.23' },
+              assetIds: [],
+              rights: {}
+            }, options);
+          }
+
+          ''' + marker
+          replace_once('decisionLog.js', marker, helper)
+
+          replace_once(
+              'main.js',
+              'recordSubtitleContentChange, recordSubtitleBackgroundEnabledChange, recordSubtitleFontSizeChange',
+              'recordSubtitleContentChange, recordSubtitleBackgroundEnabledChange, recordSubtitleBackgroundOpacityChange, recordSubtitleFontSizeChange'
+          )
+          replace_once(
+              'main.js',
+              'snapshotSubtitleBackgroundEnabled, snapshotSubtitleFontSize',
+              'snapshotSubtitleBackgroundEnabled, snapshotSubtitleBackgroundOpacity, snapshotSubtitleFontSize'
+          )
+          replace_once(
+              'main.js',
+              "['subtitleEnabled','textColor','outlineColor','backgroundColor','backgroundOpacity'].forEach(k=>root.querySelector('#'+k).oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();});",
+              "['subtitleEnabled','textColor','outlineColor','backgroundColor'].forEach(k=>root.querySelector('#'+k).oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();});"
+          )
+
+          marker_main = "  const subtitleOutlineWidthBeforeByElement=new WeakMap();\n"
+          opacity_handler = r'''  const subtitleBackgroundOpacityBeforeByElement=new WeakMap();
+          const backgroundOpacityEl=root.querySelector('#backgroundOpacity');
+          const rememberSubtitleBackgroundOpacityBefore=el=>{if(subtitleBackgroundOpacityBeforeByElement.has(el))return;subtitleBackgroundOpacityBeforeByElement.set(el,snapshotSubtitleBackgroundOpacity(el.value));};
+          const commitSubtitleBackgroundOpacityDecision=el=>{if(!subtitleBackgroundOpacityBeforeByElement.has(el))return;const before=subtitleBackgroundOpacityBeforeByElement.get(el);subtitleBackgroundOpacityBeforeByElement.delete(el);const after=snapshotSubtitleBackgroundOpacity(el.value);const record=recordSubtitleBackgroundOpacityChange(project,{beforeState:before,afterState:after,backgroundEnabled:Boolean(root.querySelector('#backgroundEnabled').checked)});if(record)save();};
+          backgroundOpacityEl.onpointerdown=()=>rememberSubtitleBackgroundOpacityBefore(backgroundOpacityEl);
+          backgroundOpacityEl.onfocus=()=>rememberSubtitleBackgroundOpacityBefore(backgroundOpacityEl);
+          backgroundOpacityEl.onkeydown=()=>rememberSubtitleBackgroundOpacityBefore(backgroundOpacityEl);
+          backgroundOpacityEl.oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();};
+          backgroundOpacityEl.onpointerup=()=>commitSubtitleBackgroundOpacityDecision(backgroundOpacityEl);
+          backgroundOpacityEl.onpointercancel=()=>subtitleBackgroundOpacityBeforeByElement.delete(backgroundOpacityEl);
+          backgroundOpacityEl.onblur=()=>commitSubtitleBackgroundOpacityDecision(backgroundOpacityEl);
+          ''' + marker_main
+          replace_once('main.js', marker_main, opacity_handler)
+
+          replace_once(
+              'tests/decisionLog.test.mjs',
+              '  normalizeSubtitleBackgroundEnabled,\n',
+              '  normalizeSubtitleBackgroundEnabled,\n  normalizeSubtitleBackgroundOpacity,\n'
+          )
+          replace_once(
+              'tests/decisionLog.test.mjs',
+              '  recordSubtitleBackgroundEnabledChange,\n',
+              '  recordSubtitleBackgroundEnabledChange,\n  recordSubtitleBackgroundOpacityChange,\n'
+          )
+          replace_once(
+              'tests/decisionLog.test.mjs',
+              '  snapshotSubtitleBackgroundEnabled,\n',
+              '  snapshotSubtitleBackgroundEnabled,\n  snapshotSubtitleBackgroundOpacity,\n'
+          )
+
+          tests_path = Path('tests/decisionLog.test.mjs')
+          tests = tests_path.read_text()
+          tests += r'''
+
+          test('subtitle background opacity normalization accepts only direct 0.05 slider steps', () => {
+            assert.equal(normalizeSubtitleBackgroundOpacity(0), 0);
+            assert.equal(normalizeSubtitleBackgroundOpacity(0.45), 0.45);
+            assert.equal(normalizeSubtitleBackgroundOpacity('0.60'), 0.6);
+            assert.equal(normalizeSubtitleBackgroundOpacity(0.9), 0.9);
+            assert.equal(normalizeSubtitleBackgroundOpacity(0.58), null);
+            assert.equal(normalizeSubtitleBackgroundOpacity(-0.05), null);
+            assert.equal(normalizeSubtitleBackgroundOpacity(0.95), null);
+            assert.equal(normalizeSubtitleBackgroundOpacity('bad'), null);
+          });
+
+          test('subtitle-background-opacity records one active-background adjustment with style context', () => {
+            const project={
+              id:'p-opacity',platform:'youtube-shorts',aspectRatio:'9:16',learning:{decisions:[]},
+              subtitleStyle:{preset:'boxed',fontSize:52,position:'bottom',maxCharsPerLine:16,maxLines:2,outlineWidth:0,backgroundEnabled:true,backgroundColor:'#101010',backgroundOpacity:0.6},
+              scenes:[{id:'s1',subtitleText:'字幕あり'},{id:'s2',subtitleText:'',subtitleEnabled:true},{id:'s3',subtitleText:'非表示',subtitleEnabled:false}]
+            };
+            const record=recordSubtitleBackgroundOpacityChange(project,{
+              beforeState:{backgroundOpacity:0.45},afterState:{backgroundOpacity:0.6},backgroundEnabled:true
+            },{createId:()=> 'd-opacity-1',now:()=> '2026-09-05T10:05:00.000Z'});
+            assert.equal(record.decisionType,'subtitle-background-opacity');
+            assert.deepEqual(record.proposal,{backgroundOpacity:0.45});
+            assert.deepEqual(record.finalDecision,{backgroundOpacity:0.6});
+            assert.deepEqual(record.alternatives,[]);
+            assert.deepEqual(record.humanAction,{type:'set-subtitle-background-opacity'});
+            assert.deepEqual(record.source,{type:'human',feature:'subtitle-editor',version:'0.23'});
+            assert.deepEqual(record.assetIds,[]);
+            assert.deepEqual(record.rights,{});
+            assert.deepEqual(record.context,{
+              platform:'youtube-shorts',aspectRatio:'9:16',subtitlePreset:'boxed',backgroundEnabled:true,backgroundColor:'#101010',
+              fontSizePx:52,position:'bottom',maxCharsPerLine:16,maxLines:2,outlineWidth:0,sceneCount:3,subtitleSceneCount:1
+            });
+            assert.equal(project.learning.decisions.length,1);
+          });
+
+          test('subtitle-background-opacity ignores opacity edits while subtitle background is disabled', () => {
+            const project={id:'p',learning:{decisions:[]},subtitleStyle:{backgroundEnabled:false,backgroundOpacity:0.6},scenes:[]};
+            assert.equal(recordSubtitleBackgroundOpacityChange(project,{beforeState:{backgroundOpacity:0.45},afterState:{backgroundOpacity:0.6},backgroundEnabled:false}),null);
+            assert.equal(project.learning.decisions.length,0);
+          });
+
+          test('subtitle-background-opacity keeps a valid preset-derived before value but rejects invalid final states', () => {
+            const project={id:'p',learning:{decisions:[]},subtitleStyle:{backgroundEnabled:true,backgroundOpacity:0.6},scenes:[]};
+            const record=recordSubtitleBackgroundOpacityChange(project,{beforeState:snapshotSubtitleBackgroundOpacity(0.58),afterState:{backgroundOpacity:0.6},backgroundEnabled:true});
+            assert.deepEqual(record.proposal,{backgroundOpacity:0.58});
+            assert.deepEqual(record.finalDecision,{backgroundOpacity:0.6});
+            assert.deepEqual(snapshotSubtitleBackgroundOpacity(0.58),{backgroundOpacity:0.58});
+            assert.equal(recordSubtitleBackgroundOpacityChange(project,{beforeState:{backgroundOpacity:0.6},afterState:{backgroundOpacity:0.6},backgroundEnabled:true}),null);
+            assert.equal(recordSubtitleBackgroundOpacityChange(project,{beforeState:{backgroundOpacity:0.6},afterState:{backgroundOpacity:0.58},backgroundEnabled:true}),null);
+            assert.equal(recordSubtitleBackgroundOpacityChange(project,{beforeState:{backgroundOpacity:0.6},afterState:{backgroundOpacity:1},backgroundEnabled:true}),null);
+            assert.equal(project.learning.decisions.length,1);
+          });
+          '''
+          tests_path.write_text(tests)
+          PY
+      - name: Install dependencies without repository artifacts
+        run: npm install --package-lock=false --no-audit --no-fund
+      - name: Test
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Diff and scope checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=ce6dec41b7f2ba5e89015083d310a4c58edf15dc
+          git diff --check
+          git diff --exit-code "$BASE" -- videoRenderer.js db.js projectFactory.js subtitlePosition.js qualityLogic.js projectBackup.js audioAssetIdentity.js voice-lab.html styles.css
+          test "$(grep -o 'recordSubtitleBackgroundOpacityChange(' main.js | wc -l)" -eq 1
+          test "$(grep -o "backgroundOpacityEl.oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();}" main.js | wc -l)" -eq 1
+          if grep -F "['subtitleEnabled','textColor','outlineColor','backgroundColor','backgroundOpacity']" main.js; then exit 1; fi
+          test "$(grep -o "if (style.backgroundEnabled)" videoRenderer.js | wc -l)" -ge 1
+      - name: Commit intended changes and remove runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/issue80-runner.yml
+          rm -rf dist node_modules package-lock.json
+          git clean -fdx
+          changed="$(git status --short | awk '{print $2}' | sort)"
+          expected="$(printf '%s\n' .github/workflows/issue80-runner.yml decisionLog.js main.js tests/decisionLog.test.mjs | sort)"
+          printf 'changed:\n%s\nexpected:\n%s\n' "$changed" "$expected"
+          test "$changed" = "$expected"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add decisionLog.js main.js tests/decisionLog.test.mjs .github/workflows/issue80-runner.yml
+          git commit -m "Capture subtitle background opacity decisions"
+          git push origin HEAD:issue-80-subtitle-background-opacity-v023
