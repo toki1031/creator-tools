@@ -12,6 +12,7 @@ import {
   normalizeSubtitleFontSize,
   normalizeNarrationVoiceId,
   recordBgmDuckingChange,
+  recordBgmLoopChange,
   recordBgmSelectionChange,
   recordBgmVolumeChange,
   recordNarrationVoiceDecision,
@@ -944,4 +945,54 @@ test('bgm-ducking only links a valid current audio asset id and normalizes volum
   assert.equal(record.context.bgmVolume,0.5);
   assert.equal(record.context.hasBgm,true);
   assert.equal(record.context.loop,false);
+});
+
+
+test('bgm-loop records explicit true to false decision with duration and mix context', () => {
+  const audioAssetId='audio-sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
+  const project={id:'p-loop',platform:'youtube-shorts',aspectRatio:'9:16',targetDurationSec:60,learning:{decisions:[]},bgm:{source:'upload',category:'calm',volume:0.12,ducking:true,audioAssetId,audioData:'data:audio/wav;base64,SECRET',fileName:'private.wav',title:'private title',license:'private license',credit:'private credit'},scenes:[{id:'s1',narration:{audioData:'data:audio/wav;base64,AA=='}},{id:'s2'}]};
+  const record=recordBgmLoopChange(project,{beforeLoop:true,afterLoop:false,bgmSource:'upload',bgmCategory:'history',bgmVolume:'0.18',ducking:false,hasBgm:true},{createId:()=> 'd-loop-1',now:()=> '2026-09-05T01:20:00.000Z'});
+  assert.equal(record.decisionType,'bgm-loop');
+  assert.equal(record.sceneId,'');
+  assert.deepEqual(record.proposal,{loop:true});
+  assert.deepEqual(record.finalDecision,{loop:false});
+  assert.deepEqual(record.alternatives,[{loop:true}]);
+  assert.deepEqual(record.humanAction,{type:'set-bgm-loop'});
+  assert.deepEqual(record.source,{type:'human',feature:'bgm-editor',version:'0.16'});
+  assert.deepEqual(record.assetIds,[audioAssetId]);
+  assert.deepEqual(record.rights,{});
+  assert.deepEqual(record.context,{platform:'youtube-shorts',aspectRatio:'9:16',targetDurationSec:60,bgmSource:'upload',bgmCategory:'history',bgmVolume:0.18,ducking:false,hasBgm:true,hasNarration:true,sceneCount:2});
+  const serialized=JSON.stringify(record);
+  for(const secret of ['SECRET','private.wav','private title','private license','private credit']) assert.equal(serialized.includes(secret),false);
+});
+
+test('bgm-loop records explicit false to true decision', () => {
+  const project={id:'p-loop-on',platform:'instagram-reels',aspectRatio:'1:1',targetDurationSec:30,learning:{decisions:[]},bgm:{source:'none',category:'sleep',volume:0.08,ducking:true},scenes:[]};
+  const record=recordBgmLoopChange(project,{beforeLoop:false,afterLoop:true,bgmSource:'none',bgmCategory:'sleep',bgmVolume:0.08,ducking:true,hasBgm:false});
+  assert.deepEqual(record.proposal,{loop:false});
+  assert.deepEqual(record.finalDecision,{loop:true});
+  assert.deepEqual(record.alternatives,[{loop:false}]);
+  assert.equal(record.context.targetDurationSec,30);
+  assert.equal(record.context.hasBgm,false);
+  assert.equal(record.context.hasNarration,false);
+  assert.deepEqual(record.assetIds,[]);
+});
+
+test('bgm-loop ignores same and non-boolean states without noise', () => {
+  const project={id:'p-loop-invalid',learning:{decisions:[]},bgm:{},scenes:[]};
+  assert.equal(recordBgmLoopChange(project,{beforeLoop:true,afterLoop:true}),null);
+  assert.equal(recordBgmLoopChange(project,{beforeLoop:'true',afterLoop:false}),null);
+  assert.equal(recordBgmLoopChange(project,{beforeLoop:false,afterLoop:1}),null);
+  assert.equal(recordBgmLoopChange(project,{beforeLoop:null,afterLoop:true}),null);
+  assert.equal(project.learning.decisions.length,0);
+});
+
+test('bgm-loop only links a valid current audio asset id and safely normalizes context', () => {
+  const project={id:'p-loop-asset',targetDurationSec:'invalid',learning:{decisions:[]},bgm:{audioAssetId:'legacy.mp3',source:'upload',category:'calm',volume:9,ducking:false,audioData:'data:audio/wav;base64,AA=='},scenes:[]};
+  const record=recordBgmLoopChange(project,{beforeLoop:true,afterLoop:false});
+  assert.deepEqual(record.assetIds,[]);
+  assert.equal(record.context.targetDurationSec,null);
+  assert.equal(record.context.bgmVolume,0.5);
+  assert.equal(record.context.hasBgm,true);
+  assert.equal(record.context.ducking,false);
 });

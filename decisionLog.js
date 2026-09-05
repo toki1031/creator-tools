@@ -603,6 +603,51 @@ export function recordSubtitleSceneSyncDecision(project, {
   }, options);
 }
 
+export function recordBgmLoopChange(project, {
+  beforeLoop,
+  afterLoop,
+  bgmSource,
+  bgmCategory,
+  bgmVolume,
+  ducking,
+  hasBgm
+}, options = {}) {
+  if (typeof beforeLoop !== 'boolean' || typeof afterLoop !== 'boolean' || beforeLoop === afterLoop) return null;
+  const bgm = isRecord(project?.bgm) ? project.bgm : {};
+  const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+  const currentVolume = normalizeBgmVolume(bgmVolume ?? bgm.volume);
+  const audioAssetId = normalizeAudioAssetId(bgm.audioAssetId);
+  const targetDuration = Number(project?.targetDurationSec);
+  const hasNarration = Boolean(project?.narration?.audioData) || scenes.some(scene => Boolean(scene?.narration?.audioData));
+  const currentHasBgm = typeof hasBgm === 'boolean' ? hasBgm : Boolean(bgm.audioData);
+  const currentDucking = typeof ducking === 'boolean' ? ducking : Boolean(bgm.ducking);
+  return appendDecision(project, {
+    decisionType: 'bgm-loop',
+    sceneId: '',
+    context: {
+      platform: stringOr(project?.platform),
+      aspectRatio: stringOr(project?.aspectRatio),
+      targetDurationSec: Number.isFinite(targetDuration) ? targetDuration : null,
+      bgmSource: typeof bgmSource === 'string' ? bgmSource.trim() : stringOr(bgm.source).trim(),
+      bgmCategory: typeof bgmCategory === 'string' ? bgmCategory.trim() : stringOr(bgm.category).trim(),
+      bgmVolume: currentVolume,
+      ducking: currentDucking,
+      hasBgm: currentHasBgm,
+      hasNarration,
+      sceneCount: scenes.length
+    },
+    proposal: { loop: beforeLoop },
+    alternatives: [{ loop: !afterLoop }],
+    humanAction: { type: 'set-bgm-loop' },
+    finalDecision: { loop: afterLoop },
+    reasonCode: '',
+    reasonNote: '',
+    source: { type: 'human', feature: 'bgm-editor', version: '0.16' },
+    assetIds: audioAssetId ? [audioAssetId] : [],
+    rights: {}
+  }, options);
+}
+
 export function recordBgmDuckingChange(project, {
   beforeDucking,
   afterDucking,
