@@ -10,7 +10,7 @@ import { normalizeSubtitleOffset, resolveEffectiveSubtitlePosition, resolveSubti
 import { assessMvpVideoResult, describeVideoExportFailure, isMvpShortsProject, validateMvpShortsOutput } from "./videoMvp.js";
 import { createGenerationStartController, projectExpectsVideoAudio } from "./videoGenerationStart.js";
 import { applyDictionaryEntries, normalizeSubtitleContentForSync, splitIntoScenes, splitSubtitleCards, subtitleContentChanged } from "./qualityLogic.js";
-import { ensureLearningState, moveSceneWithDecision, recordBgmDuckingChange, recordBgmLoopChange, recordBgmSelectionChange, recordBgmVolumeChange, recordGlobalSubtitlePositionChange, recordSceneDurationChange, recordSceneImageSelection, recordSceneMotionChange, recordSceneSubtitlePositionChange, recordSceneTransitionChange, recordSubtitleContentChange, recordSubtitleFontSizeChange, recordSubtitlePresetChange, recordSubtitleSceneSyncDecision, snapshotGlobalSubtitlePosition, snapshotSceneSubtitlePosition, snapshotSubtitleFontSize, snapshotSubtitlePresetState } from "./decisionLog.js";
+import { ensureLearningState, moveSceneWithDecision, recordBgmDuckingChange, recordBgmLoopChange, recordBgmSelectionChange, recordBgmVolumeChange, recordGlobalSubtitlePositionChange, recordSceneDurationChange, recordSceneImageSelection, recordSceneMotionChange, recordSceneSubtitlePositionChange, recordSceneTransitionChange, recordSubtitleContentChange, recordSubtitleFontSizeChange, recordSubtitleMaxCharsChange, recordSubtitlePresetChange, recordSubtitleSceneSyncDecision, snapshotGlobalSubtitlePosition, snapshotSceneSubtitlePosition, snapshotSubtitleFontSize, snapshotSubtitleMaxChars, snapshotSubtitlePresetState } from "./decisionLog.js";
 
 const rootElement = document.querySelector("#app");
 if (!rootElement) throw new Error("#app がありません。");
@@ -776,7 +776,18 @@ loopEl.onblur=()=>commitBgmLoopDecision(loopEl);
   volumeEl.onpointerup=()=>commitBgmVolumeDecision(volumeEl);
   volumeEl.onpointercancel=()=>bgmVolumeBeforeByElement.delete(volumeEl);
   volumeEl.onblur=()=>commitBgmVolumeDecision(volumeEl);
-  ['subtitleEnabled','maxChars','maxLines','textColor','outlineColor','outlineWidth','backgroundEnabled','backgroundColor','backgroundOpacity'].forEach(k=>root.querySelector('#'+k).oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();});
+  ['subtitleEnabled','maxLines','textColor','outlineColor','outlineWidth','backgroundEnabled','backgroundColor','backgroundOpacity'].forEach(k=>root.querySelector('#'+k).oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();});
+  const subtitleMaxCharsBeforeByElement=new WeakMap();
+const maxCharsEl=root.querySelector('#maxChars');
+const rememberSubtitleMaxCharsBefore=el=>{if(subtitleMaxCharsBeforeByElement.has(el))return;subtitleMaxCharsBeforeByElement.set(el,snapshotSubtitleMaxChars(el.value));};
+const commitSubtitleMaxCharsDecision=el=>{if(!subtitleMaxCharsBeforeByElement.has(el))return;const before=subtitleMaxCharsBeforeByElement.get(el);subtitleMaxCharsBeforeByElement.delete(el);const after=snapshotSubtitleMaxChars(el.value);const record=recordSubtitleMaxCharsChange(project,{beforeState:before,afterState:after});if(record)save();};
+maxCharsEl.onpointerdown=()=>rememberSubtitleMaxCharsBefore(maxCharsEl);
+maxCharsEl.onfocus=()=>rememberSubtitleMaxCharsBefore(maxCharsEl);
+maxCharsEl.onkeydown=()=>rememberSubtitleMaxCharsBefore(maxCharsEl);
+maxCharsEl.oninput=()=>{readGlobalSettings();updateLabels();renderSubtitleEditor();renderSubtitlePreview();save();};
+maxCharsEl.onchange=()=>commitSubtitleMaxCharsDecision(maxCharsEl);
+maxCharsEl.onpointercancel=()=>subtitleMaxCharsBeforeByElement.delete(maxCharsEl);
+maxCharsEl.onblur=()=>commitSubtitleMaxCharsDecision(maxCharsEl);
   const subtitleFontSizeBeforeByElement=new WeakMap();
 const rememberSubtitleFontSizeBefore=el=>{if(subtitleFontSizeBeforeByElement.has(el))return;const before=snapshotSubtitleFontSize(el.value);if(before)subtitleFontSizeBeforeByElement.set(el,before);};
 const commitSubtitleFontSizeDecision=el=>{if(!subtitleFontSizeBeforeByElement.has(el))return;const before=subtitleFontSizeBeforeByElement.get(el);subtitleFontSizeBeforeByElement.delete(el);const after=snapshotSubtitleFontSize(el.value);const record=recordSubtitleFontSizeChange(project,{beforeState:before,afterState:after});if(record)save();};

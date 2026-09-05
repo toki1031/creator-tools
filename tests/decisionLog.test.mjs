@@ -10,6 +10,7 @@ import {
   normalizeLearningState,
   normalizeBgmVolume,
   normalizeSubtitleFontSize,
+  normalizeSubtitleMaxChars,
   normalizeNarrationVoiceId,
   recordBgmDuckingChange,
   recordBgmLoopChange,
@@ -18,6 +19,7 @@ import {
   recordNarrationVoiceDecision,
   recordGlobalSubtitlePositionChange,
   recordSubtitleFontSizeChange,
+  recordSubtitleMaxCharsChange,
   recordSubtitlePresetChange,
   recordSubtitleSceneSyncDecision,
   recordSceneDurationChange,
@@ -28,6 +30,7 @@ import {
   snapshotGlobalSubtitlePosition,
   snapshotSceneSubtitlePosition,
   snapshotSubtitleFontSize,
+  snapshotSubtitleMaxChars,
   snapshotSubtitlePresetState,
   recordSceneOrderChange,
   recordSubtitleContentChange,
@@ -995,4 +998,50 @@ test('bgm-loop only links a valid current audio asset id and safely normalizes c
   assert.equal(record.context.bgmVolume,0.5);
   assert.equal(record.context.hasBgm,true);
   assert.equal(record.context.ducking,false);
+});
+
+
+test('subtitle-max-chars records a direct valid adjustment with compact context', () => {
+  const project={id:'p-max-chars',platform:'youtube-shorts',aspectRatio:'9:16',learning:{decisions:[]},subtitleStyle:{preset:'standard',enabled:true,fontSize:54,position:'bottom',maxCharsPerLine:18,maxLines:2},scenes:[{id:'s1',subtitleText:'字幕あり'},{id:'s2',subtitleText:''}]};
+  const record=recordSubtitleMaxCharsChange(project,{beforeState:{maxCharsPerLine:16},afterState:{maxCharsPerLine:18}},{createId:()=> 'd-max-chars',now:()=> '2026-09-05T00:00:00.000Z'});
+  assert.equal(record.decisionType,'subtitle-max-chars');
+  assert.equal(record.sceneId,'');
+  assert.deepEqual(record.proposal,{maxCharsPerLine:16});
+  assert.deepEqual(record.finalDecision,{maxCharsPerLine:18});
+  assert.deepEqual(record.alternatives,[]);
+  assert.deepEqual(record.humanAction,{type:'set-subtitle-max-chars'});
+  assert.deepEqual(record.source,{type:'human',feature:'subtitle-editor',version:'0.17'});
+  assert.deepEqual(record.assetIds,[]);
+  assert.deepEqual(record.rights,{});
+  assert.deepEqual(record.context,{platform:'youtube-shorts',aspectRatio:'9:16',subtitlePreset:'standard',subtitleEnabled:true,fontSizePx:54,position:'bottom',maxLines:2,sceneCount:2,subtitleSceneCount:1});
+});
+
+test('subtitle-max-chars normalization accepts only integer UI values 6 through 30', () => {
+  assert.equal(normalizeSubtitleMaxChars(6),6);
+  assert.equal(normalizeSubtitleMaxChars('16'),16);
+  assert.equal(normalizeSubtitleMaxChars(30),30);
+  for(const value of ['',null,undefined,5,31,16.5,'abc']) assert.equal(normalizeSubtitleMaxChars(value),null);
+  assert.deepEqual(snapshotSubtitleMaxChars('20'),{maxCharsPerLine:20});
+  assert.deepEqual(snapshotSubtitleMaxChars(''),{maxCharsPerLine:null});
+});
+
+test('subtitle-max-chars records a valid final value even when previous value is legacy or invalid', () => {
+  const project={id:'p',platform:'instagram-reels',aspectRatio:'1:1',learning:{decisions:[]},subtitleStyle:{preset:'legacy',enabled:false,fontSize:68,position:'center',maxCharsPerLine:14,maxLines:1},scenes:[]};
+  const record=recordSubtitleMaxCharsChange(project,{beforeState:{maxCharsPerLine:99},afterState:{maxCharsPerLine:14}});
+  assert.deepEqual(record.proposal,{maxCharsPerLine:null});
+  assert.deepEqual(record.finalDecision,{maxCharsPerLine:14});
+  assert.equal(record.context.subtitlePreset,'legacy');
+  assert.equal(record.context.subtitleEnabled,false);
+  assert.equal(record.context.fontSizePx,68);
+  assert.equal(record.context.position,'center');
+  assert.equal(record.context.maxLines,1);
+});
+
+test('subtitle-max-chars ignores same values and invalid final values', () => {
+  const project={id:'p',learning:{decisions:[]},subtitleStyle:{},scenes:[]};
+  assert.equal(recordSubtitleMaxCharsChange(project,{beforeState:{maxCharsPerLine:16},afterState:{maxCharsPerLine:16}}),null);
+  assert.equal(recordSubtitleMaxCharsChange(project,{beforeState:{maxCharsPerLine:16},afterState:{maxCharsPerLine:31}}),null);
+  assert.equal(recordSubtitleMaxCharsChange(project,{beforeState:{maxCharsPerLine:16},afterState:{maxCharsPerLine:12.5}}),null);
+  assert.equal(recordSubtitleMaxCharsChange(project,{beforeState:null,afterState:null}),null);
+  assert.equal(project.learning.decisions.length,0);
 });
