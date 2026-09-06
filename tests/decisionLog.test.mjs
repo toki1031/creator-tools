@@ -18,6 +18,7 @@ import {
   normalizeSubtitleEnabled,
   normalizeSubtitleColor,
   normalizeFinalReviewApproval,
+  normalizePublishVisibility,
   normalizeSubtitleMaxLines,
   normalizeNarrationVoiceId,
   recordBgmDuckingChange,
@@ -38,6 +39,7 @@ import {
   recordSubtitleOutlineColorChange,
   recordSubtitleBackgroundColorChange,
   recordFinalReviewApproval,
+  recordPublishMetadataApproval,
   recordSubtitleMaxLinesChange,
   recordSubtitlePresetChange,
   recordSubtitleSceneSyncDecision,
@@ -60,6 +62,8 @@ import {
   snapshotSubtitleOutlineColor,
   snapshotSubtitleBackgroundColor,
   snapshotFinalReviewApproval,
+  snapshotPublishMetadata,
+  publishMetadataApprovalMatches,
   snapshotSubtitleMaxLines,
   snapshotSubtitlePresetState,
   recordSceneOrderChange,
@@ -1670,4 +1674,84 @@ test('final-review-approval ignores already-approved, invalid, and automatic rev
   assert.equal(recordFinalReviewApproval(project,{beforeState:{approved:false},afterState:{approved:'true'},visualReadySceneCount:0}),null);
   assert.equal(recordFinalReviewApproval(project,{beforeState:{approved:null},afterState:{approved:true},visualReadySceneCount:0}),null);
   assert.equal(project.learning.decisions.length,0);
+});
+
+
+test('publish metadata snapshot preserves final text and normalizes CRLF and visibility', () => {
+  assert.equal(normalizePublishVisibility('private'), 'private');
+  assert.equal(normalizePublishVisibility(' public '), 'public');
+  assert.equal(normalizePublishVisibility('draft'), null);
+  assert.deepEqual(snapshotPublishMetadata({
+    title:' 最終タイトル ',
+    description:'1行目\r\n2行目\r3行目',
+    tags:'偉人,名言',
+    thumbnailText:'最後まで伸びる',
+    visibility:'unlisted'
+  }),{
+    title:' 最終タイトル ',
+    description:'1行目\n2行目\n3行目',
+    tags:'偉人,名言',
+    thumbnailText:'最後まで伸びる',
+    visibility:'unlisted'
+  });
+});
+
+test('publish metadata approval matching is exact and becomes stale after any metadata edit', () => {
+  const snapshot=snapshotPublishMetadata({title:'完成',description:'説明',tags:'A,B',thumbnailText:'文字',visibility:'private'});
+  const approval={approved:true,snapshot};
+  assert.equal(publishMetadataApprovalMatches(approval,snapshot),true);
+  assert.equal(publishMetadataApprovalMatches(approval,{...snapshot,title:'完成版'}),false);
+  assert.equal(publishMetadataApprovalMatches(approval,{...snapshot,visibility:'public'}),false);
+  assert.equal(publishMetadataApprovalMatches({approved:false,snapshot},snapshot),false);
+  assert.equal(publishMetadataApprovalMatches({approved:true,snapshot:{...snapshot,visibility:'invalid'}},snapshot),false);
+});
+
+test('publish-metadata-approval records one explicit final package with compact project context', () => {
+  const project={
+    id:'p-publish',platform:'youtube-shorts',genre:'great-person',aspectRatio:'9:16',targetDurationSec:60,learning:{decisions:[]},
+    scenes:[
+      {id:'s1',durationSec:4,narration:{audioData:'data:audio/wav;base64,SHOULD_NOT_COPY'}},
+      {id:'s2',durationSec:6}
+    ],
+    narration:{audioData:''},
+    bgm:{audioData:'data:audio/wav;base64,BGM_SHOULD_NOT_COPY'},
+    subtitleStyle:{enabled:true},
+    displayScript:'SCRIPT_SHOULD_NOT_COPY',
+    finalReview:{signature:'SIGNATURE_SHOULD_NOT_COPY'}
+  };
+  const finalState={title:'北斎は何歳まで伸びたのか',description:'最終説明\n出典は概要欄へ',tags:'葛飾北斎,偉人,Shorts',thumbnailText:'90歳でも上達',visibility:'public'};
+  const record=recordPublishMetadataApproval(project,{beforeApproval:null,finalState,hasFinalReviewApproval:true},{createId:()=> 'd-publish-1',now:()=> '2026-09-06T15:00:00.000Z'});
+  assert.equal(record.decisionType,'publish-metadata-approval');
+  assert.equal(record.sceneId,'');
+  assert.equal(record.proposal,null);
+  assert.deepEqual(record.finalDecision,finalState);
+  assert.deepEqual(record.alternatives,[]);
+  assert.deepEqual(record.humanAction,{type:'approve-publish-metadata'});
+  assert.deepEqual(record.source,{type:'human',feature:'publish-editor',version:'0.29'});
+  assert.deepEqual(record.assetIds,[]);
+  assert.deepEqual(record.rights,{});
+  assert.deepEqual(record.context,{
+    platform:'youtube-shorts',genre:'great-person',aspectRatio:'9:16',targetDurationSec:60,projectDurationSec:10,sceneCount:2,
+    hasFinalReviewApproval:true,hasBgm:true,hasNarration:true,subtitleEnabled:true
+  });
+  const serialized=JSON.stringify(record);
+  assert.equal(serialized.includes('SHOULD_NOT_COPY'),false);
+  assert.equal(serialized.includes('SIGNATURE_SHOULD_NOT_COPY'),false);
+  assert.equal(project.learning.decisions.length,1);
+});
+
+test('publish-metadata-approval reuses previous approved package as proposal and rejects noise', () => {
+  const project={id:'p',learning:{decisions:[]},scenes:[],subtitleStyle:{},bgm:{}};
+  const previous={title:'旧タイトル',description:'旧説明',tags:'old',thumbnailText:'旧',visibility:'private'};
+  const beforeApproval={approved:true,snapshot:previous,approvedAt:'2026-09-06T14:00:00.000Z'};
+  const next={title:'新タイトル',description:'新説明',tags:'new',thumbnailText:'新',visibility:'public'};
+  const record=recordPublishMetadataApproval(project,{beforeApproval,finalState:next,hasFinalReviewApproval:false});
+  assert.deepEqual(record.proposal,previous);
+  assert.deepEqual(record.finalDecision,next);
+  assert.equal(project.learning.decisions.length,1);
+
+  assert.equal(recordPublishMetadataApproval(project,{beforeApproval:{approved:true,snapshot:next},finalState:next,hasFinalReviewApproval:false}),null);
+  assert.equal(recordPublishMetadataApproval(project,{beforeApproval:null,finalState:{...next,title:'   '},hasFinalReviewApproval:false}),null);
+  assert.equal(recordPublishMetadataApproval(project,{beforeApproval:null,finalState:{...next,visibility:'draft'},hasFinalReviewApproval:false}),null);
+  assert.equal(project.learning.decisions.length,1);
 });
