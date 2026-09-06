@@ -17,6 +17,7 @@ import {
   normalizeSubtitleBackgroundOpacity,
   normalizeSubtitleEnabled,
   normalizeSubtitleColor,
+  normalizeFinalReviewApproval,
   normalizeSubtitleMaxLines,
   normalizeNarrationVoiceId,
   recordBgmDuckingChange,
@@ -36,6 +37,7 @@ import {
   recordSubtitleTextColorChange,
   recordSubtitleOutlineColorChange,
   recordSubtitleBackgroundColorChange,
+  recordFinalReviewApproval,
   recordSubtitleMaxLinesChange,
   recordSubtitlePresetChange,
   recordSubtitleSceneSyncDecision,
@@ -57,6 +59,7 @@ import {
   snapshotSubtitleTextColor,
   snapshotSubtitleOutlineColor,
   snapshotSubtitleBackgroundColor,
+  snapshotFinalReviewApproval,
   snapshotSubtitleMaxLines,
   snapshotSubtitlePresetState,
   recordSceneOrderChange,
@@ -1605,4 +1608,66 @@ test('subtitle-background-color ignores hidden, disabled, transparent, same, and
   assert.equal(recordSubtitleBackgroundColorChange(visible,{beforeState:{backgroundColor:'#abcdef'},afterState:{backgroundColor:'#ABCDEF'}}),null);
   assert.equal(recordSubtitleBackgroundColorChange(visible,{beforeState:{backgroundColor:'#000000'},afterState:{backgroundColor:'rgb(1,2,3)'}}),null);
   assert.equal(visible.learning.decisions.length,0);
+});
+
+
+test('final review approval normalization accepts booleans only', () => {
+  assert.equal(normalizeFinalReviewApproval(true), true);
+  assert.equal(normalizeFinalReviewApproval(false), false);
+  assert.equal(normalizeFinalReviewApproval('true'), null);
+  assert.equal(normalizeFinalReviewApproval(1), null);
+  assert.equal(normalizeFinalReviewApproval(null), null);
+  assert.deepEqual(snapshotFinalReviewApproval(false), {approved:false});
+});
+
+test('final-review-approval records one explicit approval with compact completed-state context', () => {
+  const project={
+    id:'p-final-review',platform:'youtube-shorts',aspectRatio:'9:16',targetDurationSec:60,learning:{decisions:[]},
+    scenes:[
+      {id:'s1',durationSec:4,subtitleText:'字幕1',imageData:'data:image/png;base64,SHOULD_NOT_COPY',narration:{audioData:'data:audio/wav;base64,AA=='}},
+      {id:'s2',durationSec:6,subtitleText:'字幕2',subtitleEnabled:false,videoData:'data:video/mp4;base64,SHOULD_NOT_COPY'}
+    ],
+    narration:{audioData:'data:audio/wav;base64,GLOBAL_SHOULD_NOT_COPY'},
+    bgm:{audioData:'data:audio/wav;base64,BGM_SHOULD_NOT_COPY',volume:0.12,ducking:true,loop:false,title:'secret title'},
+    subtitleStyle:{enabled:true,preset:'boxed',position:'bottom',positionOffsetPercent:3,fontSize:52,backgroundEnabled:true},
+    output:{width:1080,height:1920,fps:30,quality:'high',bgmEnabled:true},
+    finalReview:{approved:true,signature:'DO_NOT_COPY_SIGNATURE'}
+  };
+  const record=recordFinalReviewApproval(project,{beforeState:{approved:false},afterState:{approved:true},visualReadySceneCount:2},{createId:()=> 'd-final-review-1',now:()=> '2026-09-06T08:30:00.000Z'});
+  assert.equal(record.decisionType,'final-review-approval');
+  assert.deepEqual(record.proposal,{approved:false});
+  assert.deepEqual(record.finalDecision,{approved:true});
+  assert.deepEqual(record.alternatives,[]);
+  assert.deepEqual(record.humanAction,{type:'approve-final-review'});
+  assert.deepEqual(record.source,{type:'human',feature:'output-final-review',version:'0.28'});
+  assert.deepEqual(record.assetIds,[]);
+  assert.deepEqual(record.rights,{});
+  assert.deepEqual(record.context,{
+    platform:'youtube-shorts',aspectRatio:'9:16',targetDurationSec:60,projectDurationSec:10,sceneCount:2,visualReadySceneCount:2,
+    subtitleSceneCount:1,narrationSceneCount:1,hasGlobalNarration:true,hasBgm:true,bgmEnabled:true,bgmVolume:0.12,bgmDucking:true,bgmLoop:false,
+    subtitleEnabled:true,subtitlePreset:'boxed',subtitlePosition:'bottom',subtitleOffsetPercent:3,fontSizePx:52,backgroundEnabled:true,
+    outputWidth:1080,outputHeight:1920,outputFps:30,outputQuality:'high'
+  });
+  const serialized=JSON.stringify(record);
+  assert.equal(serialized.includes('SHOULD_NOT_COPY'),false);
+  assert.equal(serialized.includes('secret title'),false);
+  assert.equal(serialized.includes('DO_NOT_COPY_SIGNATURE'),false);
+  assert.equal(project.learning.decisions.length,1);
+});
+
+test('final-review-approval treats a stale raw approval as a new effective false to true approval', () => {
+  const project={id:'p-stale',learning:{decisions:[]},finalReview:{approved:true,signature:'old-signature'},scenes:[],subtitleStyle:{},output:{},bgm:{}};
+  const record=recordFinalReviewApproval(project,{beforeState:snapshotFinalReviewApproval(false),afterState:snapshotFinalReviewApproval(true),visualReadySceneCount:0});
+  assert.deepEqual(record.proposal,{approved:false});
+  assert.deepEqual(record.finalDecision,{approved:true});
+  assert.equal(project.learning.decisions.length,1);
+});
+
+test('final-review-approval ignores already-approved, invalid, and automatic revoke states', () => {
+  const project={id:'p',learning:{decisions:[]},scenes:[],subtitleStyle:{},output:{},bgm:{}};
+  assert.equal(recordFinalReviewApproval(project,{beforeState:{approved:true},afterState:{approved:true},visualReadySceneCount:0}),null);
+  assert.equal(recordFinalReviewApproval(project,{beforeState:{approved:false},afterState:{approved:false},visualReadySceneCount:0}),null);
+  assert.equal(recordFinalReviewApproval(project,{beforeState:{approved:false},afterState:{approved:'true'},visualReadySceneCount:0}),null);
+  assert.equal(recordFinalReviewApproval(project,{beforeState:{approved:null},afterState:{approved:true},visualReadySceneCount:0}),null);
+  assert.equal(project.learning.decisions.length,0);
 });

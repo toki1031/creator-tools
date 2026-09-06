@@ -1611,6 +1611,81 @@ export function recordNarrationVoiceDecision(project, {
   }, options);
 }
 
+export function normalizeFinalReviewApproval(value) {
+  return typeof value === 'boolean' ? value : null;
+}
+
+export function snapshotFinalReviewApproval(value) {
+  return { approved: normalizeFinalReviewApproval(value) };
+}
+
+export function recordFinalReviewApproval(project, {
+  beforeState,
+  afterState,
+  visualReadySceneCount
+}, options = {}) {
+  const beforeRaw = isRecord(beforeState) ? beforeState.approved : beforeState;
+  const afterRaw = isRecord(afterState) ? afterState.approved : afterState;
+  const before = normalizeFinalReviewApproval(beforeRaw);
+  const after = normalizeFinalReviewApproval(afterRaw);
+  if (before !== false || after !== true) return null;
+
+  const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+  const style = isRecord(project?.subtitleStyle) ? project.subtitleStyle : {};
+  const bgm = isRecord(project?.bgm) ? project.bgm : {};
+  const output = isRecord(project?.output) ? project.output : {};
+  const targetDuration = Number(project?.targetDurationSec);
+  const projectDurationSec = scenes.reduce((sum, scene) => sum + (Number(scene?.durationSec) || 0), 0);
+  const rawVisualReady = Number(visualReadySceneCount);
+  const visualReady = Number.isInteger(rawVisualReady) && rawVisualReady >= 0
+    ? Math.min(scenes.length, rawVisualReady)
+    : null;
+  const subtitleSceneCount = scenes.filter(scene => scene?.subtitleEnabled !== false && stringOr(scene?.subtitleText).trim()).length;
+  const narrationSceneCount = scenes.filter(scene => Boolean(scene?.narration?.audioData)).length;
+  const positionValue = stringOr(style.position).trim();
+  const subtitlePosition = ['top', 'center', 'bottom'].includes(positionValue) ? positionValue : '';
+
+  return appendDecision(project, {
+    decisionType: 'final-review-approval',
+    sceneId: '',
+    context: {
+      platform: stringOr(project?.platform),
+      aspectRatio: stringOr(project?.aspectRatio),
+      targetDurationSec: Number.isFinite(targetDuration) ? targetDuration : null,
+      projectDurationSec,
+      sceneCount: scenes.length,
+      visualReadySceneCount: visualReady,
+      subtitleSceneCount,
+      narrationSceneCount,
+      hasGlobalNarration: Boolean(project?.narration?.audioData),
+      hasBgm: Boolean(bgm.audioData),
+      bgmEnabled: Boolean(output.bgmEnabled),
+      bgmVolume: normalizeBgmVolume(bgm.volume),
+      bgmDucking: Boolean(bgm.ducking),
+      bgmLoop: Boolean(bgm.loop),
+      subtitleEnabled: style.enabled !== false,
+      subtitlePreset: stringOr(style.preset).trim() || 'standard',
+      subtitlePosition,
+      subtitleOffsetPercent: normalizeSubtitleOffset(style.positionOffsetPercent),
+      fontSizePx: normalizeSubtitleFontSize(style.fontSize),
+      backgroundEnabled: Boolean(style.backgroundEnabled),
+      outputWidth: Number.isFinite(Number(output.width)) ? Number(output.width) : null,
+      outputHeight: Number.isFinite(Number(output.height)) ? Number(output.height) : null,
+      outputFps: Number.isFinite(Number(output.fps)) ? Number(output.fps) : null,
+      outputQuality: stringOr(output.quality).trim()
+    },
+    proposal: { approved: false },
+    alternatives: [],
+    humanAction: { type: 'approve-final-review' },
+    finalDecision: { approved: true },
+    reasonCode: '',
+    reasonNote: '',
+    source: { type: 'human', feature: 'output-final-review', version: '0.28' },
+    assetIds: [],
+    rights: {}
+  }, options);
+}
+
 export function moveSceneWithDecision(project, index, direction, options = {}) {
   ensureLearningState(project);
   const scenes = Array.isArray(project?.scenes) ? project.scenes : [];

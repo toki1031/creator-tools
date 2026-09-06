@@ -10,7 +10,7 @@ import { normalizeSubtitleOffset, resolveEffectiveSubtitlePosition, resolveSubti
 import { assessMvpVideoResult, describeVideoExportFailure, isMvpShortsProject, validateMvpShortsOutput } from "./videoMvp.js";
 import { createGenerationStartController, projectExpectsVideoAudio } from "./videoGenerationStart.js";
 import { applyDictionaryEntries, normalizeSubtitleContentForSync, splitIntoScenes, splitSubtitleCards, subtitleContentChanged } from "./qualityLogic.js";
-import { ensureLearningState, moveSceneWithDecision, recordBgmDuckingChange, recordBgmFadeInChange, recordBgmFadeOutChange, recordBgmLoopChange, recordBgmSelectionChange, recordBgmVolumeChange, recordGlobalSubtitlePositionChange, recordSceneDurationChange, recordSceneImageSelection, recordSceneMotionChange, recordSceneSubtitlePositionChange, recordSceneTransitionChange, recordSubtitleContentChange, recordSubtitleBackgroundEnabledChange, recordSubtitleBackgroundOpacityChange, recordSubtitleEnabledChange, recordSubtitleFontSizeChange, recordSubtitleTextColorChange, recordSubtitleOutlineColorChange, recordSubtitleBackgroundColorChange, recordSubtitleMaxCharsChange, recordSubtitleMaxLinesChange, recordSubtitleOutlineWidthChange, recordSubtitlePresetChange, recordSubtitleSceneSyncDecision, snapshotBgmFadeIn, snapshotBgmFadeOut, snapshotGlobalSubtitlePosition, snapshotSceneSubtitlePosition, snapshotSubtitleBackgroundEnabled, snapshotSubtitleBackgroundOpacity, snapshotSubtitleEnabled, snapshotSubtitleFontSize, snapshotSubtitleMaxChars, snapshotSubtitleTextColor, snapshotSubtitleOutlineColor, snapshotSubtitleBackgroundColor, snapshotSubtitleMaxLines, snapshotSubtitleOutlineWidth, snapshotSubtitlePresetState } from "./decisionLog.js";
+import { ensureLearningState, moveSceneWithDecision, recordBgmDuckingChange, recordBgmFadeInChange, recordBgmFadeOutChange, recordBgmLoopChange, recordBgmSelectionChange, recordBgmVolumeChange, recordGlobalSubtitlePositionChange, recordSceneDurationChange, recordSceneImageSelection, recordSceneMotionChange, recordSceneSubtitlePositionChange, recordSceneTransitionChange, recordSubtitleContentChange, recordSubtitleBackgroundEnabledChange, recordSubtitleBackgroundOpacityChange, recordSubtitleEnabledChange, recordSubtitleFontSizeChange, recordSubtitleTextColorChange, recordSubtitleOutlineColorChange, recordSubtitleBackgroundColorChange, recordFinalReviewApproval, recordSubtitleMaxCharsChange, recordSubtitleMaxLinesChange, recordSubtitleOutlineWidthChange, recordSubtitlePresetChange, recordSubtitleSceneSyncDecision, snapshotBgmFadeIn, snapshotBgmFadeOut, snapshotGlobalSubtitlePosition, snapshotSceneSubtitlePosition, snapshotSubtitleBackgroundEnabled, snapshotSubtitleBackgroundOpacity, snapshotSubtitleEnabled, snapshotSubtitleFontSize, snapshotSubtitleMaxChars, snapshotSubtitleTextColor, snapshotSubtitleOutlineColor, snapshotSubtitleBackgroundColor, snapshotFinalReviewApproval, snapshotSubtitleMaxLines, snapshotSubtitleOutlineWidth, snapshotSubtitlePresetState } from "./decisionLog.js";
 
 const rootElement = document.querySelector("#app");
 if (!rootElement) throw new Error("#app がありません。");
@@ -1051,11 +1051,13 @@ async function renderOutput(id) {
     const missingVisual=scenes.findIndex(scene=>!resolveSceneImageSource(project,scene).data);
     if(missingVisual>=0){alert(`シーン${missingVisual+1}に映像素材がありません。シーン編集へ戻って画像または動画を設定してください。`);return;}
     if(!scenes.length){alert('シーンがありません。');return;}
+    const beforeApproval=snapshotFinalReviewApproval(finalReviewApproved);
     project.finalReview={
       approved:true,
       signature:finalReviewSignature(project),
       approvedAt:new Date().toISOString()
     };
+    recordFinalReviewApproval(project,{beforeState:beforeApproval,afterState:snapshotFinalReviewApproval(true),visualReadySceneCount:hasImages});
     project.updatedAt=new Date().toISOString();
     await saveProject(project);
     renderOutput(id);
