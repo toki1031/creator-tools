@@ -1,0 +1,235 @@
+name: Issue 90 branch runner
+on:
+  push:
+    branches: [issue-90-final-review-approval-v028]
+permissions:
+  contents: write
+jobs:
+  implement-test-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply guarded v0.28 changes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          decision = Path('decisionLog.js')
+          main = Path('main.js')
+          tests = Path('tests/decisionLog.test.mjs')
+
+          d = decision.read_text()
+          marker = "export function moveSceneWithDecision(project, index, direction, options = {}) {"
+          assert marker in d, 'decisionLog insertion marker missing'
+          assert 'recordFinalReviewApproval' not in d, 'v0.28 helper already exists'
+          helper = r'''export function normalizeFinalReviewApproval(value) {
+  return typeof value === 'boolean' ? value : null;
+}
+
+export function snapshotFinalReviewApproval(value) {
+  return { approved: normalizeFinalReviewApproval(value) };
+}
+
+export function recordFinalReviewApproval(project, {
+  beforeState,
+  afterState,
+  visualReadySceneCount
+}, options = {}) {
+  const beforeRaw = isRecord(beforeState) ? beforeState.approved : beforeState;
+  const afterRaw = isRecord(afterState) ? afterState.approved : afterState;
+  const before = normalizeFinalReviewApproval(beforeRaw);
+  const after = normalizeFinalReviewApproval(afterRaw);
+  if (before !== false || after !== true) return null;
+
+  const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+  const style = isRecord(project?.subtitleStyle) ? project.subtitleStyle : {};
+  const bgm = isRecord(project?.bgm) ? project.bgm : {};
+  const output = isRecord(project?.output) ? project.output : {};
+  const targetDuration = Number(project?.targetDurationSec);
+  const projectDurationSec = scenes.reduce((sum, scene) => sum + (Number(scene?.durationSec) || 0), 0);
+  const rawVisualReady = Number(visualReadySceneCount);
+  const visualReady = Number.isInteger(rawVisualReady) && rawVisualReady >= 0
+    ? Math.min(scenes.length, rawVisualReady)
+    : null;
+  const subtitleSceneCount = scenes.filter(scene => scene?.subtitleEnabled !== false && stringOr(scene?.subtitleText).trim()).length;
+  const narrationSceneCount = scenes.filter(scene => Boolean(scene?.narration?.audioData)).length;
+  const positionValue = stringOr(style.position).trim();
+  const subtitlePosition = ['top', 'center', 'bottom'].includes(positionValue) ? positionValue : '';
+
+  return appendDecision(project, {
+    decisionType: 'final-review-approval',
+    sceneId: '',
+    context: {
+      platform: stringOr(project?.platform),
+      aspectRatio: stringOr(project?.aspectRatio),
+      targetDurationSec: Number.isFinite(targetDuration) ? targetDuration : null,
+      projectDurationSec,
+      sceneCount: scenes.length,
+      visualReadySceneCount: visualReady,
+      subtitleSceneCount,
+      narrationSceneCount,
+      hasGlobalNarration: Boolean(project?.narration?.audioData),
+      hasBgm: Boolean(bgm.audioData),
+      bgmEnabled: Boolean(output.bgmEnabled),
+      bgmVolume: normalizeBgmVolume(bgm.volume),
+      bgmDucking: Boolean(bgm.ducking),
+      bgmLoop: Boolean(bgm.loop),
+      subtitleEnabled: style.enabled !== false,
+      subtitlePreset: stringOr(style.preset).trim() || 'standard',
+      subtitlePosition,
+      subtitleOffsetPercent: normalizeSubtitleOffset(style.positionOffsetPercent),
+      fontSizePx: normalizeSubtitleFontSize(style.fontSize),
+      backgroundEnabled: Boolean(style.backgroundEnabled),
+      outputWidth: Number.isFinite(Number(output.width)) ? Number(output.width) : null,
+      outputHeight: Number.isFinite(Number(output.height)) ? Number(output.height) : null,
+      outputFps: Number.isFinite(Number(output.fps)) ? Number(output.fps) : null,
+      outputQuality: stringOr(output.quality).trim()
+    },
+    proposal: { approved: false },
+    alternatives: [],
+    humanAction: { type: 'approve-final-review' },
+    finalDecision: { approved: true },
+    reasonCode: '',
+    reasonNote: '',
+    source: { type: 'human', feature: 'output-final-review', version: '0.28' },
+    assetIds: [],
+    rights: {}
+  }, options);
+}
+
+'''
+          d = d.replace(marker, helper + marker, 1)
+          decision.write_text(d)
+
+          m = main.read_text()
+          old_import = "recordSubtitleBackgroundColorChange, recordSubtitleMaxCharsChange"
+          new_import = "recordSubtitleBackgroundColorChange, recordFinalReviewApproval, recordSubtitleMaxCharsChange"
+          assert old_import in m, 'main record import marker missing'
+          m = m.replace(old_import, new_import, 1)
+          old_snapshot = "snapshotSubtitleBackgroundColor, snapshotSubtitleMaxLines"
+          new_snapshot = "snapshotSubtitleBackgroundColor, snapshotFinalReviewApproval, snapshotSubtitleMaxLines"
+          assert old_snapshot in m, 'main snapshot import marker missing'
+          m = m.replace(old_snapshot, new_snapshot, 1)
+
+          old_handler = '''  root.querySelector('#approveFinalReview').onclick=async()=>{\n    const missingVisual=scenes.findIndex(scene=>!resolveSceneImageSource(project,scene).data);\n    if(missingVisual>=0){alert(`シーン${missingVisual+1}に映像素材がありません。シーン編集へ戻って画像または動画を設定してください。`);return;}\n    if(!scenes.length){alert('シーンがありません。');return;}\n    project.finalReview={\n      approved:true,\n      signature:finalReviewSignature(project),\n      approvedAt:new Date().toISOString()\n    };\n    project.updatedAt=new Date().toISOString();\n    await saveProject(project);\n    renderOutput(id);\n  };'''
+          new_handler = '''  root.querySelector('#approveFinalReview').onclick=async()=>{\n    const missingVisual=scenes.findIndex(scene=>!resolveSceneImageSource(project,scene).data);\n    if(missingVisual>=0){alert(`シーン${missingVisual+1}に映像素材がありません。シーン編集へ戻って画像または動画を設定してください。`);return;}\n    if(!scenes.length){alert('シーンがありません。');return;}\n    const beforeApproval=snapshotFinalReviewApproval(finalReviewApproved);\n    project.finalReview={\n      approved:true,\n      signature:finalReviewSignature(project),\n      approvedAt:new Date().toISOString()\n    };\n    recordFinalReviewApproval(project,{beforeState:beforeApproval,afterState:snapshotFinalReviewApproval(true),visualReadySceneCount:hasImages});\n    project.updatedAt=new Date().toISOString();\n    await saveProject(project);\n    renderOutput(id);\n  };'''
+          assert old_handler in m, 'final review handler marker missing'
+          m = m.replace(old_handler, new_handler, 1)
+          main.write_text(m)
+
+          t = tests.read_text()
+          import_marker = "  normalizeSubtitleColor,\n"
+          assert import_marker in t, 'test normalize import marker missing'
+          t = t.replace(import_marker, import_marker + "  normalizeFinalReviewApproval,\n", 1)
+          record_marker = "  recordSubtitleBackgroundColorChange,\n"
+          assert record_marker in t, 'test record import marker missing'
+          t = t.replace(record_marker, record_marker + "  recordFinalReviewApproval,\n", 1)
+          snapshot_marker = "  snapshotSubtitleBackgroundColor,\n"
+          assert snapshot_marker in t, 'test snapshot import marker missing'
+          t = t.replace(snapshot_marker, snapshot_marker + "  snapshotFinalReviewApproval,\n", 1)
+
+          t += r'''
+
+test('final review approval normalization accepts booleans only', () => {
+  assert.equal(normalizeFinalReviewApproval(true), true);
+  assert.equal(normalizeFinalReviewApproval(false), false);
+  assert.equal(normalizeFinalReviewApproval('true'), null);
+  assert.equal(normalizeFinalReviewApproval(1), null);
+  assert.equal(normalizeFinalReviewApproval(null), null);
+  assert.deepEqual(snapshotFinalReviewApproval(false), {approved:false});
+});
+
+test('final-review-approval records one explicit approval with compact completed-state context', () => {
+  const project={
+    id:'p-final-review',platform:'youtube-shorts',aspectRatio:'9:16',targetDurationSec:60,learning:{decisions:[]},
+    scenes:[
+      {id:'s1',durationSec:4,subtitleText:'字幕1',imageData:'data:image/png;base64,SHOULD_NOT_COPY',narration:{audioData:'data:audio/wav;base64,AA=='}},
+      {id:'s2',durationSec:6,subtitleText:'字幕2',subtitleEnabled:false,videoData:'data:video/mp4;base64,SHOULD_NOT_COPY'}
+    ],
+    narration:{audioData:'data:audio/wav;base64,GLOBAL_SHOULD_NOT_COPY'},
+    bgm:{audioData:'data:audio/wav;base64,BGM_SHOULD_NOT_COPY',volume:0.12,ducking:true,loop:false,title:'secret title'},
+    subtitleStyle:{enabled:true,preset:'boxed',position:'bottom',positionOffsetPercent:3,fontSize:52,backgroundEnabled:true},
+    output:{width:1080,height:1920,fps:30,quality:'high',bgmEnabled:true},
+    finalReview:{approved:true,signature:'DO_NOT_COPY_SIGNATURE'}
+  };
+  const record=recordFinalReviewApproval(project,{beforeState:{approved:false},afterState:{approved:true},visualReadySceneCount:2},{createId:()=> 'd-final-review-1',now:()=> '2026-09-06T08:30:00.000Z'});
+  assert.equal(record.decisionType,'final-review-approval');
+  assert.deepEqual(record.proposal,{approved:false});
+  assert.deepEqual(record.finalDecision,{approved:true});
+  assert.deepEqual(record.alternatives,[]);
+  assert.deepEqual(record.humanAction,{type:'approve-final-review'});
+  assert.deepEqual(record.source,{type:'human',feature:'output-final-review',version:'0.28'});
+  assert.deepEqual(record.assetIds,[]);
+  assert.deepEqual(record.rights,{});
+  assert.deepEqual(record.context,{
+    platform:'youtube-shorts',aspectRatio:'9:16',targetDurationSec:60,projectDurationSec:10,sceneCount:2,visualReadySceneCount:2,
+    subtitleSceneCount:1,narrationSceneCount:1,hasGlobalNarration:true,hasBgm:true,bgmEnabled:true,bgmVolume:0.12,bgmDucking:true,bgmLoop:false,
+    subtitleEnabled:true,subtitlePreset:'boxed',subtitlePosition:'bottom',subtitleOffsetPercent:3,fontSizePx:52,backgroundEnabled:true,
+    outputWidth:1080,outputHeight:1920,outputFps:30,outputQuality:'high'
+  });
+  const serialized=JSON.stringify(record);
+  assert.equal(serialized.includes('SHOULD_NOT_COPY'),false);
+  assert.equal(serialized.includes('secret title'),false);
+  assert.equal(serialized.includes('DO_NOT_COPY_SIGNATURE'),false);
+  assert.equal(project.learning.decisions.length,1);
+});
+
+test('final-review-approval treats a stale raw approval as a new effective false to true approval', () => {
+  const project={id:'p-stale',learning:{decisions:[]},finalReview:{approved:true,signature:'old-signature'},scenes:[],subtitleStyle:{},output:{},bgm:{}};
+  const record=recordFinalReviewApproval(project,{beforeState:snapshotFinalReviewApproval(false),afterState:snapshotFinalReviewApproval(true),visualReadySceneCount:0});
+  assert.deepEqual(record.proposal,{approved:false});
+  assert.deepEqual(record.finalDecision,{approved:true});
+  assert.equal(project.learning.decisions.length,1);
+});
+
+test('final-review-approval ignores already-approved, invalid, and automatic revoke states', () => {
+  const project={id:'p',learning:{decisions:[]},scenes:[],subtitleStyle:{},output:{},bgm:{}};
+  assert.equal(recordFinalReviewApproval(project,{beforeState:{approved:true},afterState:{approved:true},visualReadySceneCount:0}),null);
+  assert.equal(recordFinalReviewApproval(project,{beforeState:{approved:false},afterState:{approved:false},visualReadySceneCount:0}),null);
+  assert.equal(recordFinalReviewApproval(project,{beforeState:{approved:false},afterState:{approved:'true'},visualReadySceneCount:0}),null);
+  assert.equal(recordFinalReviewApproval(project,{beforeState:{approved:null},afterState:{approved:true},visualReadySceneCount:0}),null);
+  assert.equal(project.learning.decisions.length,0);
+});
+'''
+          tests.write_text(t)
+          PY
+      - name: Install dependencies without lockfile changes
+        run: npm install --package-lock=false --no-audit --no-fund
+      - name: Run tests
+        run: npm test
+      - name: Production build
+        run: npm run build
+      - name: Diff safety checks
+        shell: bash
+        run: |
+          git diff --check
+          git add -N decisionLog.js main.js tests/decisionLog.test.mjs
+          changed="$(git diff --name-only HEAD | sort)"
+          expected="$(printf '%s\n' '.github/workflows/issue90-runner.yml' 'decisionLog.js' 'main.js' 'tests/decisionLog.test.mjs' | sort)"
+          test "$changed" = "$expected"
+          for protected in videoRenderer.js db.js projectFactory.js subtitlePosition.js qualityLogic.js projectBackup.js audioAssetIdentity.js voice-lab.html style.css styles.css package.json; do
+            git diff --quiet HEAD -- "$protected" || { echo "Protected file changed: $protected"; exit 1; }
+          done
+          rm -rf node_modules dist package-lock.json
+          rm .github/workflows/issue90-runner.yml
+          git diff --check
+          changed="$(git status --short | sed -E 's/^...//' | sort)"
+          expected="$(printf '%s\n' '.github/workflows/issue90-runner.yml' 'decisionLog.js' 'main.js' 'tests/decisionLog.test.mjs' | sort)"
+          test "$changed" = "$expected"
+      - name: Commit implementation and remove runner
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add decisionLog.js main.js tests/decisionLog.test.mjs
+          git add -u .github/workflows/issue90-runner.yml
+          git diff --cached --check
+          test "$(git diff --cached --name-only | sort)" = "$(printf '%s\n' '.github/workflows/issue90-runner.yml' 'decisionLog.js' 'main.js' 'tests/decisionLog.test.mjs' | sort)"
+          git commit -m 'Capture final review approvals'
+          git push
