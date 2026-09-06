@@ -35,6 +35,7 @@ import {
   recordSubtitleEnabledChange,
   recordSubtitleTextColorChange,
   recordSubtitleOutlineColorChange,
+  recordSubtitleBackgroundColorChange,
   recordSubtitleMaxLinesChange,
   recordSubtitlePresetChange,
   recordSubtitleSceneSyncDecision,
@@ -55,6 +56,7 @@ import {
   snapshotSubtitleEnabled,
   snapshotSubtitleTextColor,
   snapshotSubtitleOutlineColor,
+  snapshotSubtitleBackgroundColor,
   snapshotSubtitleMaxLines,
   snapshotSubtitlePresetState,
   recordSceneOrderChange,
@@ -1549,5 +1551,58 @@ test('subtitle-outline-color ignores hidden, zero-width, same, and invalid final
   const visible={id:'visible',learning:{decisions:[]},subtitleStyle:{enabled:true,outlineWidth:2},scenes:[]};
   assert.equal(recordSubtitleOutlineColorChange(visible,{beforeState:{outlineColor:'#abcdef'},afterState:{outlineColor:'#ABCDEF'}}),null);
   assert.equal(recordSubtitleOutlineColorChange(visible,{beforeState:{outlineColor:'#000000'},afterState:{outlineColor:'rgb(1,2,3)'}}),null);
+  assert.equal(visible.learning.decisions.length,0);
+});
+
+
+test('subtitle background color snapshot reuses normalized six-digit hex colors', () => {
+  assert.deepEqual(snapshotSubtitleBackgroundColor('#A1B2C3'), { backgroundColor: '#a1b2c3' });
+  assert.deepEqual(snapshotSubtitleBackgroundColor('#fff'), { backgroundColor: null });
+});
+
+test('subtitle-background-color records an explicit visible background color choice', () => {
+  const project={
+    id:'p-bg-color',platform:'youtube-shorts',aspectRatio:'9:16',learning:{decisions:[]},
+    subtitleStyle:{enabled:true,preset:'boxed',fontSize:52,position:'bottom',positionOffsetPercent:2,maxCharsPerLine:16,maxLines:2,textColor:'#ffffff',outlineColor:'#000000',outlineWidth:0,backgroundEnabled:true,backgroundColor:'#123456',backgroundOpacity:0.58},
+    scenes:[
+      {id:'s1',subtitleText:'字幕あり',narration:{audioData:'data:audio/wav;base64,QQ=='}},
+      {id:'s2',subtitleText:'個別OFF',subtitleEnabled:false}
+    ]
+  };
+  const record=recordSubtitleBackgroundColorChange(project,{beforeState:{backgroundColor:'#000000'},afterState:{backgroundColor:'#123456'}},{createId:()=> 'd-bg-color-1',now:()=> '2026-09-06T02:00:00.000Z'});
+  assert.equal(record.decisionType,'subtitle-background-color');
+  assert.deepEqual(record.proposal,{backgroundColor:'#000000'});
+  assert.deepEqual(record.finalDecision,{backgroundColor:'#123456'});
+  assert.deepEqual(record.alternatives,[]);
+  assert.deepEqual(record.humanAction,{type:'set-subtitle-background-color'});
+  assert.deepEqual(record.source,{type:'human',feature:'subtitle-editor',version:'0.27'});
+  assert.deepEqual(record.assetIds,[]);
+  assert.deepEqual(record.rights,{});
+  assert.deepEqual(record.context,{
+    platform:'youtube-shorts',aspectRatio:'9:16',subtitleEnabled:true,subtitlePreset:'boxed',fontSizePx:52,position:'bottom',positionOffsetPercent:2,
+    maxCharsPerLine:16,maxLines:2,textColor:'#ffffff',outlineColor:'#000000',outlineWidth:0,backgroundEnabled:true,backgroundOpacity:0.58,
+    sceneCount:2,subtitleSceneCount:1,hasNarration:true
+  });
+  assert.equal(project.learning.decisions.length,1);
+});
+
+test('subtitle-background-color allows invalid legacy before as null for a valid visible final', () => {
+  const project={id:'p',learning:{decisions:[]},subtitleStyle:{enabled:true,backgroundEnabled:true,backgroundOpacity:0.45},scenes:[]};
+  const record=recordSubtitleBackgroundColorChange(project,{beforeState:{backgroundColor:'legacy'},afterState:{backgroundColor:'#ABCDEF'}});
+  assert.deepEqual(record.proposal,{backgroundColor:null});
+  assert.deepEqual(record.finalDecision,{backgroundColor:'#abcdef'});
+  assert.equal(project.learning.decisions.length,1);
+});
+
+test('subtitle-background-color ignores hidden, disabled, transparent, same, and invalid final choices', () => {
+  const hidden={id:'hidden',learning:{decisions:[]},subtitleStyle:{enabled:false,backgroundEnabled:true,backgroundOpacity:0.45},scenes:[]};
+  assert.equal(recordSubtitleBackgroundColorChange(hidden,{beforeState:{backgroundColor:'#000000'},afterState:{backgroundColor:'#ffffff'}}),null);
+  const disabled={id:'disabled',learning:{decisions:[]},subtitleStyle:{enabled:true,backgroundEnabled:false,backgroundOpacity:0.45},scenes:[]};
+  assert.equal(recordSubtitleBackgroundColorChange(disabled,{beforeState:{backgroundColor:'#000000'},afterState:{backgroundColor:'#ffffff'}}),null);
+  const transparent={id:'transparent',learning:{decisions:[]},subtitleStyle:{enabled:true,backgroundEnabled:true,backgroundOpacity:0},scenes:[]};
+  assert.equal(recordSubtitleBackgroundColorChange(transparent,{beforeState:{backgroundColor:'#000000'},afterState:{backgroundColor:'#ffffff'}}),null);
+  const visible={id:'visible',learning:{decisions:[]},subtitleStyle:{enabled:true,backgroundEnabled:true,backgroundOpacity:0.45},scenes:[]};
+  assert.equal(recordSubtitleBackgroundColorChange(visible,{beforeState:{backgroundColor:'#abcdef'},afterState:{backgroundColor:'#ABCDEF'}}),null);
+  assert.equal(recordSubtitleBackgroundColorChange(visible,{beforeState:{backgroundColor:'#000000'},afterState:{backgroundColor:'rgb(1,2,3)'}}),null);
   assert.equal(visible.learning.decisions.length,0);
 });
