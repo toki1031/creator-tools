@@ -1686,6 +1686,85 @@ export function recordFinalReviewApproval(project, {
   }, options);
 }
 
+const PUBLISH_VISIBILITIES = new Set(['private', 'unlisted', 'public']);
+
+export function normalizePublishVisibility(value) {
+  const normalized = stringOr(value).trim();
+  return PUBLISH_VISIBILITIES.has(normalized) ? normalized : null;
+}
+
+export function snapshotPublishMetadata(value) {
+  const source = isRecord(value) ? value : {};
+  return {
+    title: stringOr(source.title),
+    description: stringOr(source.description).replace(/\r\n?/g, '\n'),
+    tags: stringOr(source.tags),
+    thumbnailText: stringOr(source.thumbnailText),
+    visibility: normalizePublishVisibility(source.visibility)
+  };
+}
+
+function validPublishMetadataSnapshot(value) {
+  const snapshot = snapshotPublishMetadata(value);
+  return Boolean(snapshot.title.trim()) && snapshot.visibility !== null;
+}
+
+export function publishMetadataApprovalMatches(approval, currentState) {
+  if (!isRecord(approval) || approval.approved !== true) return false;
+  const approved = snapshotPublishMetadata(approval.snapshot);
+  const current = snapshotPublishMetadata(currentState);
+  if (!validPublishMetadataSnapshot(approved) || !validPublishMetadataSnapshot(current)) return false;
+  return JSON.stringify(approved) === JSON.stringify(current);
+}
+
+export function recordPublishMetadataApproval(project, {
+  beforeApproval,
+  finalState,
+  hasFinalReviewApproval
+}, options = {}) {
+  const finalMetadata = snapshotPublishMetadata(finalState);
+  if (!validPublishMetadataSnapshot(finalMetadata)) return null;
+  if (publishMetadataApprovalMatches(beforeApproval, finalMetadata)) return null;
+
+  const previousMetadata = isRecord(beforeApproval) && beforeApproval.approved === true
+    ? snapshotPublishMetadata(beforeApproval.snapshot)
+    : null;
+  const proposal = previousMetadata && validPublishMetadataSnapshot(previousMetadata)
+    ? previousMetadata
+    : null;
+  const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+  const targetDuration = Number(project?.targetDurationSec);
+  const projectDurationSec = scenes.reduce((sum, scene) => sum + (Number(scene?.durationSec) || 0), 0);
+  const hasNarration = Boolean(project?.narration?.audioData)
+    || scenes.some(scene => Boolean(scene?.narration?.audioData));
+
+  return appendDecision(project, {
+    decisionType: 'publish-metadata-approval',
+    sceneId: '',
+    context: {
+      platform: stringOr(project?.platform),
+      genre: stringOr(project?.genre),
+      aspectRatio: stringOr(project?.aspectRatio),
+      targetDurationSec: Number.isFinite(targetDuration) ? targetDuration : null,
+      projectDurationSec,
+      sceneCount: scenes.length,
+      hasFinalReviewApproval: Boolean(hasFinalReviewApproval),
+      hasBgm: Boolean(project?.bgm?.audioData),
+      hasNarration,
+      subtitleEnabled: project?.subtitleStyle?.enabled !== false
+    },
+    proposal,
+    alternatives: [],
+    humanAction: { type: 'approve-publish-metadata' },
+    finalDecision: finalMetadata,
+    reasonCode: '',
+    reasonNote: '',
+    source: { type: 'human', feature: 'publish-editor', version: '0.29' },
+    assetIds: [],
+    rights: {}
+  }, options);
+}
+
 export function moveSceneWithDecision(project, index, direction, options = {}) {
   ensureLearningState(project);
   const scenes = Array.isArray(project?.scenes) ? project.scenes : [];

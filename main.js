@@ -10,7 +10,7 @@ import { normalizeSubtitleOffset, resolveEffectiveSubtitlePosition, resolveSubti
 import { assessMvpVideoResult, describeVideoExportFailure, isMvpShortsProject, validateMvpShortsOutput } from "./videoMvp.js";
 import { createGenerationStartController, projectExpectsVideoAudio } from "./videoGenerationStart.js";
 import { applyDictionaryEntries, normalizeSubtitleContentForSync, splitIntoScenes, splitSubtitleCards, subtitleContentChanged } from "./qualityLogic.js";
-import { ensureLearningState, moveSceneWithDecision, recordBgmDuckingChange, recordBgmFadeInChange, recordBgmFadeOutChange, recordBgmLoopChange, recordBgmSelectionChange, recordBgmVolumeChange, recordGlobalSubtitlePositionChange, recordSceneDurationChange, recordSceneImageSelection, recordSceneMotionChange, recordSceneSubtitlePositionChange, recordSceneTransitionChange, recordSubtitleContentChange, recordSubtitleBackgroundEnabledChange, recordSubtitleBackgroundOpacityChange, recordSubtitleEnabledChange, recordSubtitleFontSizeChange, recordSubtitleTextColorChange, recordSubtitleOutlineColorChange, recordSubtitleBackgroundColorChange, recordFinalReviewApproval, recordSubtitleMaxCharsChange, recordSubtitleMaxLinesChange, recordSubtitleOutlineWidthChange, recordSubtitlePresetChange, recordSubtitleSceneSyncDecision, snapshotBgmFadeIn, snapshotBgmFadeOut, snapshotGlobalSubtitlePosition, snapshotSceneSubtitlePosition, snapshotSubtitleBackgroundEnabled, snapshotSubtitleBackgroundOpacity, snapshotSubtitleEnabled, snapshotSubtitleFontSize, snapshotSubtitleMaxChars, snapshotSubtitleTextColor, snapshotSubtitleOutlineColor, snapshotSubtitleBackgroundColor, snapshotFinalReviewApproval, snapshotSubtitleMaxLines, snapshotSubtitleOutlineWidth, snapshotSubtitlePresetState } from "./decisionLog.js";
+import { ensureLearningState, moveSceneWithDecision, recordBgmDuckingChange, recordBgmFadeInChange, recordBgmFadeOutChange, recordBgmLoopChange, recordBgmSelectionChange, recordBgmVolumeChange, recordGlobalSubtitlePositionChange, recordSceneDurationChange, recordSceneImageSelection, recordSceneMotionChange, recordSceneSubtitlePositionChange, recordSceneTransitionChange, recordSubtitleContentChange, recordSubtitleBackgroundEnabledChange, recordSubtitleBackgroundOpacityChange, recordSubtitleEnabledChange, recordSubtitleFontSizeChange, recordSubtitleTextColorChange, recordSubtitleOutlineColorChange, recordSubtitleBackgroundColorChange, recordFinalReviewApproval, recordPublishMetadataApproval, recordSubtitleMaxCharsChange, recordSubtitleMaxLinesChange, recordSubtitleOutlineWidthChange, recordSubtitlePresetChange, recordSubtitleSceneSyncDecision, snapshotBgmFadeIn, snapshotBgmFadeOut, snapshotGlobalSubtitlePosition, snapshotSceneSubtitlePosition, snapshotSubtitleBackgroundEnabled, snapshotSubtitleBackgroundOpacity, snapshotSubtitleEnabled, snapshotSubtitleFontSize, snapshotSubtitleMaxChars, snapshotSubtitleTextColor, snapshotSubtitleOutlineColor, snapshotSubtitleBackgroundColor, snapshotFinalReviewApproval, snapshotPublishMetadata, publishMetadataApprovalMatches, snapshotSubtitleMaxLines, snapshotSubtitleOutlineWidth, snapshotSubtitlePresetState } from "./decisionLog.js";
 
 const rootElement = document.querySelector("#app");
 if (!rootElement) throw new Error("#app がありません。");
@@ -1183,14 +1183,54 @@ async function renderOutput(id) {
 
 async function renderPublish(id) {
   const project=await getProject(id);if(!project){goHome();return;}ensureProjectSettings(project);const p=project.publish;
-  root.innerHTML=`<main class="shell editor-shell"><header class="editor-head"><button id="back">←</button><div><span>投稿準備</span><h1>${escapeHtml(project.title)}</h1></div><button id="menu">•••</button></header><section class="editor-card"><div class="section-head"><div><h2>YouTube投稿情報</h2><p>タイトル・概要欄・タグをまとめます。</p></div><span id="saveState">保存済み</span></div><label>タイトル<input id="publishTitle" value="${escapeHtml(p.title)}"></label><label>概要欄<textarea id="description" placeholder="動画の概要、出典、クレジットなど">${escapeHtml(p.description)}</textarea></label><label>タグ<input id="tags" value="${escapeHtml(p.tags)}" placeholder="偉人, 名言, Shorts"></label><label>サムネ文字<input id="thumbnailText" value="${escapeHtml(p.thumbnailText)}" placeholder="短く強い言葉"></label><label>公開設定<select id="visibility"><option value="private">非公開</option><option value="unlisted">限定公開</option><option value="public">公開</option></select></label><div class="tool-row"><button id="copyTitle">タイトルをコピー</button><button id="copyDescription">概要欄をコピー</button><button id="copyAll" class="primary">全部コピー</button></div></section><section class="actions"><button id="backOutput">← 出力へ</button><button id="exportJson">投稿情報JSON</button><button class="primary" id="done">Studioへ戻る</button></section></main>`;
+  const publishMetadataApproved=publishMetadataApprovalMatches(p.approval,p);
+  root.innerHTML=`<main class="shell editor-shell"><header class="editor-head"><button id="back">←</button><div><span>投稿準備</span><h1>${escapeHtml(project.title)}</h1></div><button id="menu">•••</button></header><section class="editor-card"><div class="section-head"><div><h2>YouTube投稿情報</h2><p>タイトル・概要欄・タグをまとめます。</p></div><span id="saveState">保存済み</span></div><label>タイトル<input id="publishTitle" value="${escapeHtml(p.title)}"></label><label>概要欄<textarea id="description" placeholder="動画の概要、出典、クレジットなど">${escapeHtml(p.description)}</textarea></label><label>タグ<input id="tags" value="${escapeHtml(p.tags)}" placeholder="偉人, 名言, Shorts"></label><label>サムネ文字<input id="thumbnailText" value="${escapeHtml(p.thumbnailText)}" placeholder="短く強い言葉"></label><label>公開設定<select id="visibility"><option value="private">非公開</option><option value="unlisted">限定公開</option><option value="public">公開</option></select></label><div class="tool-row"><button id="copyTitle">タイトルをコピー</button><button id="copyDescription">概要欄をコピー</button><button id="copyAll" class="primary">全部コピー</button></div><div class="tool-row"><button id="approvePublishMetadata" class="primary">${publishMetadataApproved?'✓ 投稿情報は確定済み':'✓ この投稿情報を確定'}</button></div><p id="publishApprovalNote" class="notice">${publishMetadataApproved?'現在の投稿情報は確定済みです。編集すると未確定に戻ります。':'入力途中は自動保存されます。完成したらこのボタンで確定してください。'}</p></section><section class="actions"><button id="backOutput">← 出力へ</button><button id="exportJson">投稿情報JSON</button><button class="primary" id="done">Studioへ戻る</button></section></main>`;
   root.querySelector('#visibility').value=p.visibility;attachProjectMenu(project,root.querySelector('#menu'),()=>goStudio(studioForGenre(project.genre)));
   const persist=async()=>{Object.assign(p,{title:root.querySelector('#publishTitle').value,description:root.querySelector('#description').value,tags:root.querySelector('#tags').value,thumbnailText:root.querySelector('#thumbnailText').value,visibility:root.querySelector('#visibility').value});project.updatedAt=new Date().toISOString();await saveProject(project);};
   const {scheduleSave:save,flushSave}=createSaveController({delay:400,persist,setStatus:text=>root.querySelector('#saveState').textContent=text});
+  const currentPublishMetadata=()=>snapshotPublishMetadata({
+    title:root.querySelector('#publishTitle').value,
+    description:root.querySelector('#description').value,
+    tags:root.querySelector('#tags').value,
+    thumbnailText:root.querySelector('#thumbnailText').value,
+    visibility:root.querySelector('#visibility').value
+  });
+  const refreshPublishApproval=()=>{
+    const approved=publishMetadataApprovalMatches(p.approval,currentPublishMetadata());
+    root.querySelector('#approvePublishMetadata').textContent=approved?'✓ 投稿情報は確定済み':'✓ この投稿情報を確定';
+    root.querySelector('#publishApprovalNote').textContent=approved?'現在の投稿情報は確定済みです。編集すると未確定に戻ります。':'入力途中は自動保存されます。完成したらこのボタンで確定してください。';
+    return approved;
+  };
   bindSavedNavigation(root.querySelector('#back'),flushSave,()=>goOutput(id));
   bindSavedNavigation(root.querySelector('#backOutput'),flushSave,()=>goOutput(id));
   bindSavedNavigation(root.querySelector('#done'),flushSave,()=>goStudio(studioForGenre(project.genre)));
-  ['publishTitle','description','tags','thumbnailText','visibility'].forEach(k=>root.querySelector('#'+k).oninput=save);
+  ['publishTitle','description','tags','thumbnailText','visibility'].forEach(k=>root.querySelector('#'+k).oninput=()=>{save();refreshPublishApproval();});
+  root.querySelector('#approvePublishMetadata').onclick=async()=>{
+    try{
+      await flushSave();
+      const finalState=snapshotPublishMetadata(p);
+      if(!finalState.title.trim()){alert('投稿タイトルを入力してください。');return;}
+      if(!finalState.visibility){alert('公開設定を確認してください。');return;}
+      if(publishMetadataApprovalMatches(p.approval,finalState)){refreshPublishApproval();return;}
+      const beforeApproval=p.approval;
+      const previousUpdatedAt=project.updatedAt;
+      const decisionCount=ensureLearningState(project).decisions.length;
+      const finalReviewApproved=Boolean(project.finalReview?.approved&&project.finalReview?.signature===finalReviewSignature(project));
+      const record=recordPublishMetadataApproval(project,{beforeApproval,finalState,hasFinalReviewApproval:finalReviewApproved});
+      if(!record){alert('投稿情報を確定できませんでした。入力内容を確認してください。');return;}
+      p.approval={approved:true,snapshot:finalState,approvedAt:new Date().toISOString()};
+      project.updatedAt=new Date().toISOString();
+      try{await saveProject(project);}
+      catch(error){
+        ensureLearningState(project).decisions.splice(decisionCount);
+        if(beforeApproval===undefined)delete p.approval;else p.approval=beforeApproval;
+        project.updatedAt=previousUpdatedAt;
+        throw error;
+      }
+      root.querySelector('#saveState').textContent='保存済み';
+      refreshPublishApproval();
+    }catch(error){console.error(error);alert(`投稿情報を確定できませんでした：${error.message}`);}
+  };
   const copy=async t=>{try{await navigator.clipboard.writeText(t);alert('コピーしました');}catch{prompt('コピーしてください',t);}};root.querySelector('#copyTitle').onclick=()=>copy(root.querySelector('#publishTitle').value);root.querySelector('#copyDescription').onclick=()=>copy(root.querySelector('#description').value);root.querySelector('#copyAll').onclick=()=>copy(`${root.querySelector('#publishTitle').value}\n\n${root.querySelector('#description').value}\n\n${root.querySelector('#tags').value}`);root.querySelector('#exportJson').onclick=()=>downloadJson(`${safeName(project.title)}-publish.json`,p);
 }
 
