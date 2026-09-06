@@ -106,8 +106,8 @@ new_start = "  const project=await getProject(id);if(!project){goHome();return;}
 assert old_start in m, 'renderPublish start marker missing'
 m = m.replace(old_start, new_start, 1)
 
-old_markup = '<div class=\\"tool-row\\"><button id=\\"copyTitle\\">タイトルをコピー</button><button id=\\"copyDescription\\">概要欄をコピー</button><button id=\\"copyAll\\" class=\\"primary\\">全部コピー</button></div></section><section class=\\"actions\\">'
-new_markup = '<div class=\\"tool-row\\"><button id=\\"copyTitle\\">タイトルをコピー</button><button id=\\"copyDescription\\">概要欄をコピー</button><button id=\\"copyAll\\" class=\\"primary\\">全部コピー</button></div><div class=\\"tool-row\\"><button id=\\"approvePublishMetadata\\" class=\\"primary\\">${publishMetadataApproved?\\'✓ 投稿情報は確定済み\\':\\'✓ この投稿情報を確定\\'}</button></div><p id=\\"publishApprovalNote\\" class=\\"notice\\">${publishMetadataApproved?\\'現在の投稿情報は確定済みです。編集すると未確定に戻ります。\\':\\'入力途中は自動保存されます。完成したらこのボタンで確定してください。\\'}</p></section><section class=\\"actions\\">'
+old_markup = r'''<div class=\"tool-row\"><button id=\"copyTitle\">タイトルをコピー</button><button id=\"copyDescription\">概要欄をコピー</button><button id=\"copyAll\" class=\"primary\">全部コピー</button></div></section><section class=\"actions\">'''
+new_markup = r'''<div class=\"tool-row\"><button id=\"copyTitle\">タイトルをコピー</button><button id=\"copyDescription\">概要欄をコピー</button><button id=\"copyAll\" class=\"primary\">全部コピー</button></div><div class=\"tool-row\"><button id=\"approvePublishMetadata\" class=\"primary\">${publishMetadataApproved?'✓ 投稿情報は確定済み':'✓ この投稿情報を確定'}</button></div><p id=\"publishApprovalNote\" class=\"notice\">${publishMetadataApproved?'現在の投稿情報は確定済みです。編集すると未確定に戻ります。':'入力途中は自動保存されます。完成したらこのボタンで確定してください。'}</p></section><section class=\"actions\">'''
 assert old_markup in m, 'publish markup marker missing'
 m = m.replace(old_markup, new_markup, 1)
 
