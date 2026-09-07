@@ -17,17 +17,16 @@ window.addEventListener('unhandledrejection', event => {
   showBootError(event.reason || 'Unhandled promise rejection');
 });
 
-try {
-  await import('./main.js');
-  const optionalModules = [
-    './subtitlePreviewNavigation.js',
-    './editorUndo.js',
-    './datasetExportUi.js',
-    './optionalAiModuleLoader.js'
-  ];
-  for (const modulePath of optionalModules) {
-    import(modulePath).catch(error => console.warn(`Optional module failed to load: ${modulePath}`, error));
-  }
-} catch (error) {
-  showBootError(error);
-}
+import('./main.js')
+  .then(() => {
+    const optionalModules = [
+      './subtitlePreviewNavigation.js',
+      './editorUndo.js',
+      './datasetExportUi.js',
+      './optionalAiModuleLoader.js'
+    ];
+    for (const modulePath of optionalModules) {
+      import(modulePath).catch(error => console.warn(`Optional module failed to load: ${modulePath}`, error));
+    }
+  })
+  .catch(showBootError);
