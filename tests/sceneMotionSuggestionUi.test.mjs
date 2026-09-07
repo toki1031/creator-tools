@@ -23,3 +23,14 @@ test('scene motion AI UI uses enhanced local multi-project training and stays ad
   assert.doesNotMatch(source, /saveProject\s*\(/);
   assert.doesNotMatch(source, /recordSceneMotionChange\s*\(/);
 });
+
+test('scene motion feedback is queued only from an explicit human change', () => {
+  assert.match(source, /createSceneMotionAiFeedbackRecord/);
+  assert.match(source, /queueProjectDecision/);
+  assert.match(source, /humanConfirmed:\s*true/);
+  assert.match(source, /finalMotion:\s*select\.value/);
+  assert.match(source, /aiSuggestedMotion/);
+  assert.match(source, /aiFeedbackConsumed/);
+  assert.match(source, /document\.addEventListener\('change',\s*captureHumanMotionFeedback,\s*true\)/);
+  assert.doesNotMatch(source, /dispatchEvent/);
+});
