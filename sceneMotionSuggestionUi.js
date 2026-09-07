@@ -6,6 +6,7 @@ import { createSceneMotionAiFeedbackRecord } from './sceneMotionAiFeedback.js';
 import { trainSceneMotionModel, predictSceneMotion } from './sceneMotionModel.js';
 import { evaluateAiSuggestionOutcomes } from './aiSuggestionOutcomeEvaluation.js';
 import { summarizeAiSuggestionEvidence } from './aiSuggestionQualityEvidence.js';
+import { assessAiSuggestionReadiness } from './aiSuggestionReadinessPolicy.js';
 import { createAiLearningSignature, createAiSuggestionRuntimeCache } from './aiSuggestionRuntimeCache.js';
 
 const LABEL_TEXT = {
@@ -128,7 +129,8 @@ async function renderSceneMotionSuggestions() {
     const contributingProjects = new Set(examples.map(example => example.projectId)).size;
     const evaluation = evaluateAiSuggestionOutcomes(corpus.decisions, 'scene-motion');
     const evidence = summarizeAiSuggestionEvidence(evaluation);
-    const ready = examples.length >= 5 && labels.size >= 2 && evidence.hasEnoughEvidence;
+    const readiness = assessAiSuggestionReadiness(evidence);
+    const ready = examples.length >= 5 && labels.size >= 2 && readiness.ready;
     return { examples, contributingProjects, ready, model: ready ? trainSceneMotionModel(examples) : null };
   });
   const { examples, contributingProjects, ready, model } = runtime;
