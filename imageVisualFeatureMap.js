@@ -13,6 +13,7 @@ export async function buildImageVisualFeatureMap(mediaLibrary = [], decodeImageD
   const featuresByAssetId = {};
   const seenIds = new Set();
   let eligibleAssets = 0;
+  let attemptedAssets = 0;
   let processedAssets = 0;
   let skippedAssets = 0;
   let failedAssets = 0;
@@ -20,7 +21,7 @@ export async function buildImageVisualFeatureMap(mediaLibrary = [], decodeImageD
   if (typeof decodeImageData !== 'function') {
     return {
       featureMapVersion: '0.65',
-      summary: { inputAssets: source.length, eligibleAssets: 0, processedAssets: 0, skippedAssets: source.length, failedAssets: 0, maxAssets },
+      summary: { inputAssets: source.length, eligibleAssets: 0, attemptedAssets: 0, processedAssets: 0, skippedAssets: source.length, failedAssets: 0, maxAssets },
       featuresByAssetId
     };
   }
@@ -33,10 +34,11 @@ export async function buildImageVisualFeatureMap(mediaLibrary = [], decodeImageD
     }
     seenIds.add(assetId);
     eligibleAssets += 1;
-    if (processedAssets >= maxAssets) {
+    if (attemptedAssets >= maxAssets) {
       skippedAssets += 1;
       continue;
     }
+    attemptedAssets += 1;
 
     try {
       const imageData = await decodeImageData(asset.data, assetId);
@@ -57,6 +59,7 @@ export async function buildImageVisualFeatureMap(mediaLibrary = [], decodeImageD
     summary: {
       inputAssets: source.length,
       eligibleAssets,
+      attemptedAssets,
       processedAssets,
       skippedAssets,
       failedAssets,
