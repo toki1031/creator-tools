@@ -13,7 +13,9 @@ test('scene transition AI UI uses enhanced local multi-project training and stay
   assert.match(source, /createAiEnhancedTrainingSet\(corpus\.decisions, 'scene-transition'\)/);
   assert.match(source, /evaluateAiSuggestionOutcomes\(corpus\.decisions, 'scene-transition'\)/);
   assert.match(source, /summarizeAiSuggestionEvidence/);
-  assert.match(source, /evidence\.hasEnoughEvidence/);
+  assert.match(source, /assessAiSuggestionReadiness\(evidence\)/);
+  assert.match(source, /readiness\.ready/);
+  assert.doesNotMatch(source, /evidence\.hasEnoughEvidence/);
   assert.match(source, /trainSceneTransitionModel/);
   assert.match(source, /predictSceneTransition/);
   assert.match(source, /createAiLearningSignature/);
@@ -35,6 +37,12 @@ test('scene transition AI UI uses enhanced local multi-project training and stay
   assert.match(bootLoader, /unhandledrejection/);
   assert.match(loader, /sceneTransitionSuggestionUi\.js/);
   assert.match(loader, /\.catch\(/);
+});
+
+test('scene transition does not train a proposal model unless the quality policy is ready', () => {
+  assert.match(source, /const ready = examples\.length >= 5 && labels\.size >= 2 && readiness\.ready/);
+  assert.match(source, /model: ready \? trainSceneTransitionModel\(examples\) : null/);
+  assert.match(source, /if \(!ready\) \{\s*clearAiProposal\(select\)/);
 });
 
 test('scene transition suggestion avoids self-triggering MutationObserver loops', () => {
