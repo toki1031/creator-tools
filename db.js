@@ -1,6 +1,7 @@
 const DB_NAME = "creator-os";
 const DB_VERSION = 1;
 const PROJECTS = "projects";
+const STORAGE_TIMEOUT_MS = 8000;
 const pendingProjectDecisions = new Map();
 
 function cloneDecision(value) {
@@ -12,6 +13,37 @@ function cloneDecision(value) {
   } catch {
     return null;
   }
+}
+
+function setBootStorageStage(message) {
+  try {
+    const note = document.querySelector('#app .boot p');
+    if (note) note.textContent = message;
+  } catch {}
+}
+
+function storageTimeoutError(stage) {
+  const error = new Error(`端末保存の${stage}が${Math.round(STORAGE_TIMEOUT_MS / 1000)}秒以内に完了しませんでした。SafariのWebサイトデータは削除せず、ページを閉じてから再度お試しください。`);
+  error.name = 'StorageTimeoutError';
+  return error;
+}
+
+function withStorageTimeout(executor, stage) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      fn(value);
+    };
+    const timer = setTimeout(() => finish(reject, storageTimeoutError(stage)), STORAGE_TIMEOUT_MS);
+    try {
+      executor(value => finish(resolve, value), error => finish(reject, error));
+    } catch (error) {
+      finish(reject, error);
+    }
+  });
 }
 
 export function queueProjectDecision(projectId, decision) {
@@ -75,7 +107,8 @@ export function normalizeStorageError(error, fallback = '保存できません�
 }
 
 function openDb() {
-  return new Promise((resolve, reject) => {
+  setBootStorageStage('端末データベースを開いています…');
+  return withStorageTimeout((resolve, reject) => {
     if (!('indexedDB' in globalThis)) return reject(new Error('このブラウザでは端末保存を利用できません。'));
     const request = indexedDB.open(DB_NAME, DB_VERSION);
     request.onupgradeneeded = () => {
@@ -87,34 +120,49 @@ function openDb() {
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error ?? new Error("データベースを開けませんでした。"));
-  });
+    request.onblocked = () => reject(new Error('端末データベースが他のタブまたは古い接続によりブロックされています。開いているCreator OSのタブを閉じてから再度お試しください。'));
+  }, 'データベース接続');
 }
 
 export async function listProjects() {
   const db = await openDb();
-  return new Promise((resolve, reject) => {
+  setBootStorageStage('保存済みプロジェクトを読み込んでいます…');
+  return withStorageTimeout((resolve, reject) => {
     const tx = db.transaction(PROJECTS, "readonly");
     const request = tx.objectStore(PROJECTS).getAll();
-    request.onsuccess = () => resolve(sortProjectsByUpdatedAt(request.result));
+    let result = [];
+    request.onsuccess = () => { result = sortProjectsByUpdatedAt(request.result); };
     request.onerror = () => reject(request.error);
-    tx.oncomplete = () => db.close();
+    tx.oncomplete = () => { db.close(); resolve(result); };
+    tx.onerror = () => { try { db.close(); } catch {} reject(tx.error ?? request.error); };
+    tx.onabort = () => { try { db.close(); } catch {} reject(tx.error ?? request.error ?? new Error('プロジェクト読み込みが中断されました。')); };
+  }, 'プロジェクト読み込み').catch(error => {
+    try { db.close(); } catch {}
+    throw error;
   });
 }
+
 export async function getProject(id) {
   const db = await openDb();
-  return new Promise((resolve, reject) => {
+  return withStorageTimeout((resolve, reject) => {
     const tx = db.transaction(PROJECTS, "readonly");
     const request = tx.objectStore(PROJECTS).get(id);
-    request.onsuccess = () => resolve(request.result);
+    let result;
+    request.onsuccess = () => { result = request.result; };
     request.onerror = () => reject(request.error);
-    tx.oncomplete = () => db.close();
+    tx.oncomplete = () => { db.close(); resolve(result); };
+    tx.onerror = () => { try { db.close(); } catch {} reject(tx.error ?? request.error); };
+    tx.onabort = () => { try { db.close(); } catch {} reject(tx.error ?? request.error ?? new Error('プロジェクト読み込みが中断されました。')); };
+  }, 'プロジェクト読み込み').catch(error => {
+    try { db.close(); } catch {}
+    throw error;
   });
 }
 export async function saveProject(project) {
   const projectId = String(project?.id || '').trim();
   const queuedDecisionIds = applyQueuedProjectDecisions(project);
   const db = await openDb();
-  return new Promise((resolve, reject) => {
+  return withStorageTimeout((resolve, reject) => {
     const tx = db.transaction(PROJECTS, "readwrite");
     const request = tx.objectStore(PROJECTS).put(project);
     let settled = false;
@@ -134,14 +182,21 @@ export async function saveProject(project) {
     };
     tx.onerror = () => fail(tx.error || request.error);
     tx.onabort = () => fail(tx.error || request.error);
+  }, 'プロジェクト保存').catch(error => {
+    try { db.close(); } catch {}
+    throw normalizeStorageError(error);
   });
 }
 export async function deleteProject(id) {
   const db = await openDb();
-  return new Promise((resolve, reject) => {
+  return withStorageTimeout((resolve, reject) => {
     const tx = db.transaction(PROJECTS, "readwrite");
     tx.objectStore(PROJECTS).delete(id);
     tx.oncomplete = () => { db.close(); resolve(); };
-    tx.onerror = () => reject(tx.error ?? new Error("削除できませんでした。"));
+    tx.onerror = () => { try { db.close(); } catch {} reject(tx.error ?? new Error("削除できませんでした。")); };
+    tx.onabort = () => { try { db.close(); } catch {} reject(tx.error ?? new Error("削除処理が中断されました。")); };
+  }, 'プロジェクト削除').catch(error => {
+    try { db.close(); } catch {}
+    throw normalizeStorageError(error, '削除できませんでした。');
   });
 }
