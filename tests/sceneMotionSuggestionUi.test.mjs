@@ -13,6 +13,9 @@ test('scene motion AI UI uses enhanced local multi-project training and stays ad
   assert.match(source, /evidence\.hasEnoughEvidence/);
   assert.match(source, /trainSceneMotionModel/);
   assert.match(source, /predictSceneMotion/);
+  assert.match(source, /createAiLearningSignature/);
+  assert.match(source, /createAiSuggestionRuntimeCache/);
+  assert.match(source, /learningCache\.get\(signature/);
   assert.match(source, /\[data-motion\]/);
   assert.match(source, /scene-motion-ai-suggestion/);
   assert.match(source, /examples\.length\s*>=\s*5/);
