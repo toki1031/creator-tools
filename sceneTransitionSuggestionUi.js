@@ -1,7 +1,10 @@
-import { getProject } from './db.js';
+import { getProject, listProjects } from './db.js';
 import { readRoute } from './router.js';
+import { createLocalLearningCorpus } from './localLearningCorpus.js';
 import { createSceneTransitionTrainingSet } from './sceneTransitionTrainingData.js';
 import { trainSceneTransitionModel, predictSceneTransition } from './sceneTransitionModel.js';
+import { evaluateAiSuggestionOutcomes } from './aiSuggestionOutcomeEvaluation.js';
+import { summarizeAiSuggestionEvidence } from './aiSuggestionQualityEvidence.js';
 
 const LABEL_TEXT = {
   fade: 'フェード',
@@ -26,13 +29,17 @@ async function renderSceneTransitionSuggestions() {
   const selects = [...document.querySelectorAll('[data-transition]')];
   if (!selects.length) return;
 
-  const project = await getProject(route.id);
+  const [project, projects] = await Promise.all([getProject(route.id), listProjects()]);
   if (!project) return;
 
-  const trainingSet = createSceneTransitionTrainingSet(project?.learning?.decisions || []);
+  const corpus = createLocalLearningCorpus(projects);
+  const trainingSet = createSceneTransitionTrainingSet(corpus.decisions);
   const examples = trainingSet.examples;
   const labels = new Set(examples.map(example => example.label));
-  const ready = examples.length >= 5 && labels.size >= 2;
+  const contributingProjects = new Set(examples.map(example => example.projectId)).size;
+  const evaluation = evaluateAiSuggestionOutcomes(corpus.decisions, 'scene-transition');
+  const evidence = summarizeAiSuggestionEvidence(evaluation);
+  const ready = examples.length >= 5 && labels.size >= 2 && evidence.hasEnoughEvidence;
   const model = ready ? trainSceneTransitionModel(examples) : null;
 
   for (const select of selects) {
@@ -53,7 +60,7 @@ async function renderSceneTransitionSuggestions() {
     }
 
     if (!ready) {
-      note.textContent = `AI提案：学習中（${examples.length}件）`;
+      note.textContent = `AI提案：学習中（${examples.length}件・${contributingProjects}プロジェクト）`;
       continue;
     }
 
