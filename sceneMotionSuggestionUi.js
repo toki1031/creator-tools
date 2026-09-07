@@ -1,7 +1,8 @@
-import { getProject, listProjects } from './db.js';
+import { getProject, listProjects, queueProjectDecision } from './db.js';
 import { readRoute } from './router.js';
 import { createLocalLearningCorpus } from './localLearningCorpus.js';
 import { createAiEnhancedTrainingSet } from './aiFeedbackTrainingData.js';
+import { createSceneMotionAiFeedbackRecord } from './sceneMotionAiFeedback.js';
 import { trainSceneMotionModel, predictSceneMotion } from './sceneMotionModel.js';
 import { evaluateAiSuggestionOutcomes } from './aiSuggestionOutcomeEvaluation.js';
 import { summarizeAiSuggestionEvidence } from './aiSuggestionQualityEvidence.js';
@@ -23,6 +24,83 @@ function scheduleRender() {
     scheduled = false;
     void renderSceneMotionSuggestions();
   });
+}
+
+function decisionId() {
+  return String(globalThis.crypto?.randomUUID?.() || `scene-motion-ai-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+}
+
+function clearAiProposal(select) {
+  delete select.dataset.aiSuggestedMotion;
+  delete select.dataset.aiModelVersion;
+  delete select.dataset.aiTrainingExamples;
+  delete select.dataset.aiSceneId;
+  delete select.dataset.aiSceneText;
+  delete select.dataset.aiDurationSec;
+  delete select.dataset.aiPlatform;
+  delete select.dataset.aiAspectRatio;
+  delete select.dataset.aiProposalKey;
+  delete select.dataset.aiFeedbackConsumed;
+}
+
+function attachAiProposal(select, { label, model, examples, scene, index, project }) {
+  const proposalKey = JSON.stringify([
+    label,
+    model?.modelVersion || '',
+    Number(model?.totalExamples ?? examples.length),
+    String(scene?.id || ''),
+    String(scene?.text || ''),
+    Number(scene?.durationSec),
+    index,
+    String(project?.platform || ''),
+    String(project?.aspectRatio || '')
+  ]);
+  if (select.dataset.aiProposalKey !== proposalKey) {
+    select.dataset.aiProposalKey = proposalKey;
+    select.dataset.aiFeedbackConsumed = '0';
+  }
+  select.dataset.aiSuggestedMotion = label;
+  select.dataset.aiModelVersion = String(model?.modelVersion || '');
+  select.dataset.aiTrainingExamples = String(Number(model?.totalExamples ?? examples.length));
+  select.dataset.aiSceneId = String(scene?.id || '');
+  select.dataset.aiSceneText = String(scene?.text || '');
+  select.dataset.aiDurationSec = Number.isFinite(Number(scene?.durationSec)) ? String(Number(scene.durationSec)) : '';
+  select.dataset.aiPlatform = String(project?.platform || '');
+  select.dataset.aiAspectRatio = String(project?.aspectRatio || '');
+}
+
+function captureHumanMotionFeedback(event) {
+  const select = event.target;
+  if (!(select instanceof HTMLSelectElement) || !select.matches('[data-motion]')) return;
+  if (select.dataset.aiFeedbackConsumed === '1') return;
+
+  const route = readRoute();
+  if (route?.page !== 'scenes' || !route?.id) return;
+  const suggestedMotion = select.dataset.aiSuggestedMotion;
+  if (!suggestedMotion) return;
+
+  const record = createSceneMotionAiFeedbackRecord({
+    decisionId: decisionId(),
+    projectId: route.id,
+    sceneId: select.dataset.aiSceneId,
+    timestamp: new Date().toISOString(),
+    suggestedMotion,
+    finalMotion: select.value,
+    humanConfirmed: true,
+    context: {
+      sceneText: select.dataset.aiSceneText,
+      sceneIndex: Number(select.dataset.motion),
+      durationSec: select.dataset.aiDurationSec,
+      platform: select.dataset.aiPlatform,
+      aspectRatio: select.dataset.aiAspectRatio
+    },
+    model: {
+      version: select.dataset.aiModelVersion,
+      trainingExamples: select.dataset.aiTrainingExamples
+    }
+  });
+  if (!record) return;
+  if (queueProjectDecision(route.id, record)) select.dataset.aiFeedbackConsumed = '1';
 }
 
 async function renderSceneMotionSuggestions() {
@@ -63,6 +141,7 @@ async function renderSceneMotionSuggestions() {
     }
 
     if (!ready) {
+      clearAiProposal(select);
       note.textContent = `AI提案：学習中（${examples.length}件・${contributingProjects}プロジェクト）`;
       continue;
     }
@@ -75,11 +154,13 @@ async function renderSceneMotionSuggestions() {
       aspectRatio: project.aspectRatio || ''
     });
     const label = prediction.label;
+    attachAiProposal(select, { label, model, examples, scene, index, project });
     const text = LABEL_TEXT[label] || label;
     note.textContent = select.value === label ? 'AI提案：現在の設定と一致' : `AI提案：${text}`;
   }
 }
 
+document.addEventListener('change', captureHumanMotionFeedback, true);
 const app = document.querySelector('#app');
 if (app && typeof MutationObserver === 'function') {
   new MutationObserver(scheduleRender).observe(app, { childList: true, subtree: true });
