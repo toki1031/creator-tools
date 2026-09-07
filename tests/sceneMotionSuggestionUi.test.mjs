@@ -4,10 +4,10 @@ import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('../sceneMotionSuggestionUi.js', import.meta.url), 'utf8');
 
-test('scene motion AI UI uses local multi-project evidence and stays advisory', () => {
+test('scene motion AI UI uses enhanced local multi-project training and stays advisory', () => {
   assert.match(source, /listProjects/);
   assert.match(source, /createLocalLearningCorpus/);
-  assert.match(source, /createSceneMotionTrainingSet\(corpus\.decisions\)/);
+  assert.match(source, /createAiEnhancedTrainingSet\(corpus\.decisions, 'scene-motion'\)/);
   assert.match(source, /evaluateAiSuggestionOutcomes\(corpus\.decisions, 'scene-motion'\)/);
   assert.match(source, /summarizeAiSuggestionEvidence/);
   assert.match(source, /evidence\.hasEnoughEvidence/);
