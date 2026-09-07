@@ -1,7 +1,10 @@
-import { getProject } from './db.js';
+import { getProject, listProjects } from './db.js';
 import { readRoute } from './router.js';
+import { createLocalLearningCorpus } from './localLearningCorpus.js';
 import { createSceneMotionTrainingSet } from './sceneMotionTrainingData.js';
 import { trainSceneMotionModel, predictSceneMotion } from './sceneMotionModel.js';
+import { evaluateAiSuggestionOutcomes } from './aiSuggestionOutcomeEvaluation.js';
+import { summarizeAiSuggestionEvidence } from './aiSuggestionQualityEvidence.js';
 
 const LABEL_TEXT = {
   'none': 'なし',
@@ -29,13 +32,17 @@ async function renderSceneMotionSuggestions() {
   const selects = [...document.querySelectorAll('[data-motion]')];
   if (!selects.length) return;
 
-  const project = await getProject(route.id);
+  const [project, projects] = await Promise.all([getProject(route.id), listProjects()]);
   if (!project) return;
 
-  const trainingSet = createSceneMotionTrainingSet(project?.learning?.decisions || []);
+  const corpus = createLocalLearningCorpus(projects);
+  const trainingSet = createSceneMotionTrainingSet(corpus.decisions);
   const examples = trainingSet.examples;
   const labels = new Set(examples.map(example => example.label));
-  const ready = examples.length >= 5 && labels.size >= 2;
+  const contributingProjects = new Set(examples.map(example => example.projectId)).size;
+  const evaluation = evaluateAiSuggestionOutcomes(corpus.decisions, 'scene-motion');
+  const evidence = summarizeAiSuggestionEvidence(evaluation);
+  const ready = examples.length >= 5 && labels.size >= 2 && evidence.hasEnoughEvidence;
   const model = ready ? trainSceneMotionModel(examples) : null;
 
   for (const select of selects) {
@@ -56,7 +63,7 @@ async function renderSceneMotionSuggestions() {
     }
 
     if (!ready) {
-      note.textContent = `AI提案：学習中（${examples.length}件）`;
+      note.textContent = `AI提案：学習中（${examples.length}件・${contributingProjects}プロジェクト）`;
       continue;
     }
 
