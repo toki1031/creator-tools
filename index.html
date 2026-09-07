@@ -15,18 +15,6 @@
   <div id="app">
     <main class="boot"><div><div class="boot-logo">✦</div><p>Creator OSを起動しています…</p></div></main>
   </div>
-  <script type="module" src="./main.js"></script>
-  <script type="module" src="./subtitlePreviewNavigation.js"></script>
-  <script type="module" src="./editorUndo.js"></script>
-  <script type="module" src="./datasetExportUi.js"></script>
-  <script type="module" src="./optionalAiModuleLoader.js"></script>
-  <script>
-    window.addEventListener('error', function (event) {
-      const app = document.getElementById('app');
-      if (!app) return;
-      const message = String(event.message || 'Unknown error').replace(/[&<>]/g, function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;'})[c]});
-      app.innerHTML = '<main class="boot"><section class="boot-error"><h1>Creator OSを起動できませんでした</h1><p>ファイルの読み込みに問題が発生しました。</p><pre>' + message + '</pre><button onclick="location.reload()">再読み込み</button></section></main>';
-    });
-  </script>
+  <script type="module" src="./bootLoader.js"></script>
 </body>
 </html>
