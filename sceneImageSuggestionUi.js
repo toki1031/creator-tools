@@ -6,6 +6,7 @@ import { createSceneImageVisualPairwiseTrainingSet } from './sceneImageVisualPai
 import { evaluateSceneImageVisualRanker } from './sceneImageVisualRankerEvaluation.js';
 import { assessSceneImageSuggestionReadiness } from './sceneImageSuggestionReadiness.js';
 import { trainSceneImageVisualRanker, rankSceneImageVisualCandidates } from './sceneImageVisualRanker.js';
+import { createImageAiRuntimeSignature } from './imageAiRuntimeSignature.js';
 
 const MIN_BASE_PAIRS = 5;
 const MIN_PROJECTS = 3;
@@ -31,8 +32,12 @@ function noteFor(card) {
   return note;
 }
 
+function setNoteText(note, text) {
+  if (note.textContent !== text) note.textContent = text;
+}
+
 function setNotes(text) {
-  document.querySelectorAll('.scene-card').forEach(card => { noteFor(card).textContent = text; });
+  document.querySelectorAll('.scene-card').forEach(card => { setNoteText(noteFor(card), text); });
 }
 
 function baseEvidence(decisions) {
@@ -45,10 +50,6 @@ function baseEvidence(decisions) {
     if (chosen) pairs += alternatives.filter(value => String(value?.assetId ?? value ?? '').trim() && String(value?.assetId ?? value ?? '').trim() !== chosen).length;
   }
   return { pairs, projects: projects.size };
-}
-
-function signature(projects, decisions) {
-  return projects.map(project => `${project?.id || ''}:${project?.updatedAt || ''}:${project?.mediaLibrary?.length || 0}`).join('|') + `|d:${decisions.length}`;
 }
 
 async function buildRuntime(projects, decisions) {
@@ -85,7 +86,7 @@ async function render() {
       return;
     }
 
-    const key = signature(projects, corpus.decisions);
+    const key = createImageAiRuntimeSignature(projects, corpus.decisions);
     if (!cachedPromise || key !== lastSignature) {
       lastSignature = key;
       cachedPromise = buildRuntime(projects, corpus.decisions).catch(error => {
@@ -109,9 +110,9 @@ async function render() {
       const ranked = rankSceneImageVisualCandidates(runtime.model, candidates);
       const best = ranked[0];
       const note = noteFor(card);
-      if (!best) note.textContent = 'AI画像提案：候補を分析できません';
-      else if (best.assetId === scene?.imageAssetId) note.textContent = 'AI画像提案：現在の画像と一致';
-      else note.textContent = `AI画像提案：${assetName(project, best.assetId)}`;
+      if (!best) setNoteText(note, 'AI画像提案：候補を分析できません');
+      else if (best.assetId === scene?.imageAssetId) setNoteText(note, 'AI画像提案：現在の画像と一致');
+      else setNoteText(note, `AI画像提案：${assetName(project, best.assetId)}`);
     });
   } catch (error) {
     console.warn('Image AI suggestion unavailable:', error);
