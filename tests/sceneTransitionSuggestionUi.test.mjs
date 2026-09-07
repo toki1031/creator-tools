@@ -25,3 +25,14 @@ test('scene transition AI UI uses enhanced local multi-project training and stay
   assert.doesNotMatch(source, /recordSceneTransitionChange\s*\(/);
   assert.match(index, /sceneTransitionSuggestionUi\.js/);
 });
+
+test('scene transition feedback is queued only from an explicit human change', () => {
+  assert.match(source, /createSceneTransitionAiFeedbackRecord/);
+  assert.match(source, /queueProjectDecision/);
+  assert.match(source, /humanConfirmed:\s*true/);
+  assert.match(source, /finalTransition:\s*select\.value/);
+  assert.match(source, /aiSuggestedTransition/);
+  assert.match(source, /aiFeedbackConsumed/);
+  assert.match(source, /document\.addEventListener\('change',\s*captureHumanTransitionFeedback,\s*true\)/);
+  assert.doesNotMatch(source, /dispatchEvent/);
+});
