@@ -28,6 +28,10 @@ function scheduleRender() {
   });
 }
 
+function setNoteText(note, text) {
+  if (note.textContent !== text) note.textContent = text;
+}
+
 function decisionId() {
   return String(globalThis.crypto?.randomUUID?.() || `scene-motion-ai-${Date.now()}-${Math.random().toString(16).slice(2)}`);
 }
@@ -148,7 +152,7 @@ async function renderSceneMotionSuggestions() {
 
     if (!ready) {
       clearAiProposal(select);
-      note.textContent = `AI提案：学習中（${examples.length}件・${contributingProjects}プロジェクト）`;
+      setNoteText(note, `AI提案：学習中（${examples.length}件・${contributingProjects}プロジェクト）`);
       continue;
     }
 
@@ -162,7 +166,7 @@ async function renderSceneMotionSuggestions() {
     const label = prediction.label;
     attachAiProposal(select, { label, model, examples, scene, index, project });
     const text = LABEL_TEXT[label] || label;
-    note.textContent = select.value === label ? 'AI提案：現在の設定と一致' : `AI提案：${text}`;
+    setNoteText(note, select.value === label ? 'AI提案：現在の設定と一致' : `AI提案：${text}`);
   }
 }
 
