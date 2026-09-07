@@ -38,6 +38,20 @@ function compactContext(record) {
   };
 }
 
+function exampleSignature(example = {}) {
+  const context = example.context || {};
+  return JSON.stringify([
+    safeString(example.projectId),
+    safeString(example.sceneId),
+    safeString(example.label),
+    safeString(context.sceneText),
+    finiteOrNull(context.sceneIndex),
+    finiteOrNull(context.durationSec),
+    safeString(context.platform),
+    safeString(context.aspectRatio)
+  ]);
+}
+
 export function createAiFeedbackExamples(decisions = [], decisionType) {
   const config = CONFIG[decisionType];
   if (!config) return [];
@@ -68,22 +82,25 @@ export function createAiFeedbackExamples(decisions = [], decisionType) {
 
 export function createAiEnhancedTrainingSet(decisions = [], decisionType) {
   const config = CONFIG[decisionType];
-  if (!config) return { trainingSetVersion: '0.51', decisionType: decisionType || '', baseExamples: 0, feedbackExamples: 0, examples: [] };
+  if (!config) return { trainingSetVersion: '0.56', decisionType: decisionType || '', baseExamples: 0, feedbackExamples: 0, deduplicatedFeedbackExamples: 0, examples: [] };
   const source = Array.isArray(decisions) ? decisions : [];
   const base = config.createBase(source).examples;
   const feedback = createAiFeedbackExamples(source, decisionType);
+  const baseSignatures = new Set(base.map(exampleSignature));
+  const uniqueFeedback = feedback.filter(example => !baseSignatures.has(exampleSignature(example)));
   return {
-    trainingSetVersion: '0.51',
+    trainingSetVersion: '0.56',
     decisionType,
     baseExamples: base.length,
-    feedbackExamples: feedback.length,
-    examples: [...base, ...feedback]
+    feedbackExamples: uniqueFeedback.length,
+    deduplicatedFeedbackExamples: feedback.length - uniqueFeedback.length,
+    examples: [...base, ...uniqueFeedback]
   };
 }
 
 export function createCreatorAiEnhancedTrainingSets(decisions = []) {
   return {
-    trainingSetVersion: '0.51',
+    trainingSetVersion: '0.56',
     motion: createAiEnhancedTrainingSet(decisions, 'scene-motion'),
     transition: createAiEnhancedTrainingSet(decisions, 'scene-transition')
   };
