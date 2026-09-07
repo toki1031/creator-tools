@@ -16,6 +16,9 @@ test('scene transition AI UI uses enhanced local multi-project training and stay
   assert.match(source, /evidence\.hasEnoughEvidence/);
   assert.match(source, /trainSceneTransitionModel/);
   assert.match(source, /predictSceneTransition/);
+  assert.match(source, /createAiLearningSignature/);
+  assert.match(source, /createAiSuggestionRuntimeCache/);
+  assert.match(source, /learningCache\.get\(signature/);
   assert.match(source, /\[data-transition\]/);
   assert.match(source, /scene-transition-ai-suggestion/);
   assert.match(source, /examples\.length\s*>=\s*5/);
