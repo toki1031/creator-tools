@@ -75,10 +75,12 @@ test('evaluation separates projects and is safe for empty input', () => {
     examples.push(example(projectId, i % 2 ? 'cut' : 'fade', i % 2 ? '短く強い切替' : 'ゆっくり余韻', i % 5));
   }
   const result = evaluateSceneTransitionExamples(examples, { validationRatio: 0.3, seed: 'transition-test' });
-  const trainProjects = new Set(result.split.projectSplits.filter(item => item.split === 'train').map(item => item.projectId));
-  const validationProjects = new Set(result.split.projectSplits.filter(item => item.split === 'validation').map(item => item.projectId));
-  for (const id of validationProjects) assert.equal(trainProjects.has(id), false);
+  const splits = result.split.projectSplits;
+  for (const projectId of new Set(examples.map(item => item.projectId))) {
+    assert.ok(['train', 'validation'].includes(splits[projectId]));
+  }
   assert.equal(result.evaluationVersion, '0.42');
+  assert.equal(result.metrics.evaluated + result.metrics.skipped, result.metrics.validationExamples);
   assert.ok(result.metrics.accuracy === null || (result.metrics.accuracy >= 0 && result.metrics.accuracy <= 1));
   assert.deepEqual(Object.keys(result.metrics.confusionMatrix), ['fade', 'cut']);
 
