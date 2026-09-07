@@ -32,19 +32,22 @@ export async function decodeImageDataUrlForFeatures(dataUrl, options = {}) {
 
   await new Promise((resolve, reject) => {
     let settled = false;
+    let timer = null;
     const finish = callback => value => {
       if (settled) return;
       settled = true;
-      clearTimer(timer);
+      if (timer != null) clearTimer(timer);
       callback(value);
     };
-    const timer = setTimer(finish(reject), timeoutMs, 'image-decode-timeout');
-    image.onload = finish(resolve);
-    image.onerror = finish(reject);
+    const resolveOnce = finish(resolve);
+    const rejectOnce = finish(reject);
+    image.onload = resolveOnce;
+    image.onerror = rejectOnce;
+    timer = setTimer(() => rejectOnce('image-decode-timeout'), timeoutMs);
     try {
       image.src = dataUrl;
     } catch (error) {
-      finish(reject)(error);
+      rejectOnce(error);
     }
   }).catch(error => {
     if (error === 'image-decode-timeout') throw new Error('image-decode-timeout');
