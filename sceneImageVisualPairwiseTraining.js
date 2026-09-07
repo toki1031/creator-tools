@@ -14,11 +14,20 @@ function safeString(value) {
   return /^(?:data|blob):/i.test(text) ? '' : text;
 }
 
-function featureFor(featureMap, assetId) {
+function directFeatureFor(featureMap, assetId) {
   if (!assetId || !featureMap) return null;
   if (featureMap instanceof Map) return featureMap.get(assetId) ?? null;
   if (typeof featureMap === 'object') return featureMap[assetId] ?? null;
   return null;
+}
+
+function featureFor(featureMap, projectId, assetId) {
+  if (!featureMap || !assetId) return null;
+  if (featureMap?.projectsById && typeof featureMap.projectsById === 'object') {
+    const scoped = featureMap.projectsById[projectId];
+    return directFeatureFor(scoped, assetId);
+  }
+  return directFeatureFor(featureMap, assetId);
 }
 
 function normalizeVisualFeatures(value) {
@@ -39,12 +48,13 @@ export function createSceneImageVisualPairwiseTrainingSet(decisions = [], featur
   let missingRejectedFeatures = 0;
 
   for (const example of base.examples) {
-    const chosenFeatures = normalizeVisualFeatures(featureFor(featureMap, example.chosenAssetId));
+    const projectId = safeString(example.projectId);
+    const chosenFeatures = normalizeVisualFeatures(featureFor(featureMap, projectId, example.chosenAssetId));
     if (!chosenFeatures) {
       missingChosenFeatures += 1;
       continue;
     }
-    const rejectedFeatures = normalizeVisualFeatures(featureFor(featureMap, example.rejectedAssetId));
+    const rejectedFeatures = normalizeVisualFeatures(featureFor(featureMap, projectId, example.rejectedAssetId));
     if (!rejectedFeatures) {
       missingRejectedFeatures += 1;
       continue;
@@ -52,7 +62,7 @@ export function createSceneImageVisualPairwiseTrainingSet(decisions = [], featur
 
     examples.push({
       decisionId: safeString(example.decisionId),
-      projectId: safeString(example.projectId),
+      projectId,
       sceneId: safeString(example.sceneId),
       context: { ...example.context },
       chosenAssetId: safeString(example.chosenAssetId),
@@ -66,6 +76,7 @@ export function createSceneImageVisualPairwiseTrainingSet(decisions = [], featur
     trainingSetVersion: '0.62',
     decisionType: 'scene-image-selection',
     featureVersion: '0.61',
+    featureScopeVersion: featureMap?.projectsById ? '0.66' : 'flat-legacy',
     summary: {
       inputDecisions: base.summary.inputDecisions,
       pairwiseCandidates: base.examples.length,
