@@ -1,4 +1,5 @@
 function finiteNumber(value) {
+  if (value === null || value === undefined || value === '' || typeof value === 'boolean') return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }
@@ -7,6 +8,11 @@ function clampThreshold(value, fallback = 0.6) {
   const number = finiteNumber(value);
   if (number === null) return fallback;
   return Math.min(1, Math.max(0, number));
+}
+
+function safeCount(value) {
+  const number = finiteNumber(value);
+  return number !== null && number >= 0 ? Math.floor(number) : 0;
 }
 
 export function assessAiSuggestionReadiness(evidence = {}, options = {}) {
@@ -31,8 +37,8 @@ export function assessAiSuggestionReadiness(evidence = {}, options = {}) {
     reason,
     minAccuracy,
     accuracy,
-    evaluated: Number.isFinite(Number(evidence?.evaluated)) ? Math.max(0, Math.floor(Number(evidence.evaluated))) : 0,
-    evaluatedProjects: Number.isFinite(Number(evidence?.evaluatedProjects)) ? Math.max(0, Math.floor(Number(evidence.evaluatedProjects))) : 0
+    evaluated: safeCount(evidence?.evaluated),
+    evaluatedProjects: safeCount(evidence?.evaluatedProjects)
   };
 }
 
