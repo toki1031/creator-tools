@@ -37,6 +37,12 @@ test('scene transition AI UI uses enhanced local multi-project training and stay
   assert.match(loader, /\.catch\(/);
 });
 
+test('scene transition suggestion avoids self-triggering MutationObserver loops', () => {
+  assert.match(source, /function setNoteText\(note, text\)/);
+  assert.match(source, /if \(note\.textContent !== text\) note\.textContent = text/);
+  assert.doesNotMatch(source, /\n\s*note\.textContent\s*=/);
+});
+
 test('scene transition feedback is queued only from an explicit human change', () => {
   assert.match(source, /createSceneTransitionAiFeedbackRecord/);
   assert.match(source, /queueProjectDecision/);
