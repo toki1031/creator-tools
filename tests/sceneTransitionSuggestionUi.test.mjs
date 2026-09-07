@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 const source = await readFile(new URL('../sceneTransitionSuggestionUi.js', import.meta.url), 'utf8');
 const index = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 const loader = await readFile(new URL('../optionalAiModuleLoader.js', import.meta.url), 'utf8');
+const bootLoader = await readFile(new URL('../bootLoader.js', import.meta.url), 'utf8');
 
 test('scene transition AI UI uses enhanced local multi-project training and stays advisory', () => {
   assert.match(source, /listProjects/);
@@ -24,7 +25,10 @@ test('scene transition AI UI uses enhanced local multi-project training and stay
   assert.doesNotMatch(source, /select\.value\s*=(?!=)/);
   assert.doesNotMatch(source, /saveProject\s*\(/);
   assert.doesNotMatch(source, /recordSceneTransitionChange\s*\(/);
-  assert.match(index, /optionalAiModuleLoader\.js/);
+  assert.match(index, /bootLoader\.js/);
+  assert.match(bootLoader, /await import\('\.\/main\.js'\)/);
+  assert.match(bootLoader, /optionalAiModuleLoader\.js/);
+  assert.match(bootLoader, /unhandledrejection/);
   assert.match(loader, /sceneTransitionSuggestionUi\.js/);
   assert.match(loader, /\.catch\(/);
 });
