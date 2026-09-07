@@ -14,7 +14,7 @@ test('scene motion AI UI stays advisory and uses trained motion data', () => {
   assert.match(source, /labels\.size\s*>=\s*2/);
   assert.match(source, /AI提案：学習中/);
   assert.match(source, /AI提案：現在の設定と一致/);
-  assert.doesNotMatch(source, /select\.value\s*=/);
+  assert.doesNotMatch(source, /select\.value\s*=(?!=)/);
   assert.doesNotMatch(source, /saveProject\s*\(/);
   assert.doesNotMatch(source, /recordSceneMotionChange\s*\(/);
 });
