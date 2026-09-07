@@ -1,7 +1,7 @@
 import { getProject, listProjects } from './db.js';
 import { readRoute } from './router.js';
 import { createLocalLearningCorpus } from './localLearningCorpus.js';
-import { createSceneTransitionTrainingSet } from './sceneTransitionTrainingData.js';
+import { createAiEnhancedTrainingSet } from './aiFeedbackTrainingData.js';
 import { trainSceneTransitionModel, predictSceneTransition } from './sceneTransitionModel.js';
 import { evaluateAiSuggestionOutcomes } from './aiSuggestionOutcomeEvaluation.js';
 import { summarizeAiSuggestionEvidence } from './aiSuggestionQualityEvidence.js';
@@ -33,7 +33,7 @@ async function renderSceneTransitionSuggestions() {
   if (!project) return;
 
   const corpus = createLocalLearningCorpus(projects);
-  const trainingSet = createSceneTransitionTrainingSet(corpus.decisions);
+  const trainingSet = createAiEnhancedTrainingSet(corpus.decisions, 'scene-transition');
   const examples = trainingSet.examples;
   const labels = new Set(examples.map(example => example.label));
   const contributingProjects = new Set(examples.map(example => example.projectId)).size;
