@@ -10,7 +10,9 @@ test('scene motion AI UI uses enhanced local multi-project training and stays ad
   assert.match(source, /createAiEnhancedTrainingSet\(corpus\.decisions, 'scene-motion'\)/);
   assert.match(source, /evaluateAiSuggestionOutcomes\(corpus\.decisions, 'scene-motion'\)/);
   assert.match(source, /summarizeAiSuggestionEvidence/);
-  assert.match(source, /evidence\.hasEnoughEvidence/);
+  assert.match(source, /assessAiSuggestionReadiness\(evidence\)/);
+  assert.match(source, /readiness\.ready/);
+  assert.doesNotMatch(source, /evidence\.hasEnoughEvidence/);
   assert.match(source, /trainSceneMotionModel/);
   assert.match(source, /predictSceneMotion/);
   assert.match(source, /createAiLearningSignature/);
@@ -25,6 +27,12 @@ test('scene motion AI UI uses enhanced local multi-project training and stays ad
   assert.doesNotMatch(source, /select\.value\s*=(?!=)/);
   assert.doesNotMatch(source, /saveProject\s*\(/);
   assert.doesNotMatch(source, /recordSceneMotionChange\s*\(/);
+});
+
+test('scene motion does not train a proposal model unless the quality policy is ready', () => {
+  assert.match(source, /const ready = examples\.length >= 5 && labels\.size >= 2 && readiness\.ready/);
+  assert.match(source, /model: ready \? trainSceneMotionModel\(examples\) : null/);
+  assert.match(source, /if \(!ready\) \{\s*clearAiProposal\(select\)/);
 });
 
 test('scene motion suggestion avoids self-triggering MutationObserver loops', () => {
