@@ -1,17 +1,14 @@
-import { createSceneMotionTrainingSet } from './sceneMotionTrainingData.js';
+import { createAiEnhancedTrainingSet } from './aiFeedbackTrainingData.js';
 import { trainSceneMotionModel, predictSceneMotion } from './sceneMotionModel.js';
-import { createSceneTransitionTrainingSet } from './sceneTransitionTrainingData.js';
 import { trainSceneTransitionModel, predictSceneTransition } from './sceneTransitionModel.js';
 
 const CONFIG = {
   'scene-motion': {
-    createSet: createSceneMotionTrainingSet,
     train: trainSceneMotionModel,
     predict: predictSceneMotion,
     labels: new Set(['none', 'zoom-in', 'zoom-out', 'pan-left', 'pan-right'])
   },
   'scene-transition': {
-    createSet: createSceneTransitionTrainingSet,
     train: trainSceneTransitionModel,
     predict: predictSceneTransition,
     labels: new Set(['fade', 'cut'])
@@ -20,7 +17,7 @@ const CONFIG = {
 
 function emptyResult(decisionType, totalExamples = 0) {
   return {
-    evaluationVersion: '0.44',
+    evaluationVersion: '0.58',
     decisionType,
     totalExamples,
     evaluated: 0,
@@ -36,7 +33,9 @@ export function evaluateAiSuggestionOutcomes(decisions = [], decisionType) {
   const config = CONFIG[decisionType];
   if (!config) return emptyResult(decisionType || '', 0);
 
-  const examples = config.createSet(decisions).examples;
+  // Evaluate the same deduplicated base + AI-feedback examples that the runtime
+  // model actually trains on. Project-level holdout still prevents leakage.
+  const examples = createAiEnhancedTrainingSet(decisions, decisionType).examples;
   if (examples.length < 2) return emptyResult(decisionType, examples.length);
 
   const outcomes = [];
@@ -44,8 +43,6 @@ export function evaluateAiSuggestionOutcomes(decisions = [], decisionType) {
   let changed = 0;
   let skipped = 0;
 
-  // Leave-one-project-out: an outcome is never predicted from records belonging
-  // to the same project. This prevents project-specific leakage.
   for (const example of examples) {
     const trainExamples = examples.filter(candidate => candidate.projectId !== example.projectId);
     const trainLabels = new Set(trainExamples.map(candidate => candidate.label));
@@ -77,7 +74,7 @@ export function evaluateAiSuggestionOutcomes(decisions = [], decisionType) {
 
   const evaluated = matched + changed;
   return {
-    evaluationVersion: '0.44',
+    evaluationVersion: '0.58',
     decisionType,
     totalExamples: examples.length,
     evaluated,
@@ -91,7 +88,7 @@ export function evaluateAiSuggestionOutcomes(decisions = [], decisionType) {
 
 export function evaluateCreatorAiSuggestions(decisions = []) {
   return {
-    evaluationVersion: '0.44',
+    evaluationVersion: '0.58',
     motion: evaluateAiSuggestionOutcomes(decisions, 'scene-motion'),
     transition: evaluateAiSuggestionOutcomes(decisions, 'scene-transition')
   };
