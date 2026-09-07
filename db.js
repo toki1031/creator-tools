@@ -141,7 +141,7 @@ export async function deleteProject(id) {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(PROJECTS, "readwrite");
     tx.objectStore(PROJECTS).delete(id);
-    tx.oncomplete = () => db.close();
+    tx.oncomplete = () => { db.close(); resolve(); };
     tx.onerror = () => reject(tx.error ?? new Error("削除できませんでした。"));
   });
 }
