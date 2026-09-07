@@ -26,7 +26,8 @@ test('scene transition AI UI uses enhanced local multi-project training and stay
   assert.doesNotMatch(source, /saveProject\s*\(/);
   assert.doesNotMatch(source, /recordSceneTransitionChange\s*\(/);
   assert.match(index, /bootLoader\.js/);
-  assert.match(bootLoader, /await import\('\.\/main\.js'\)/);
+  assert.match(bootLoader, /import\('\.\/main\.js'\)/);
+  assert.match(bootLoader, /\.then\(/);
   assert.match(bootLoader, /optionalAiModuleLoader\.js/);
   assert.match(bootLoader, /unhandledrejection/);
   assert.match(loader, /sceneTransitionSuggestionUi\.js/);
