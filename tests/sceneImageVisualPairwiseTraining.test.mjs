@@ -79,7 +79,17 @@ test('skips pairs when chosen or rejected visual features are unavailable', () =
   assert.equal(noRejected.summary.missingRejectedFeatures, 1);
 });
 
-test('supports Map feature lookup and rejects blocked asset ids through the base pair builder', () => {
+test('supports Map feature lookup for a valid audited decision', () => {
+  const map = new Map([
+    ['a0', feature()],
+    ['a1', feature()],
+    ['a2', feature()]
+  ]);
+  const result = createSceneImageVisualPairwiseTrainingSet([decision()], map);
+  assert.deepEqual(result.examples.map(example => example.rejectedAssetId), ['a0', 'a2']);
+});
+
+test('blocked asset URLs invalidate the source DecisionRecord before pairing', () => {
   const record = decision();
   record.alternatives = [{ imageAssetId: 'data:image/png;base64,blocked' }, { imageAssetId: 'a2' }];
   const map = new Map([
@@ -88,7 +98,7 @@ test('supports Map feature lookup and rejects blocked asset ids through the base
     ['a2', feature()]
   ]);
   const result = createSceneImageVisualPairwiseTrainingSet([record], map);
-  assert.deepEqual(result.examples.map(example => example.rejectedAssetId), ['a0', 'a2']);
+  assert.deepEqual(result.examples, []);
 });
 
 test('handles malformed input safely', () => {
