@@ -13,6 +13,9 @@ test('scene motion AI UI uses enhanced local multi-project training and stays ad
   assert.match(source, /evidence\.hasEnoughEvidence/);
   assert.match(source, /trainSceneMotionModel/);
   assert.match(source, /predictSceneMotion/);
+  assert.match(source, /createAiLearningSignature/);
+  assert.match(source, /createAiSuggestionRuntimeCache/);
+  assert.match(source, /learningCache\.get\(signature/);
   assert.match(source, /\[data-motion\]/);
   assert.match(source, /scene-motion-ai-suggestion/);
   assert.match(source, /examples\.length\s*>=\s*5/);
@@ -22,6 +25,12 @@ test('scene motion AI UI uses enhanced local multi-project training and stays ad
   assert.doesNotMatch(source, /select\.value\s*=(?!=)/);
   assert.doesNotMatch(source, /saveProject\s*\(/);
   assert.doesNotMatch(source, /recordSceneMotionChange\s*\(/);
+});
+
+test('scene motion suggestion avoids self-triggering MutationObserver loops', () => {
+  assert.match(source, /function setNoteText\(note, text\)/);
+  assert.match(source, /if \(note\.textContent !== text\) note\.textContent = text/);
+  assert.doesNotMatch(source, /\n\s*note\.textContent\s*=/);
 });
 
 test('scene motion feedback is queued only from an explicit human change', () => {

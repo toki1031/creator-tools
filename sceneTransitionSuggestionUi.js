@@ -6,6 +6,7 @@ import { createSceneTransitionAiFeedbackRecord } from './sceneTransitionAiFeedba
 import { trainSceneTransitionModel, predictSceneTransition } from './sceneTransitionModel.js';
 import { evaluateAiSuggestionOutcomes } from './aiSuggestionOutcomeEvaluation.js';
 import { summarizeAiSuggestionEvidence } from './aiSuggestionQualityEvidence.js';
+import { createAiLearningSignature, createAiSuggestionRuntimeCache } from './aiSuggestionRuntimeCache.js';
 
 const LABEL_TEXT = {
   fade: 'フェード',
@@ -13,6 +14,7 @@ const LABEL_TEXT = {
 };
 
 let scheduled = false;
+const learningCache = createAiSuggestionRuntimeCache();
 
 function scheduleRender() {
   if (scheduled) return;
@@ -21,6 +23,10 @@ function scheduleRender() {
     scheduled = false;
     void renderSceneTransitionSuggestions();
   });
+}
+
+function setNoteText(note, text) {
+  if (note.textContent !== text) note.textContent = text;
 }
 
 function decisionId() {
@@ -111,14 +117,18 @@ async function renderSceneTransitionSuggestions() {
   if (!project) return;
 
   const corpus = createLocalLearningCorpus(projects);
-  const trainingSet = createAiEnhancedTrainingSet(corpus.decisions, 'scene-transition');
-  const examples = trainingSet.examples;
-  const labels = new Set(examples.map(example => example.label));
-  const contributingProjects = new Set(examples.map(example => example.projectId)).size;
-  const evaluation = evaluateAiSuggestionOutcomes(corpus.decisions, 'scene-transition');
-  const evidence = summarizeAiSuggestionEvidence(evaluation);
-  const ready = examples.length >= 5 && labels.size >= 2 && evidence.hasEnoughEvidence;
-  const model = ready ? trainSceneTransitionModel(examples) : null;
+  const signature = createAiLearningSignature(corpus.decisions, ['scene-transition', 'scene-transition-ai-feedback']);
+  const runtime = learningCache.get(signature, () => {
+    const trainingSet = createAiEnhancedTrainingSet(corpus.decisions, 'scene-transition');
+    const examples = trainingSet.examples;
+    const labels = new Set(examples.map(example => example.label));
+    const contributingProjects = new Set(examples.map(example => example.projectId)).size;
+    const evaluation = evaluateAiSuggestionOutcomes(corpus.decisions, 'scene-transition');
+    const evidence = summarizeAiSuggestionEvidence(evaluation);
+    const ready = examples.length >= 5 && labels.size >= 2 && evidence.hasEnoughEvidence;
+    return { examples, contributingProjects, ready, model: ready ? trainSceneTransitionModel(examples) : null };
+  });
+  const { examples, contributingProjects, ready, model } = runtime;
 
   for (const select of selects) {
     const index = Number(select.dataset.transition);
@@ -139,7 +149,7 @@ async function renderSceneTransitionSuggestions() {
 
     if (!ready) {
       clearAiProposal(select);
-      note.textContent = `AI提案：学習中（${examples.length}件・${contributingProjects}プロジェクト）`;
+      setNoteText(note, `AI提案：学習中（${examples.length}件・${contributingProjects}プロジェクト）`);
       continue;
     }
 
@@ -153,7 +163,7 @@ async function renderSceneTransitionSuggestions() {
     const label = prediction.label;
     attachAiProposal(select, { label, model, examples, scene, index, project });
     const text = LABEL_TEXT[label] || label;
-    note.textContent = select.value === label ? 'AI提案：現在の設定と一致' : `AI提案：${text}`;
+    setNoteText(note, select.value === label ? 'AI提案：現在の設定と一致' : `AI提案：${text}`);
   }
 }
 

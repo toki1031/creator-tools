@@ -6,6 +6,7 @@ import { createSceneMotionAiFeedbackRecord } from './sceneMotionAiFeedback.js';
 import { trainSceneMotionModel, predictSceneMotion } from './sceneMotionModel.js';
 import { evaluateAiSuggestionOutcomes } from './aiSuggestionOutcomeEvaluation.js';
 import { summarizeAiSuggestionEvidence } from './aiSuggestionQualityEvidence.js';
+import { createAiLearningSignature, createAiSuggestionRuntimeCache } from './aiSuggestionRuntimeCache.js';
 
 const LABEL_TEXT = {
   'none': 'なし',
@@ -16,6 +17,7 @@ const LABEL_TEXT = {
 };
 
 let scheduled = false;
+const learningCache = createAiSuggestionRuntimeCache();
 
 function scheduleRender() {
   if (scheduled) return;
@@ -24,6 +26,10 @@ function scheduleRender() {
     scheduled = false;
     void renderSceneMotionSuggestions();
   });
+}
+
+function setNoteText(note, text) {
+  if (note.textContent !== text) note.textContent = text;
 }
 
 function decisionId() {
@@ -114,14 +120,18 @@ async function renderSceneMotionSuggestions() {
   if (!project) return;
 
   const corpus = createLocalLearningCorpus(projects);
-  const trainingSet = createAiEnhancedTrainingSet(corpus.decisions, 'scene-motion');
-  const examples = trainingSet.examples;
-  const labels = new Set(examples.map(example => example.label));
-  const contributingProjects = new Set(examples.map(example => example.projectId)).size;
-  const evaluation = evaluateAiSuggestionOutcomes(corpus.decisions, 'scene-motion');
-  const evidence = summarizeAiSuggestionEvidence(evaluation);
-  const ready = examples.length >= 5 && labels.size >= 2 && evidence.hasEnoughEvidence;
-  const model = ready ? trainSceneMotionModel(examples) : null;
+  const signature = createAiLearningSignature(corpus.decisions, ['scene-motion', 'scene-motion-ai-feedback']);
+  const runtime = learningCache.get(signature, () => {
+    const trainingSet = createAiEnhancedTrainingSet(corpus.decisions, 'scene-motion');
+    const examples = trainingSet.examples;
+    const labels = new Set(examples.map(example => example.label));
+    const contributingProjects = new Set(examples.map(example => example.projectId)).size;
+    const evaluation = evaluateAiSuggestionOutcomes(corpus.decisions, 'scene-motion');
+    const evidence = summarizeAiSuggestionEvidence(evaluation);
+    const ready = examples.length >= 5 && labels.size >= 2 && evidence.hasEnoughEvidence;
+    return { examples, contributingProjects, ready, model: ready ? trainSceneMotionModel(examples) : null };
+  });
+  const { examples, contributingProjects, ready, model } = runtime;
 
   for (const select of selects) {
     const index = Number(select.dataset.motion);
@@ -142,7 +152,7 @@ async function renderSceneMotionSuggestions() {
 
     if (!ready) {
       clearAiProposal(select);
-      note.textContent = `AI提案：学習中（${examples.length}件・${contributingProjects}プロジェクト）`;
+      setNoteText(note, `AI提案：学習中（${examples.length}件・${contributingProjects}プロジェクト）`);
       continue;
     }
 
@@ -156,7 +166,7 @@ async function renderSceneMotionSuggestions() {
     const label = prediction.label;
     attachAiProposal(select, { label, model, examples, scene, index, project });
     const text = LABEL_TEXT[label] || label;
-    note.textContent = select.value === label ? 'AI提案：現在の設定と一致' : `AI提案：${text}`;
+    setNoteText(note, select.value === label ? 'AI提案：現在の設定と一致' : `AI提案：${text}`);
   }
 }
 

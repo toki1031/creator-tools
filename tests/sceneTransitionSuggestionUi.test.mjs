@@ -16,6 +16,9 @@ test('scene transition AI UI uses enhanced local multi-project training and stay
   assert.match(source, /evidence\.hasEnoughEvidence/);
   assert.match(source, /trainSceneTransitionModel/);
   assert.match(source, /predictSceneTransition/);
+  assert.match(source, /createAiLearningSignature/);
+  assert.match(source, /createAiSuggestionRuntimeCache/);
+  assert.match(source, /learningCache\.get\(signature/);
   assert.match(source, /\[data-transition\]/);
   assert.match(source, /scene-transition-ai-suggestion/);
   assert.match(source, /examples\.length\s*>=\s*5/);
@@ -32,6 +35,12 @@ test('scene transition AI UI uses enhanced local multi-project training and stay
   assert.match(bootLoader, /unhandledrejection/);
   assert.match(loader, /sceneTransitionSuggestionUi\.js/);
   assert.match(loader, /\.catch\(/);
+});
+
+test('scene transition suggestion avoids self-triggering MutationObserver loops', () => {
+  assert.match(source, /function setNoteText\(note, text\)/);
+  assert.match(source, /if \(note\.textContent !== text\) note\.textContent = text/);
+  assert.doesNotMatch(source, /\n\s*note\.textContent\s*=/);
 });
 
 test('scene transition feedback is queued only from an explicit human change', () => {
