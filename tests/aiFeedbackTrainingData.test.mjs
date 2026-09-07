@@ -18,7 +18,7 @@ function feedback(type, id, projectId, sceneId, suggested, finalValue, action, t
   };
 }
 
-function baseMotion(id = 'm0') {
+function baseMotion(id = 'm0', overrides = {}) {
   return {
     id,
     decisionType: 'scene-motion',
@@ -29,7 +29,8 @@ function baseMotion(id = 'm0') {
     finalDecision: { motion: 'zoom-in' },
     humanAction: { type: 'select-scene-motion' },
     source: { type: 'human', feature: 'scene-editor', version: '0.5' },
-    timestamp: '2026-09-07T00:00:00.000Z'
+    timestamp: '2026-09-07T00:00:00.000Z',
+    ...overrides
   };
 }
 
@@ -66,19 +67,51 @@ test('strips data/blob context strings and does not mutate records', () => {
   assert.deepEqual(record, snapshot);
 });
 
-test('combines base human decisions and AI feedback deterministically', () => {
+test('combines base human decisions and distinct AI feedback deterministically', () => {
   const records = [
     baseMotion(),
     feedback('scene-motion-ai-feedback', 'f1', 'p1', 's1', 'zoom-in', 'zoom-in', 'accepted'),
     feedback('scene-transition-ai-feedback', 't1', 'p2', 's2', 'fade', 'cut', 'corrected')
   ];
   const motion = createAiEnhancedTrainingSet(records, 'scene-motion');
-  assert.equal(motion.trainingSetVersion, '0.51');
+  assert.equal(motion.trainingSetVersion, '0.56');
   assert.equal(motion.baseExamples, 1);
   assert.equal(motion.feedbackExamples, 1);
+  assert.equal(motion.deduplicatedFeedbackExamples, 0);
   assert.deepEqual(motion.examples.map(item => item.decisionId), ['m0', 'f1']);
 
   const combined = createCreatorAiEnhancedTrainingSets(records);
+  assert.equal(combined.trainingSetVersion, '0.56');
   assert.equal(combined.motion.examples.length, 2);
   assert.equal(combined.transition.feedbackExamples, 1);
+});
+
+test('does not double-weight AI feedback that represents the same human scene decision', () => {
+  const base = baseMotion('m1', {
+    projectId: 'p1',
+    sceneId: 's1',
+    context: { sceneText: 'scene', sceneIndex: 1, durationSec: 4, platform: 'youtube', aspectRatio: '9:16' },
+    finalDecision: { motion: 'pan-left' }
+  });
+  const matchingFeedback = feedback('scene-motion-ai-feedback', 'f1', 'p1', 's1', 'zoom-in', 'pan-left', 'corrected');
+  const result = createAiEnhancedTrainingSet([base, matchingFeedback], 'scene-motion');
+  assert.equal(result.baseExamples, 1);
+  assert.equal(result.feedbackExamples, 0);
+  assert.equal(result.deduplicatedFeedbackExamples, 1);
+  assert.deepEqual(result.examples.map(item => item.decisionId), ['m1']);
+});
+
+test('keeps feedback when the scene context or final label differs from the base example', () => {
+  const base = baseMotion('m1', {
+    projectId: 'p1',
+    sceneId: 's1',
+    context: { sceneText: 'scene', sceneIndex: 1, durationSec: 4, platform: 'youtube', aspectRatio: '9:16' },
+    finalDecision: { motion: 'zoom-in' }
+  });
+  const differentLabel = feedback('scene-motion-ai-feedback', 'f1', 'p1', 's1', 'zoom-in', 'pan-left', 'corrected');
+  const differentContext = feedback('scene-motion-ai-feedback', 'f2', 'p1', 's1', 'zoom-in', 'zoom-in', 'accepted', 'changed scene');
+  const result = createAiEnhancedTrainingSet([base, differentLabel, differentContext], 'scene-motion');
+  assert.equal(result.feedbackExamples, 2);
+  assert.equal(result.deduplicatedFeedbackExamples, 0);
+  assert.deepEqual(result.examples.map(item => item.decisionId), ['m1', 'f1', 'f2']);
 });
