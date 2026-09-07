@@ -5,10 +5,10 @@ import { readFile } from 'node:fs/promises';
 const source = await readFile(new URL('../sceneTransitionSuggestionUi.js', import.meta.url), 'utf8');
 const index = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 
-test('scene transition AI UI uses local multi-project evidence and stays advisory', () => {
+test('scene transition AI UI uses enhanced local multi-project training and stays advisory', () => {
   assert.match(source, /listProjects/);
   assert.match(source, /createLocalLearningCorpus/);
-  assert.match(source, /createSceneTransitionTrainingSet\(corpus\.decisions\)/);
+  assert.match(source, /createAiEnhancedTrainingSet\(corpus\.decisions, 'scene-transition'\)/);
   assert.match(source, /evaluateAiSuggestionOutcomes\(corpus\.decisions, 'scene-transition'\)/);
   assert.match(source, /summarizeAiSuggestionEvidence/);
   assert.match(source, /evidence\.hasEnoughEvidence/);
