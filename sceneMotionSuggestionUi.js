@@ -6,6 +6,7 @@ import { createSceneMotionAiFeedbackRecord } from './sceneMotionAiFeedback.js';
 import { trainSceneMotionModel, predictSceneMotion } from './sceneMotionModel.js';
 import { evaluateAiSuggestionOutcomes } from './aiSuggestionOutcomeEvaluation.js';
 import { summarizeAiSuggestionEvidence } from './aiSuggestionQualityEvidence.js';
+import { createAiLearningSignature, createAiSuggestionRuntimeCache } from './aiSuggestionRuntimeCache.js';
 
 const LABEL_TEXT = {
   'none': 'なし',
@@ -16,6 +17,7 @@ const LABEL_TEXT = {
 };
 
 let scheduled = false;
+const learningCache = createAiSuggestionRuntimeCache();
 
 function scheduleRender() {
   if (scheduled) return;
@@ -114,14 +116,18 @@ async function renderSceneMotionSuggestions() {
   if (!project) return;
 
   const corpus = createLocalLearningCorpus(projects);
-  const trainingSet = createAiEnhancedTrainingSet(corpus.decisions, 'scene-motion');
-  const examples = trainingSet.examples;
-  const labels = new Set(examples.map(example => example.label));
-  const contributingProjects = new Set(examples.map(example => example.projectId)).size;
-  const evaluation = evaluateAiSuggestionOutcomes(corpus.decisions, 'scene-motion');
-  const evidence = summarizeAiSuggestionEvidence(evaluation);
-  const ready = examples.length >= 5 && labels.size >= 2 && evidence.hasEnoughEvidence;
-  const model = ready ? trainSceneMotionModel(examples) : null;
+  const signature = createAiLearningSignature(corpus.decisions, ['scene-motion', 'scene-motion-ai-feedback']);
+  const runtime = learningCache.get(signature, () => {
+    const trainingSet = createAiEnhancedTrainingSet(corpus.decisions, 'scene-motion');
+    const examples = trainingSet.examples;
+    const labels = new Set(examples.map(example => example.label));
+    const contributingProjects = new Set(examples.map(example => example.projectId)).size;
+    const evaluation = evaluateAiSuggestionOutcomes(corpus.decisions, 'scene-motion');
+    const evidence = summarizeAiSuggestionEvidence(evaluation);
+    const ready = examples.length >= 5 && labels.size >= 2 && evidence.hasEnoughEvidence;
+    return { examples, contributingProjects, ready, model: ready ? trainSceneMotionModel(examples) : null };
+  });
+  const { examples, contributingProjects, ready, model } = runtime;
 
   for (const select of selects) {
     const index = Number(select.dataset.motion);
