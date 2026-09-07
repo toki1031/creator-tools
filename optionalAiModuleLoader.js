@@ -1,6 +1,7 @@
 const MODULES = [
   './sceneMotionSuggestionUi.js',
-  './sceneTransitionSuggestionUi.js'
+  './sceneTransitionSuggestionUi.js',
+  './sceneImageSuggestionUi.js'
 ];
 
 for (const modulePath of MODULES) {
