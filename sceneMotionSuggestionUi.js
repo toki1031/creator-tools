@@ -1,7 +1,7 @@
 import { getProject, listProjects } from './db.js';
 import { readRoute } from './router.js';
 import { createLocalLearningCorpus } from './localLearningCorpus.js';
-import { createSceneMotionTrainingSet } from './sceneMotionTrainingData.js';
+import { createAiEnhancedTrainingSet } from './aiFeedbackTrainingData.js';
 import { trainSceneMotionModel, predictSceneMotion } from './sceneMotionModel.js';
 import { evaluateAiSuggestionOutcomes } from './aiSuggestionOutcomeEvaluation.js';
 import { summarizeAiSuggestionEvidence } from './aiSuggestionQualityEvidence.js';
@@ -36,7 +36,7 @@ async function renderSceneMotionSuggestions() {
   if (!project) return;
 
   const corpus = createLocalLearningCorpus(projects);
-  const trainingSet = createSceneMotionTrainingSet(corpus.decisions);
+  const trainingSet = createAiEnhancedTrainingSet(corpus.decisions, 'scene-motion');
   const examples = trainingSet.examples;
   const labels = new Set(examples.map(example => example.label));
   const contributingProjects = new Set(examples.map(example => example.projectId)).size;
