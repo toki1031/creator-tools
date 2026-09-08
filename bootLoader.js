@@ -38,6 +38,7 @@ import('./main.js')
     clearTimeout(bootWatchdog);
     const optionalModules = [
       './subtitlePreviewNavigation.js',
+      './subtitleAlignUi.js',
       './editorUndo.js',
       './datasetExportUi.js',
       './optionalAiModuleLoader.js',

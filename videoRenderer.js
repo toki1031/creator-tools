@@ -228,7 +228,6 @@ function subtitleLines(text, maxChars = 16, maxLines = 2) {
   const raw = String(text || '').replace(/\r\n?/g, '\n').trim();
   if (!raw) return [];
 
-  // ユーザーの1回改行を最優先。指定行は文字数で勝手に組み直さない。
   if (raw.includes('\n')) {
     return raw.split('\n').map(v => v.trim()).filter(Boolean).slice(0, Math.max(1, maxLines));
   }
@@ -238,7 +237,6 @@ function subtitleLines(text, maxChars = 16, maxLines = 2) {
   while (chars.length) result.push(chars.splice(0, Math.max(1, maxChars)).join(''));
   return result.slice(0, Math.max(1, maxLines));
 }
-
 
 function activeSubtitlePhrase(scene, localTime, start, end, maxChars = 13) {
   const text = scene.subtitleText || scene.text || '';
@@ -294,21 +292,23 @@ function drawSubtitle(ctx, project, item, localTime, width, height) {
   const lineHeight = fontSize * 1.35;
   const paddingX = fontSize * .5;
   const paddingY = fontSize * .28;
+  const textAlign = style.align === 'left' || style.align === 'right' ? style.align : 'center';
   ctx.save();
   ctx.font = `900 ${fontSize}px -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif`;
-  ctx.textAlign = 'center';
+  ctx.textAlign = textAlign;
   ctx.textBaseline = 'middle';
   ctx.lineJoin = 'round';
   const widest = Math.max(...lines.map(line => ctx.measureText(line).width));
   const boxWidth = Math.min(width * .9, widest + paddingX * 2);
   const boxHeight = lines.length * lineHeight + paddingY * 2;
+  const boxLeft = (width - boxWidth) / 2;
   const effectivePosition = resolveEffectiveSubtitlePosition(scene, style, project.output?.subtitlePosition);
   const centerY = height * resolveSubtitleYRatio(effectivePosition.position, effectivePosition.offsetPercent, boxHeight / height / 2);
-  const x = width / 2;
+  const x = textAlign === 'left' ? boxLeft + paddingX : textAlign === 'right' ? boxLeft + boxWidth - paddingX : width / 2;
   const top = centerY - boxHeight / 2;
   if (style.backgroundEnabled) {
     ctx.fillStyle = hexAlpha(style.backgroundColor || '#000000', style.backgroundOpacity ?? .45);
-    roundedRect(ctx, (width - boxWidth) / 2, top, boxWidth, boxHeight, fontSize * .22);
+    roundedRect(ctx, boxLeft, top, boxWidth, boxHeight, fontSize * .22);
     ctx.fill();
   }
   const outline = Math.max(0, Number(style.outlineWidth || 0) * scale);
