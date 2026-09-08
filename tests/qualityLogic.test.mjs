@@ -1,65 +1,91 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applyDictionaryEntries, calculateBgmLoopCount, normalizeSubtitleContentForSync, splitIntoScenes, splitSubtitleCards, splitSubtitlePhrases, subtitleContentChanged } from '../qualityLogic.js';
+import { applyDictionaryEntries, calculateBgmLoopCount, normalizeSubtitleContentForSync, splitIntoScenes, splitSubtitleCards, splitSubtitlePhrases, splitSubtitleTimelineCards, subtitleContentChanged } from '../qualityLogic.js';
 import { resolveSubtitlePreviewCard } from '../subtitlePreviewNavigation.js';
 
 test('読み辞書は長い語を優先して本文を実際に置換する', () => {
   const entries = [{ from: '北斎', to: 'ほくさい' }, { from: '葛飾北斎', to: 'かつしかほくさい' }];
   assert.equal(applyDictionaryEntries('葛飾北斎と北斎', entries), 'かつしかほくさいとほくさい');
 });
+
 test('字幕カードは空行で分割し、1回改行は同じカード内に残す', () => {
   assert.deepEqual(splitSubtitleCards('一行目\n二行目\n\n次のカード'), ['一行目\n二行目', '次のカード']);
 });
-test('字幕フレーズは手動改行と空行の意味を維持する', () => {
-  assert.deepEqual(splitSubtitlePhrases('一行目\n二行目', 13), ['一行目\n二行目']);
-  assert.deepEqual(splitSubtitlePhrases('カード1\n\nカード2', 13), ['カード1', 'カード2']);
+
+test('長い手動改行字幕は最大行数ごとに時間切替カードへ分ける', () => {
+  assert.deepEqual(
+    splitSubtitleTimelineCards('一行目\n二行目\n三行目\n四行目', 13, 2),
+    ['一行目\n二行目', '三行目\n四行目']
+  );
 });
-test('字幕プレビューは2枚目のカードへ移動できる', () => {
-  const result = resolveSubtitlePreviewCard('一行目\n二行目\n\n次のカード', 1, 16, 2);
+
+test('明示空行カードを保ったまま単一改行をカード内レイアウトとして扱う', () => {
+  assert.deepEqual(
+    splitSubtitleTimelineCards('一行目\n二行目\n\n次のカード', 13, 2),
+    ['一行目\n二行目', '次のカード']
+  );
+});
+
+test('字幕フレーズは長文を自然な短いカードへ分割する', () => {
+  const phrases = splitSubtitlePhrases('90歳になれば、もっと奥義に近づく。100歳を超えれば、一点一画まで生きるようになるだろう。', 13, 2);
+  assert.ok(phrases.length >= 2);
+  assert.ok(phrases.every(Boolean));
+});
+
+test('字幕プレビューは自動生成された2枚目カードへ移動できる', () => {
+  const result = resolveSubtitlePreviewCard('一行目\n二行目\n三行目\n四行目', 1, 16, 2);
   assert.equal(result.cardCount, 2);
   assert.equal(result.index, 1);
-  assert.deepEqual(result.lines, ['次のカード']);
+  assert.deepEqual(result.lines, ['三行目', '四行目']);
   assert.equal(result.hasPrevious, true);
   assert.equal(result.hasNext, false);
 });
-test('字幕プレビューは単一改行を同じカード内の改行として保持する', () => {
+
+test('字幕プレビューは単一改行2行を同じカード内の改行として保持する', () => {
   const result = resolveSubtitlePreviewCard('一行目\n二行目', 0, 16, 2);
   assert.equal(result.cardCount, 1);
   assert.deepEqual(result.lines, ['一行目', '二行目']);
   assert.equal(result.hasPrevious, false);
   assert.equal(result.hasNext, false);
 });
+
 test('字幕カード数が減った場合はプレビュー位置を有効範囲へ補正する', () => {
   const result = resolveSubtitlePreviewCard('カード1', 8, 16, 2);
   assert.equal(result.cardCount, 1);
   assert.equal(result.index, 0);
   assert.deepEqual(result.lines, ['カード1']);
 });
+
 test('字幕同期判定は改行・空行・行端空白だけの変更を無視する', () => {
   const before = 'これは字幕テストです。';
   const after = ' これは字幕\r\nテストです。 \r\n\r\n';
   assert.equal(normalizeSubtitleContentForSync(after), before);
   assert.equal(subtitleContentChanged(before, after), false);
 });
+
 test('iPhone実機QAの改行だけ変更は文章変更と判定しない', () => {
   const before = 'これは元の文章です。';
   const after = 'これは元の\n文章です。';
   assert.equal(normalizeSubtitleContentForSync(after), before);
   assert.equal(subtitleContentChanged(before, after), false);
 });
+
 test('字幕同期判定は句読点や語句の変更を文章変更として扱う', () => {
   assert.equal(subtitleContentChanged('これは字幕です。', 'これは新しい字幕です。'), true);
   assert.equal(subtitleContentChanged('字幕です。', '字幕です'), true);
 });
+
 test('字幕同期用本文はカード分割を除いてシーン本文向け文章へ戻す', () => {
   assert.equal(normalizeSubtitleContentForSync('一行目\n二行目\n\n次のカード'), '一行目二行目次のカード');
 });
+
 test('シーン分割は目標尺から均等なシーン時間を割り当てる', () => {
   const scenes = splitIntoScenes('第一文です。第二文です。第三文です。', 60);
   assert.equal(scenes.length, 3);
   assert.deepEqual(scenes.map(scene => scene.durationSec), [20, 20, 20]);
   assert.deepEqual(scenes.map(scene => scene.order), [1, 2, 3]);
 });
+
 test('BGMループ回数を動画尺と音源尺から計算する', () => {
   assert.equal(calculateBgmLoopCount(58, 4, true), 15);
   assert.equal(calculateBgmLoopCount(10, 12, true), 1);

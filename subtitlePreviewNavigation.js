@@ -1,20 +1,14 @@
-import { splitSubtitleCards } from './qualityLogic.js';
+import { splitSubtitleTimelineCards } from './qualityLogic.js';
 import { resolveSubtitleYRatio } from './subtitlePosition.js';
 
 const clampInteger = (value, min, max) => Math.min(max, Math.max(min, Math.trunc(Number(value) || 0)));
 
 export function resolveSubtitlePreviewCard(value = '', requestedIndex = 0, maxChars = 16, maxLines = 2) {
-  const cards = splitSubtitleCards(value);
+  const cards = splitSubtitleTimelineCards(value, maxChars, maxLines);
   if (!cards.length) {
     return {
-      cards: [],
-      cardCount: 0,
-      index: 0,
-      card: '',
-      lines: [],
-      overflow: false,
-      hasPrevious: false,
-      hasNext: false
+      cards: [], cardCount: 0, index: 0, card: '', lines: [], overflow: false,
+      hasPrevious: false, hasNext: false
     };
   }
 
@@ -79,14 +73,8 @@ function installSubtitlePreviewNavigation() {
       controls.setAttribute('aria-label', '字幕カード切替');
       controls.innerHTML = '<button type="button" data-subtitle-preview-prev aria-label="前の字幕カード">◀ 前へ</button><span data-subtitle-preview-status aria-live="polite"></span><button type="button" data-subtitle-preview-next aria-label="次の字幕カード">次へ ▶</button>';
       previewBox.insertAdjacentElement('afterend', controls);
-      controls.querySelector('[data-subtitle-preview-prev]').addEventListener('click', () => {
-        cardIndex -= 1;
-        apply();
-      });
-      controls.querySelector('[data-subtitle-preview-next]').addEventListener('click', () => {
-        cardIndex += 1;
-        apply();
-      });
+      controls.querySelector('[data-subtitle-preview-prev]').addEventListener('click', () => { cardIndex -= 1; apply(); });
+      controls.querySelector('[data-subtitle-preview-next]').addEventListener('click', () => { cardIndex += 1; apply(); });
     }
 
     const textarea = app.querySelector(`[data-sub-text="${sceneIndex}"]`);
@@ -106,17 +94,18 @@ function installSubtitlePreviewNavigation() {
 
     const cardLabel = previewBox.querySelector('.subtitle-card-count');
     if (cardLabel && preview.cardCount > 1) {
-      const labelText = `字幕 ${preview.index + 1}/${preview.cardCount}（空行で切替）`;
+      const labelText = `字幕 ${preview.index + 1}/${preview.cardCount}（自動切替）`;
       if (cardLabel.textContent !== labelText) cardLabel.textContent = labelText;
     }
 
     const rendered = previewBox.querySelector('.subtitle-render');
     if (!rendered) return;
     const signature = `${sceneIndex}|${preview.index}|${preview.card}|${maxChars}|${maxLines}`;
-    if (rendered.dataset.previewCardSignature === signature) return;
-    rendered.dataset.previewCardSignature = signature;
-    rendered.classList.toggle('overflow', preview.overflow);
-    replacePreviewLines(rendered, preview.lines);
+    if (rendered.dataset.previewCardSignature !== signature) {
+      rendered.dataset.previewCardSignature = signature;
+      rendered.classList.toggle('overflow', preview.overflow);
+      replacePreviewLines(rendered, preview.lines);
+    }
 
     if (previewBox.clientHeight) {
       const scenePosition = app.querySelector(`[data-sub-position="${sceneIndex}"]`);
@@ -138,6 +127,24 @@ function installSubtitlePreviewNavigation() {
 
   const observer = new MutationObserver(scheduleApply);
   observer.observe(app, { childList: true, subtree: true });
+
+  // 編集中のSceneをプレビュー対象へ自動追従。Scene選択操作を不要にする。
+  app.addEventListener('focusin', event => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const sceneIndex = target.dataset?.subText;
+    if (sceneIndex == null) return;
+    const sceneSelect = app.querySelector('#previewScene');
+    if (!sceneSelect || sceneSelect.value === sceneIndex) return;
+    sceneSelect.value = sceneIndex;
+    lastSceneIndex = null;
+    cardIndex = 0;
+    scheduleApply();
+  });
+
+  app.addEventListener('input', event => {
+    if (event.target?.dataset?.subText != null) scheduleApply();
+  });
   app.addEventListener('change', event => {
     if (event.target?.id === 'previewScene') {
       lastSceneIndex = null;
