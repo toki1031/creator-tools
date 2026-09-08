@@ -5,16 +5,72 @@ export function applyDictionaryEntries(text, entries = []) {
     .reduce((result, item) => result.split(item.from).join(item.to), String(text ?? ''));
 }
 
+function splitSentenceUnits(value = '') {
+  return String(value || '').match(/[^。！？!?]+[。！？!?]?/g)?.map(x => x.trim()).filter(Boolean) || [];
+}
+
+function startsNewVisualBeat(value = '') {
+  return /^(?:しかし|だが|でも|一方|ところが|そして|さらに|また|すると|そこで|つまり|だから|なので|最後に|では|その後|やがて)/.test(String(value || '').trim());
+}
+
 export function splitIntoScenes(text, targetDuration = 60) {
-  const blocks = String(text ?? '').trim().split(/\n{2,}|(?<=[。！？])\s*/).map(x => x.trim()).filter(Boolean);
-  if (!blocks.length) return [];
-  const per = Math.max(2, Math.round(targetDuration / blocks.length));
-  return blocks.map((sceneText, index) => ({
+  const raw = String(text ?? '').replace(/\r\n?/g, '\n').trim();
+  if (!raw) return [];
+
+  const paragraphs = raw.split(/\n\s*\n+/).map(x => x.trim()).filter(Boolean);
+  const units = paragraphs.flatMap((paragraph, paragraphIndex) => {
+    const sentences = splitSentenceUnits(paragraph);
+    return sentences.map((sentence, sentenceIndex) => ({
+      text: sentence,
+      paragraphIndex,
+      sentenceIndex,
+      paragraphStart: sentenceIndex === 0
+    }));
+  });
+  if (!units.length) return [];
+
+  const desiredCount = Math.max(1, Math.min(units.length, Math.round(Math.max(5, Number(targetDuration) || 60) / 6.5)));
+  const totalChars = units.reduce((sum, unit) => sum + Array.from(unit.text).length, 0);
+  const targetChars = Math.max(6, totalChars / desiredCount);
+  const maxChars = Math.max(20, targetChars * 1.45);
+  const minCharsBeforeBeatSplit = Math.max(8, targetChars * 0.45);
+  const groups = [];
+  let current = [];
+  let currentChars = 0;
+
+  const flush = () => {
+    if (!current.length) return;
+    groups.push(current.map(unit => unit.text).join(''));
+    current = [];
+    currentChars = 0;
+  };
+
+  for (const unit of units) {
+    const chars = Array.from(unit.text).length;
+    const hardParagraphBreak = unit.paragraphStart && current.length > 0;
+    const visualBeatBreak = startsNewVisualBeat(unit.text) && currentChars >= minCharsBeforeBeatSplit;
+    const wouldOverflow = current.length > 0 && currentChars + chars > maxChars;
+    if (hardParagraphBreak || visualBeatBreak || wouldOverflow) flush();
+    current.push(unit);
+    currentChars += chars;
+    if (currentChars >= targetChars && groups.length + 1 < desiredCount) flush();
+  }
+  flush();
+
+  if (groups.length > 1) {
+    const lastChars = Array.from(groups.at(-1)).length;
+    if (lastChars < Math.max(6, targetChars * 0.3)) groups[groups.length - 2] += groups.pop();
+  }
+
+  const safeDuration = Math.max(5, Number(targetDuration) || 60);
+  const weights = groups.map(sceneText => Math.max(1, Array.from(sceneText).length));
+  const weightTotal = weights.reduce((a, b) => a + b, 0) || 1;
+  return groups.map((sceneText, index) => ({
     id: globalThis.crypto?.randomUUID?.() || `scene-${Date.now()}-${index}`,
     order: index + 1,
     text: sceneText,
     speechText: sceneText,
-    durationSec: per,
+    durationSec: Math.max(2, Math.round((safeDuration * weights[index] / weightTotal) * 100) / 100),
     imageData: '',
     motion: 'zoom-in',
     transition: 'fade'
@@ -99,9 +155,7 @@ export function splitSubtitleTimelineCards(text, maxChars = 13, maxLines = 2) {
   for (const card of explicitCards) {
     const manualLines = card.split('\n').map(line => line.trim()).filter(Boolean);
     if (manualLines.length > 1) {
-      for (let i = 0; i < manualLines.length; i += safeMaxLines) {
-        result.push(manualLines.slice(i, i + safeMaxLines).join('\n'));
-      }
+      for (let i = 0; i < manualLines.length; i += safeMaxLines) result.push(manualLines.slice(i, i + safeMaxLines).join('\n'));
       continue;
     }
     result.push(...naturalSubtitlePhrases(card, maxChars));
