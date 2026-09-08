@@ -19,7 +19,7 @@ audio,progress{width:100%;margin-top:12px}
 </head>
 <body><div class="wrap">
 <a class="btn secondary" id="returnToProject" href="./index.html">← このプロジェクトのシーン編集へ戻る</a>
-<h1>無料 Voice Lab <small>Sprint 3.9.2</small></h1>
+<h1>無料 Voice Lab <small>v1.1</small></h1>
 <p class="muted">シーン編集後のナレーション工程です。確定した各シーンからKokoro音声を生成し、WAV実尺を基準にシーン尺・字幕尺を自動同期します。</p>
 
 <div class="card">
@@ -32,8 +32,8 @@ audio,progress{width:100%;margin-top:12px}
 
 <div class="card">
 <h2>2. シーン別ナレーション同期（推奨）</h2>
-<p class="muted">Creator OSのシーンを読み込み、1シーンずつ音声を自動生成します。生成したWAVの実尺を基準に、映像のシーン尺と字幕表示尺も自動調整します。</p>
-<button id="generateScenes" disabled>全シーンの音声を生成して同期</button>
+<p class="muted">1シーン生成するたびに保存します。途中でSafariを離れても、文章と声が変わっていない生成済みシーンは次回スキップして続きから再開します。</p>
+<button id="generateScenes" disabled>未生成・変更シーンだけ生成して同期</button>
 <progress id="sceneProg" max="100" value="0"></progress>
 <pre id="sceneResult">音声エンジン準備後に実行できます。</pre>
 </div>
@@ -60,13 +60,14 @@ audio,progress{width:100%;margin-top:12px}
 <div class="card">
 <h2>4. 登録状態</h2>
 <pre id="registered">未登録</pre>
-<p class="muted">登録した音声は、対象プロジェクトの narration.audioData にWAVとして保存します。出力画面の素材チェックで「ナレーション ✓」になり、そのまま動画生成へ使用できます。</p>
+<p class="muted">登録した音声は端末内のプロジェクトに保存します。シーン別生成は各シーンへ保存され、次回の再開判定にも使用します。</p>
 </div>
 </div>
 
 <script type="module">
 import { getProject, saveProject } from "./db.js";
 import { recordNarrationVoiceDecision } from "./decisionLog.js";
+import { canReuseSceneNarration, createNarrationFingerprint, sceneNarrationStatus } from "./narrationResume.js";
 const $=s=>document.querySelector(s);
 document.documentElement.dataset.voiceLabBoot = 'js-started';
 let tts=null, wavBlob=null, wavUrl=null;
@@ -86,6 +87,25 @@ const blobToDataUrl = blob => new Promise((resolve,reject)=>{
   r.onerror=()=>reject(r.error || new Error('WAVのData URL変換に失敗しました'));
   r.readAsDataURL(blob);
 });
+const sceneText = scene => String(scene?.speechText||scene?.subtitleText||scene?.text||'').trim();
+
+async function updateResumeSummary(){
+  if(projectId==='default') return;
+  try{
+    const project=await getProject(projectId);
+    if(!project) return;
+    const voice=$('#voice').value;
+    const scenes=Array.isArray(project.scenes)?project.scenes:[];
+    const states=scenes.map(scene=>sceneNarrationStatus(scene,{text:sceneText(scene),voiceId:voice}));
+    const reusable=states.filter(x=>x==='reusable').length;
+    const stale=states.filter(x=>x==='stale').length;
+    const missing=states.filter(x=>x==='missing').length;
+    if(scenes.length){
+      setLog('#sceneResult',`再開状態：そのまま再利用 ${reusable}/${scenes.length}、再生成 ${stale+missing}/${scenes.length}${stale?`（文章・声変更など ${stale}）`:''}\n生成開始後は1シーンごとに保存します。`,reusable?'ok':'warn');
+      $('#sceneProg').value=Math.round((reusable/scenes.length)*100);
+    }
+  }catch(e){}
+}
 
 async function loadProjectIntoVoiceLab(){
   if(projectId==='default') return;
@@ -96,11 +116,9 @@ async function loadProjectIntoVoiceLab(){
     const n=project.narration||{};
     if(n.voiceId && [...$('#voice').options].some(o=>o.value===n.voiceId)) $('#voice').value=n.voiceId;
     if(n.audioData){
-      setLog('#registered',
-        `プロジェクト登録済み ✓\nproject=${projectId}\nvoice=${n.voiceId||n.fileName||'不明'}\nsource=${n.source||'不明'}\n出力画面でそのまま使用できます。`,
-        'ok'
-      );
+      setLog('#registered',`プロジェクト登録済み ✓\nproject=${projectId}\nvoice=${n.voiceId||n.fileName||'不明'}\nsource=${n.source||'不明'}\n出力画面でそのまま使用できます。`,'ok');
     }
+    await updateResumeSummary();
   }catch(e){
     setLog('#registered','プロジェクト読込警告:\n'+(e?.message||e),'warn');
   }
@@ -123,7 +141,8 @@ async function loadRegistered(){
  }catch(e){}
 }
 loadRegistered();
-loadProjectIntoVoiceLab();
+await loadProjectIntoVoiceLab();
+$('#voice').onchange=()=>{ void updateResumeSummary(); };
 
 $('#prepare').onclick=async()=>{
  $('#prepare').disabled=true; $('#prog').value=5;
@@ -163,58 +182,26 @@ $('#generate').onclick=async()=>{
 $('#register').onclick=async()=>{
  try{
   if(!wavBlob) throw new Error('先に音声を生成してください。');
-  if(projectId==='default') throw new Error('プロジェクトIDがありません。Creator OSの「無料Voice Labを開く」から開いてください。');
-
+  if(projectId==='default') throw new Error('プロジェクトIDがありません。Creator OSのVoice Labから開いてください。');
   const voice=$('#voice').value;
   const text=$('#text').value.trim();
   const mime=wavBlob.type||'audio/wav';
   const audioData=await blobToDataUrl(wavBlob);
-
-  // 1) Creator OS本体のプロジェクトへ正式保存。
   const project=await getProject(projectId);
   if(!project) throw new Error(`対象プロジェクトが見つかりません: ${projectId}`);
-
   const narrationVoiceBefore=project.narration?.voiceId;
   const hadProjectNarrationBefore=Boolean(project.narration?.audioData);
   const sceneNarrationCountBefore=(Array.isArray(project.scenes)?project.scenes:[]).filter(scene=>Boolean(scene?.narration?.audioData)).length;
-
-  project.narration={
-    ...(project.narration||{}),
-    audioData,
-    fileName:`Kokoro_${voice}.wav`,
-    mimeType:mime,
-    source:'kokoro-js-jp',
-    voiceId:voice,
-    volume:project.narration?.volume ?? 1
-  };
-  recordNarrationVoiceDecision(project,{
-    beforeVoiceId:narrationVoiceBefore,
-    afterVoiceId:voice,
-    generationMode:'full',
-    hadProjectNarration:hadProjectNarrationBefore,
-    sceneNarrationCountBefore
-  });
+  project.narration={...(project.narration||{}),audioData,fileName:`Kokoro_${voice}.wav`,mimeType:mime,source:'kokoro-js-jp',voiceId:voice,volume:project.narration?.volume ?? 1};
+  recordNarrationVoiceDecision(project,{beforeVoiceId:narrationVoiceBefore,afterVoiceId:voice,generationMode:'full',hadProjectNarration:hadProjectNarrationBefore,sceneNarrationCountBefore});
   project.speechScript=text || project.speechScript || '';
   project.updatedAt=new Date().toISOString();
   await saveProject(project);
-
-  // 2) 生成WAV Blobも端末内へ保持（再利用・診断用）。
   const db=await openDB();
   const tx=db.transaction('narrations','readwrite');
-  const item={projectId,blob:wavBlob,voice,text,mime,updatedAt:new Date().toISOString()};
-  tx.objectStore('narrations').put(item);
+  tx.objectStore('narrations').put({projectId,blob:wavBlob,voice,text,mime,updatedAt:new Date().toISOString()});
   await new Promise((res,rej)=>{tx.oncomplete=res;tx.onerror=()=>rej(tx.error)});
-
-  setLog('#registered',
-    `登録完了 ✓
-project=${projectId}
-voice=${voice}
-WAV=${(wavBlob.size/1024).toFixed(1)}KB
-project.narration.audioData 保存済み
-
-次はCreator OSへ戻り、出力画面の素材チェックで「ナレーション ✓」を確認して動画を生成してください。`,
-    'ok'
-  );
+  setLog('#registered',`登録完了 ✓\nproject=${projectId}\nvoice=${voice}\nWAV=${(wavBlob.size/1024).toFixed(1)}KB\nproject.narration.audioData 保存済み`,'ok');
  }catch(e){
   setLog('#registered','登録失敗:\n'+(e?.stack||e),'bad');
  }
@@ -247,25 +234,33 @@ $('#generateScenes').onclick=async()=>{
     const narrationVoiceBefore=project.narration?.voiceId;
     const hadProjectNarrationBefore=Boolean(project.narration?.audioData);
     const sceneNarrationCountBefore=scenes.filter(scene=>Boolean(scene?.narration?.audioData)).length;
-
     const voice=$('#voice').value;
     let total=0;
+    let generated=0;
+    let reused=0;
     const results=[];
-    $('#sceneProg').value=0;
 
     for(let i=0;i<scenes.length;i++){
       const scene=scenes[i];
-      const text=String(scene.speechText||scene.subtitleText||scene.text||'').trim();
+      const text=sceneText(scene);
       if(!text) throw new Error(`シーン${i+1}の文章が空です。`);
-      setLog('#sceneResult',`生成中… ${i+1}/${scenes.length}\nシーン${i+1}: ${text}`,'warn');
 
+      if(canReuseSceneNarration(scene,{text,voiceId:voice})){
+        const sceneDuration=Math.max(0.5,Number(scene.durationSec)||Number(scene.narration.durationSec)||0.5);
+        total+=sceneDuration;
+        reused++;
+        results.push(`シーン${i+1}: 保存済み音声を再利用`);
+        $('#sceneProg').value=Math.round(((i+1)/scenes.length)*100);
+        setLog('#sceneResult',`再開中… ${i+1}/${scenes.length}\n再利用 ${reused} / 新規生成 ${generated}`,'warn');
+        continue;
+      }
+
+      setLog('#sceneResult',`生成中… ${i+1}/${scenes.length}\nシーン${i+1}: ${text}\n再利用 ${reused} / 新規生成 ${generated}`,'warn');
       const out=await tts.speak(text,voice);
       const blob=out.toBlob();
       const duration=await wavDuration(blob);
       if(!(duration>0)) throw new Error(`シーン${i+1}の音声尺を取得できませんでした。`);
       const audioData=await blobToDataUrl(blob);
-
-      // 語尾切れ防止の余白。映像・字幕は音声より0.15秒だけ長くする。
       const sceneDuration=Math.max(0.5, Math.round((duration+0.15)*100)/100);
       scene.speechText=text;
       if(!String(scene.subtitleText||'').trim()) scene.subtitleText=scene.text||text;
@@ -278,39 +273,28 @@ $('#generateScenes').onclick=async()=>{
         mimeType:blob.type||'audio/wav',
         source:'kokoro-js-jp',
         voiceId:voice,
-        durationSec:duration
+        durationSec:duration,
+        fingerprint:createNarrationFingerprint({text,voiceId:voice})
       };
       total+=sceneDuration;
+      generated++;
       results.push(`シーン${i+1}: 音声 ${duration.toFixed(2)}秒 → シーン ${sceneDuration.toFixed(2)}秒`);
       $('#sceneProg').value=Math.round(((i+1)/scenes.length)*100);
 
-      // 1シーンごとに保存。Safariで途中停止しても生成済み分を失わない。
+      // 生成直後に保存。途中停止しても次回はこのシーンを再利用できる。
       project.updatedAt=new Date().toISOString();
       await saveProject(project);
     }
 
     project.targetDurationSec=Math.round(total*100)/100;
-    project.narration={
-      ...(project.narration||{}),
-      source:'kokoro-js-jp-scenes',
-      voiceId:voice,
-      sceneMode:true,
-      sceneCount:scenes.length
-    };
-    recordNarrationVoiceDecision(project,{
-      beforeVoiceId:narrationVoiceBefore,
-      afterVoiceId:voice,
-      generationMode:'scenes',
-      hadProjectNarration:hadProjectNarrationBefore,
-      sceneNarrationCountBefore
-    });
+    project.narration={...(project.narration||{}),source:'kokoro-js-jp-scenes',voiceId:voice,sceneMode:true,sceneCount:scenes.length};
+    if(generated>0 || narrationVoiceBefore!==voice){
+      recordNarrationVoiceDecision(project,{beforeVoiceId:narrationVoiceBefore,afterVoiceId:voice,generationMode:'scenes',hadProjectNarration:hadProjectNarrationBefore,sceneNarrationCountBefore});
+    }
     project.updatedAt=new Date().toISOString();
     await saveProject(project);
 
-    setLog('#sceneResult',
-      `シーン同期完了 ✓\n${results.join('\n')}\n\n合計 ${total.toFixed(2)}秒\n映像尺・字幕尺をWAV実尺へ同期しました。\nCreator OSのシーン編集へ戻って確認してください。`,
-      'ok'
-    );
+    setLog('#sceneResult',`シーン同期完了 ✓\n${results.join('\n')}\n\n再利用 ${reused}件 / 新規生成 ${generated}件\n合計 ${total.toFixed(2)}秒\n映像尺・字幕尺をWAV実尺へ同期しました。`,'ok');
     if(!document.querySelector('#afterSceneSync')){
       const box=document.createElement('div');
       box.id='afterSceneSync';
