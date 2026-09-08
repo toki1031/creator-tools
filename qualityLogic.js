@@ -31,7 +31,7 @@ export function splitIntoScenes(text, targetDuration = 60) {
 
   const desiredCount = Math.max(1, Math.min(units.length, Math.round(Math.max(5, Number(targetDuration) || 60) / 6.5)));
   const totalChars = units.reduce((sum, unit) => sum + Array.from(unit.text).length, 0);
-  const targetChars = Math.max(12, totalChars / desiredCount);
+  const targetChars = Math.max(6, totalChars / desiredCount);
   const maxChars = Math.max(20, targetChars * 1.45);
   const minCharsBeforeBeatSplit = Math.max(8, targetChars * 0.45);
   const groups = [];
