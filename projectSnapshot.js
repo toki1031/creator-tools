@@ -1,7 +1,10 @@
 const clone = value => value == null ? value : JSON.parse(JSON.stringify(value));
 const SNAPSHOT_FIELDS = ['script', 'speechScript', 'displayScript', 'platform', 'aspectRatio', 'genre', 'targetDurationSec', 'subtitleStyle', 'publish'];
 const SCENE_FIELDS = ['id', 'text', 'speechText', 'subtitleText', 'durationSec', 'imageAssetId', 'motion', 'transition', 'subtitlePosition'];
-const BGM_FIELDS = ['enabled', 'volume', 'loop', 'ducking', 'fadeInSec', 'fadeOutSec', 'title', 'fileName', 'category', 'sourceUrl', 'license', 'commercialUse', 'credit', 'audioAssetId'];
+// Lightweight snapshots restore mix/edit settings only. They deliberately do not
+// capture BGM track identity, rights metadata or audio payloads, because the
+// previous audio body may no longer exist when a snapshot is restored.
+const BGM_FIELDS = ['enabled', 'volume', 'loop', 'ducking', 'fadeInSec', 'fadeOutSec', 'category'];
 
 function pick(source, fields) {
   const out = {};
