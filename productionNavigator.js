@@ -1,4 +1,5 @@
 import { inspectProductionProject } from './productionPreflight.js';
+import { publishMetadataApprovalMatches } from './decisionLog.js';
 
 const ROUTES = {
   project: 'project',
@@ -26,7 +27,8 @@ export function buildProductionChecklist(project = {}) {
   const subtitlesReady = project?.subtitleStyle?.enabled === false || (hasScenes && scenes.every(scene => String(scene.subtitleText ?? scene.text ?? '').trim()));
   const bgmReady = project?.bgm?.enabled === false || Boolean(project?.bgm?.audioData || project?.bgm?.dataUrl);
   const exportReady = report.errors === 0 && report.warnings === 0;
-  const publishReady = Boolean(project?.publishConfirmed || project?.publish?.confirmed);
+  const publish = project?.publish || {};
+  const publishReady = Boolean(publish?.approval?.approved && publishMetadataApprovalMatches(publish.approval, publish));
   return [
     { id:'scenes', label:'Scene', done:hasScenes, route:ROUTES.scenes },
     { id:'images', label:'画像素材', done:hasImages, route:ROUTES.scenes },
