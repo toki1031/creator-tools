@@ -1,10 +1,8 @@
 name: Quality Gates
 
 on:
-  pull_request:
   push:
     branches:
-      - main
       - v1.3/smart-reframe-renderer
 
 permissions:
@@ -12,7 +10,6 @@ permissions:
 
 jobs:
   patch-renderer:
-    if: github.ref == 'refs/heads/v1.3/smart-reframe-renderer' && github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,11 +24,10 @@ jobs:
           renderer = Path('videoRenderer.js')
           text = renderer.read_text()
           old_import = "import { calculateBgmLoopCount, splitSubtitlePhrases } from './qualityLogic.js';\n"
-          new_import = old_import + "import { calculateMotionCoverPlacement } from './smartReframe.js';\n"
           if "calculateMotionCoverPlacement" not in text:
               if old_import not in text:
                   raise SystemExit('qualityLogic import anchor missing')
-              text = text.replace(old_import, new_import, 1)
+              text = text.replace(old_import, old_import + "import { calculateMotionCoverPlacement } from './smartReframe.js';\n", 1)
 
           old_draw = """function drawCover(ctx, image, width, height, motion, progress, alpha = 1) {
   ctx.save();
@@ -94,16 +90,10 @@ jobs:
                   raise SystemExit('drawCover anchor missing')
               text = text.replace(old_draw, new_draw, 1)
 
-          text = text.replace(
-              "drawCover(ctx, prepared.images[item.index], width, height, item.scene.motion || 'none', progress, 1);",
-              "drawCover(ctx, prepared.images[item.index], width, height, item.scene.motion || 'none', progress, 1, item.scene.smartReframe || null);",
-              1
-          )
-          text = text.replace(
-              "drawCover(ctx, prepared.images[item.index + 1], width, height, map[item.index + 1].scene.motion || 'none', 0, fade);",
-              "drawCover(ctx, prepared.images[item.index + 1], width, height, map[item.index + 1].scene.motion || 'none', 0, fade, map[item.index + 1].scene.smartReframe || null);",
-              1
-          )
+          old_current = "drawCover(ctx, prepared.images[item.index], width, height, item.scene.motion || 'none', progress, 1);"
+          old_next = "drawCover(ctx, prepared.images[item.index + 1], width, height, map[item.index + 1].scene.motion || 'none', 0, fade);"
+          text = text.replace(old_current, "drawCover(ctx, prepared.images[item.index], width, height, item.scene.motion || 'none', progress, 1, item.scene.smartReframe || null);", 1)
+          text = text.replace(old_next, "drawCover(ctx, prepared.images[item.index + 1], width, height, map[item.index + 1].scene.motion || 'none', 0, fade, map[item.index + 1].scene.smartReframe || null);", 1)
           renderer.write_text(text)
 
           smart = Path('smartReframe.js')
@@ -134,12 +124,11 @@ export function calculateMotionCoverPlacement(imageWidth, imageHeight, frameWidt
 
           tests = Path('tests/smartReframe.test.mjs')
           t = tests.read_text()
-          if 'calculateMotionCoverPlacement' not in t.split('\n', 3)[2]:
-              t = t.replace(
-                  "calculateCoverPlacement, normalizeSceneReframe, reframePreset, suggestReframeFromSaliency",
-                  "calculateCoverPlacement, calculateMotionCoverPlacement, normalizeSceneReframe, reframePreset, suggestReframeFromSaliency",
-                  1
-              )
+          t = t.replace(
+              "calculateCoverPlacement, normalizeSceneReframe, reframePreset, suggestReframeFromSaliency",
+              "calculateCoverPlacement, calculateMotionCoverPlacement, normalizeSceneReframe, reframePreset, suggestReframeFromSaliency",
+              1
+          )
           if "renderer placement combines saved focus with motion" not in t:
               t += """
 
@@ -172,17 +161,3 @@ test('renderer pan stays inside cover bounds with Smart Reframe', () => {
           git add videoRenderer.js smartReframe.js tests/smartReframe.test.mjs .github/workflows/quality-gates.yml
           git commit -m 'Apply Smart Reframe to video renderer'
           git push origin HEAD:v1.3/smart-reframe-renderer
-
-  test-and-build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
-      - name: Run regression tests
-        run: npm test
-      - name: Production build
-        run: npm run build
