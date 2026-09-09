@@ -43,6 +43,8 @@ import('./main.js')
       './datasetExportUi.js',
       './optionalAiModuleLoader.js',
       './bgmLibraryUi.js',
+      './bgmRightsSummaryUi.js',
+      './publishRightsUi.js',
       './productionAssistantUi.js',
       './productionPipelineUi.js',
       './productionTimingTracker.js'
