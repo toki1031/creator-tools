@@ -1,0 +1,186 @@
+name: Smart Reframe Renderer Patch
+
+on:
+  push:
+    branches:
+      - v1.3/smart-reframe-renderer
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.head_commit.message == 'Add one-shot Smart Reframe renderer patch workflow'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v1.3/smart-reframe-renderer
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Apply renderer integration
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          renderer = Path('videoRenderer.js')
+          text = renderer.read_text()
+          old_import = "import { calculateBgmLoopCount, splitSubtitlePhrases } from './qualityLogic.js';\n"
+          new_import = old_import + "import { calculateMotionCoverPlacement } from './smartReframe.js';\n"
+          if old_import not in text:
+              raise SystemExit('qualityLogic import anchor missing')
+          text = text.replace(old_import, new_import, 1)
+
+          old_draw = """function drawCover(ctx, image, width, height, motion, progress, alpha = 1) {
+  ctx.save();
+  ctx.globalAlpha = clamp(alpha, 0, 1);
+  if (!image) {
+    const gradient = ctx.createLinearGradient(0, 0, width, height);
+    gradient.addColorStop(0, '#171d35');
+    gradient.addColorStop(1, '#090d17');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, width, height);
+    ctx.restore();
+    return;
+  }
+  const base = Math.max(width / image.naturalWidth, height / image.naturalHeight);
+  let zoom = 1;
+  let moveX = 0;
+  if (motion === 'zoom-in') zoom = lerp(1, 1.09, progress);
+  else if (motion === 'zoom-out') zoom = lerp(1.09, 1, progress);
+  else if (motion === 'pan-left') { zoom = 1.1; moveX = lerp(width * .045, -width * .045, progress); }
+  else if (motion === 'pan-right') { zoom = 1.1; moveX = lerp(-width * .045, width * .045, progress); }
+  const drawWidth = image.naturalWidth * base * zoom;
+  const drawHeight = image.naturalHeight * base * zoom;
+  ctx.drawImage(image, (width - drawWidth) / 2 + moveX, (height - drawHeight) / 2, drawWidth, drawHeight);
+  ctx.restore();
+}
+"""
+          new_draw = """function drawCover(ctx, image, width, height, motion, progress, alpha = 1, smartReframe = null) {
+  ctx.save();
+  ctx.globalAlpha = clamp(alpha, 0, 1);
+  if (!image) {
+    const gradient = ctx.createLinearGradient(0, 0, width, height);
+    gradient.addColorStop(0, '#171d35');
+    gradient.addColorStop(1, '#090d17');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, width, height);
+    ctx.restore();
+    return;
+  }
+  if (smartReframe) {
+    const placement = calculateMotionCoverPlacement(
+      image.naturalWidth,
+      image.naturalHeight,
+      width,
+      height,
+      smartReframe,
+      motion,
+      progress
+    );
+    ctx.drawImage(image, placement.x, placement.y, placement.drawWidth, placement.drawHeight);
+    ctx.restore();
+    return;
+  }
+  const base = Math.max(width / image.naturalWidth, height / image.naturalHeight);
+  let zoom = 1;
+  let moveX = 0;
+  if (motion === 'zoom-in') zoom = lerp(1, 1.09, progress);
+  else if (motion === 'zoom-out') zoom = lerp(1.09, 1, progress);
+  else if (motion === 'pan-left') { zoom = 1.1; moveX = lerp(width * .045, -width * .045, progress); }
+  else if (motion === 'pan-right') { zoom = 1.1; moveX = lerp(-width * .045, width * .045, progress); }
+  const drawWidth = image.naturalWidth * base * zoom;
+  const drawHeight = image.naturalHeight * base * zoom;
+  ctx.drawImage(image, (width - drawWidth) / 2 + moveX, (height - drawHeight) / 2, drawWidth, drawHeight);
+  ctx.restore();
+}
+"""
+          if old_draw not in text:
+              raise SystemExit('drawCover anchor missing')
+          text = text.replace(old_draw, new_draw, 1)
+
+          old_current = "drawCover(ctx, prepared.images[item.index], width, height, item.scene.motion || 'none', progress, 1);"
+          new_current = "drawCover(ctx, prepared.images[item.index], width, height, item.scene.motion || 'none', progress, 1, item.scene.smartReframe || null);"
+          if old_current not in text:
+              raise SystemExit('current Scene draw anchor missing')
+          text = text.replace(old_current, new_current, 1)
+
+          old_next = "drawCover(ctx, prepared.images[item.index + 1], width, height, map[item.index + 1].scene.motion || 'none', 0, fade);"
+          new_next = "drawCover(ctx, prepared.images[item.index + 1], width, height, map[item.index + 1].scene.motion || 'none', 0, fade, map[item.index + 1].scene.smartReframe || null);"
+          if old_next not in text:
+              raise SystemExit('transition Scene draw anchor missing')
+          text = text.replace(old_next, new_next, 1)
+          renderer.write_text(text)
+
+          smart = Path('smartReframe.js')
+          s = smart.read_text()
+          if 'export function calculateMotionCoverPlacement' not in s:
+              s += """
+
+export function calculateMotionCoverPlacement(imageWidth, imageHeight, frameWidth, frameHeight, reframe = {}, motion = 'none', progress = 0) {
+  const p = clamp(progress, 0, 1);
+  let motionZoom = 1;
+  let panRatio = 0;
+  if (motion === 'zoom-in') motionZoom = 1 + 0.09 * p;
+  else if (motion === 'zoom-out') motionZoom = 1.09 - 0.09 * p;
+  else if (motion === 'pan-left') { motionZoom = 1.1; panRatio = 0.045 - 0.09 * p; }
+  else if (motion === 'pan-right') { motionZoom = 1.1; panRatio = -0.045 + 0.09 * p; }
+
+  const normalized = normalizeSceneReframe(reframe);
+  const placement = calculateCoverPlacement(imageWidth, imageHeight, frameWidth, frameHeight, {
+    ...normalized,
+    zoom: clamp(normalized.zoom * motionZoom, 1, 1.65)
+  });
+  if (!panRatio) return placement;
+  const minX = Math.min(0, Number(frameWidth) - placement.drawWidth);
+  const x = Math.min(0, Math.max(minX, placement.x + Number(frameWidth) * panRatio));
+  return { ...placement, x };
+}
+"""
+              smart.write_text(s)
+
+          tests = Path('tests/smartReframe.test.mjs')
+          t = tests.read_text()
+          t = t.replace(
+              "calculateCoverPlacement, normalizeSceneReframe, reframePreset, suggestReframeFromSaliency",
+              "calculateCoverPlacement, calculateMotionCoverPlacement, normalizeSceneReframe, reframePreset, suggestReframeFromSaliency",
+              1
+          )
+          if "renderer placement combines saved focus with motion" not in t:
+              t += """
+
+test('renderer placement combines saved focus with motion without exposing empty frame', () => {
+  const focused = calculateMotionCoverPlacement(1600, 900, 1080, 1920, { focusX: 0.25, focusY: 0.5, zoom: 1.08 }, 'zoom-in', 1);
+  assert.ok(focused.x <= 0);
+  assert.ok(focused.y <= 0);
+  assert.ok(focused.x + focused.drawWidth >= 1080);
+  assert.ok(focused.y + focused.drawHeight >= 1920);
+  assert.ok(focused.drawWidth > 1080);
+});
+
+test('renderer pan stays inside cover bounds with Smart Reframe', () => {
+  const left = calculateMotionCoverPlacement(1600, 900, 1080, 1920, { focusX: 0.7, focusY: 0.5, zoom: 1.05 }, 'pan-left', 1);
+  const right = calculateMotionCoverPlacement(1600, 900, 1080, 1920, { focusX: 0.3, focusY: 0.5, zoom: 1.05 }, 'pan-right', 1);
+  for (const placement of [left, right]) {
+    assert.ok(placement.x <= 0);
+    assert.ok(placement.x + placement.drawWidth >= 1080);
+  }
+});
+"""
+              tests.write_text(t)
+          PY
+      - name: Regression tests
+        run: npm test
+      - name: Production build
+        run: npm run build
+      - name: Commit renderer integration
+        run: |
+          rm .github/workflows/smart-reframe-renderer-patch.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add videoRenderer.js smartReframe.js tests/smartReframe.test.mjs .github/workflows/smart-reframe-renderer-patch.yml
+          git commit -m 'Apply Smart Reframe to video renderer'
+          git push origin HEAD:v1.3/smart-reframe-renderer
