@@ -49,6 +49,7 @@ import('./main.js')
       './smartReframeUi.js',
       './smartReframeRendererBridge.js',
       './shortsHighlightUi.js',
+      './shortsWorkspaceUi.js',
       './publishRightsUi.js',
       './productionAssistantUi.js',
       './productionPipelineUi.js',
