@@ -2,9 +2,9 @@ import { getProject, saveProject } from './db.js';
 import { syncProjectSceneDurationsToNarration } from './productionEfficiency.js';
 import { inspectProductionProject } from './productionPreflight.js';
 import { createProductionPreset, applyProductionPreset } from './productionPreset.js';
+import { readProductionPresets, upsertProductionPreset, removeProductionPreset } from './productionPresetStore.js';
 
 const app = document.querySelector('#app');
-const PRESET_KEY = 'creator-os-production-preset-v1';
 let installing = false;
 
 function projectIdFromHash() {
@@ -12,18 +12,13 @@ function projectIdFromHash() {
   return match ? decodeURIComponent(match[1]) : '';
 }
 
-function loadPreset() {
-  try { return JSON.parse(localStorage.getItem(PRESET_KEY) || 'null'); }
-  catch { return null; }
-}
-
-function savePreset(preset) {
-  localStorage.setItem(PRESET_KEY, JSON.stringify(preset));
-}
-
 function resultText(report) {
   if (!report.issues.length) return '問題は見つかりませんでした。';
   return report.issues.map(issue => `${issue.level === 'error' ? '要修正' : '確認'}：${issue.message}`).join('\n');
+}
+
+function escapeHtml(value='') {
+  return String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
 async function install() {
@@ -44,12 +39,32 @@ async function install() {
       <div class="actions">
         <button type="button" data-sync-duration>音声尺にScene尺を合わせる</button>
         <button type="button" data-preflight>完成前チェック</button>
-        <button type="button" data-save-preset>今の設定をプリセット保存</button>
-        <button type="button" data-apply-preset>保存プリセットを適用</button>
+      </div>
+      <div style="margin-top:12px">
+        <label>制作プリセット<select data-preset-select></select></label>
+        <div class="actions">
+          <button type="button" data-save-preset>今の設定を保存</button>
+          <button type="button" data-apply-preset>選択プリセットを適用</button>
+          <button type="button" data-delete-preset>削除</button>
+        </div>
       </div>
       <pre data-assistant-result style="white-space:pre-wrap"></pre>`;
     main.appendChild(section);
     const output = section.querySelector('[data-assistant-result]');
+    const select = section.querySelector('[data-preset-select]');
+    const applyButton = section.querySelector('[data-apply-preset]');
+    const deleteButton = section.querySelector('[data-delete-preset]');
+
+    const refreshPresets = preferredName => {
+      const presets = readProductionPresets();
+      select.innerHTML = presets.length ? presets.map(preset => `<option value="${escapeHtml(preset.name)}">${escapeHtml(preset.name)}</option>`).join('') : '<option value="">保存済みプリセットなし</option>';
+      if (preferredName && presets.some(preset => preset.name === preferredName)) select.value = preferredName;
+      applyButton.disabled = !presets.length;
+      deleteButton.disabled = !presets.length;
+      return presets;
+    };
+
+    refreshPresets();
 
     section.querySelector('[data-sync-duration]').onclick = async () => {
       const current = await getProject(projectId);
@@ -72,20 +87,27 @@ async function install() {
       const current = await getProject(projectId);
       if (!current) return;
       const name = `${current.genre || 'Creator OS'} ${current.platform || ''}`.trim();
-      savePreset(createProductionPreset(current, name));
-      output.textContent = `「${name}」の字幕・BGM設定などを端末に保存しました。BGM音源本体は複製していません。`;
+      upsertProductionPreset(createProductionPreset(current, name));
+      refreshPresets(name);
+      output.textContent = `「${name}」を保存しました。BGM音源本体やproject固有素材IDは保存していません。`;
     };
 
-    const applyButton = section.querySelector('[data-apply-preset]');
-    applyButton.disabled = !loadPreset();
     applyButton.onclick = async () => {
-      const preset = loadPreset();
+      const preset = readProductionPresets().find(item => item?.name === select.value);
       const current = await getProject(projectId);
       if (!preset || !current) return;
       const next = applyProductionPreset(current, preset);
       next.updatedAt = new Date().toISOString();
       await saveProject(next);
-      output.textContent = `「${preset.name || '制作プリセット'}」を適用しました。画面を開き直すと設定表示にも反映されます。`;
+      output.textContent = `「${preset.name || '制作プリセット'}」を適用しました。`;
+    };
+
+    deleteButton.onclick = () => {
+      const name = select.value;
+      if (!name) return;
+      removeProductionPreset(name);
+      refreshPresets();
+      output.textContent = `「${name}」をプリセット一覧から削除しました。プロジェクト本体は変更していません。`;
     };
   } finally {
     installing = false;
