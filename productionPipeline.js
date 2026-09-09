@@ -1,8 +1,9 @@
 import { splitIntoScenes } from './qualityLogic.js';
 import { syncProjectSceneDurationsToNarration } from './productionEfficiency.js';
 import { inspectProductionProject } from './productionPreflight.js';
+import { safeAutofillProject } from './productionSafeAutofill.js';
 
-export const PRODUCTION_PIPELINE_VERSION = '1.2.0';
+export const PRODUCTION_PIPELINE_VERSION = '1.2.1';
 
 function clone(value) {
   return value == null ? value : JSON.parse(JSON.stringify(value));
@@ -25,13 +26,22 @@ export function buildProductionPlan(project, options = {}) {
     steps.push({ id: 'scenes', status: 'kept', message: '既存Sceneを維持' });
   }
 
-  const missingImages = (source.scenes || []).filter(scene => !scene.imageAssetId && !scene.imageData).length;
+  const autofilled = safeAutofillProject(source);
+  const prepared = autofilled.project;
+  steps.push({
+    id: 'autofill',
+    status: autofilled.changedFields ? 'prepared' : 'kept',
+    count: autofilled.changedFields,
+    message: autofilled.changedFields ? `${autofilled.changedScenes} Sceneの不足設定を補完候補化` : '字幕・読み上げ・基本演出は設定済み'
+  });
+
+  const missingImages = (prepared.scenes || []).filter(scene => !scene.imageAssetId && !scene.imageData).length;
   steps.push({ id: 'images', status: missingImages ? 'needs-input' : 'ready', count: missingImages, message: missingImages ? `画像未設定 ${missingImages} Scene` : '画像準備済み' });
 
-  const missingNarration = (source.scenes || []).filter(scene => !scene?.narration?.audioData).length;
+  const missingNarration = (prepared.scenes || []).filter(scene => !scene?.narration?.audioData).length;
   steps.push({ id: 'narration', status: missingNarration ? 'needs-generation' : 'ready', count: missingNarration, message: missingNarration ? `音声未生成 ${missingNarration} Scene` : '音声準備済み' });
 
-  const synced = syncProjectSceneDurationsToNarration(source);
+  const synced = syncProjectSceneDurationsToNarration(prepared);
   const planned = synced.project;
   steps.push({ id: 'duration', status: synced.changed ? 'prepared' : 'kept', count: synced.changed, message: synced.changed ? `${synced.changed} Sceneを音声尺へ調整候補化` : 'Scene尺変更なし' });
 
