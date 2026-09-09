@@ -1,5 +1,6 @@
 import { getProject, saveProject } from './db.js';
 import { buildProductionPlan, nextProductionAction } from './productionPipeline.js';
+import { summarizeProductionProgress, productionProgressText } from './productionProgress.js';
 import { goProject, goScenes, goBgm, goOutput } from './router.js';
 
 const app = document.querySelector('#app');
@@ -18,14 +19,7 @@ function routeForAction(projectId, actionId) {
 }
 
 function stepLabel(step) {
-  const labels = {
-    scenes: 'Scene構成',
-    autofill: '安全な自動補完',
-    images: '画像素材',
-    narration: 'ナレーション',
-    duration: '尺調整',
-    preflight: '完成前チェック'
-  };
+  const labels = { scenes: 'Scene構成', autofill: '安全な自動補完', images: '画像素材', narration: 'ナレーション', duration: '尺調整', preflight: '完成前チェック' };
   return `${labels[step.id] || step.id}：${step.message}`;
 }
 
@@ -39,30 +33,29 @@ async function install() {
   try {
     const project = await getProject(projectId);
     if (!project || projectIdFromHash() !== projectId) return;
-
     const section = document.createElement('section');
     section.id = 'productionPipelinePanel';
     section.className = 'card';
     section.innerHTML = `<h2>半自動制作 v1.2</h2>
       <p class="notice">台本から完成までの不足工程をOSが整理します。手動設定は上書きせず、空欄だけを安全に補完します。</p>
-      <div class="actions">
-        <button type="button" class="primary" data-run-pipeline>制作を整理して次へ</button>
-        <button type="button" data-review-pipeline>制作状況を見る</button>
-      </div>
+      <div data-production-progress></div>
+      <div class="actions"><button type="button" class="primary" data-run-pipeline>制作を整理して次へ</button><button type="button" data-review-pipeline>制作状況を見る</button></div>
       <pre data-pipeline-result style="white-space:pre-wrap"></pre>`;
     main.prepend(section);
-
     const output = section.querySelector('[data-pipeline-result]');
+    const progress = section.querySelector('[data-production-progress]');
     const renderPlan = plan => {
       const next = nextProductionAction(plan);
+      const summary = summarizeProductionProgress(plan);
+      progress.innerHTML = `<p><strong>${productionProgressText(summary)}</strong></p><progress max="100" value="${summary.percent}" style="width:100%"></progress>`;
       output.textContent = `${plan.steps.map(stepLabel).join('\n')}\n\n次：${next.message}`;
       return next;
     };
+    renderPlan(buildProductionPlan(project));
 
     section.querySelector('[data-review-pipeline]').onclick = async () => {
       const current = await getProject(projectId);
-      if (!current) return;
-      renderPlan(buildProductionPlan(current));
+      if (current) renderPlan(buildProductionPlan(current));
     };
 
     section.querySelector('[data-run-pipeline]').onclick = async () => {
@@ -76,12 +69,10 @@ async function install() {
         const createdScenes = !hadScenes && Array.isArray(plan.project.scenes) && plan.project.scenes.length > 0;
         const autofillChanged = plan.steps.find(step => step.id === 'autofill')?.status === 'prepared';
         const durationChanged = plan.steps.find(step => step.id === 'duration')?.status === 'prepared';
-
         if (createdScenes || autofillChanged || durationChanged) {
           plan.project.updatedAt = new Date().toISOString();
           await saveProject(plan.project);
         }
-
         const next = renderPlan(plan);
         output.textContent += createdScenes ? '\n\nScene構成案を保存しました。' : '';
         output.textContent += autofillChanged ? '\n空欄だった字幕・読み上げ・基本演出を補完しました。' : '';
@@ -90,13 +81,9 @@ async function install() {
       } catch (error) {
         console.error(error);
         output.textContent = `半自動制作を進められませんでした：${error?.message || error}`;
-      } finally {
-        button.disabled = false;
-      }
+      } finally { button.disabled = false; }
     };
-  } finally {
-    installing = false;
-  }
+  } finally { installing = false; }
 }
 
 const observer = new MutationObserver(() => void install());
