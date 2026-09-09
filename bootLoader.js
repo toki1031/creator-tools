@@ -45,6 +45,7 @@ import('./main.js')
       './optionalAiModuleLoader.js',
       './bgmLibraryUi.js',
       './bgmRightsSummaryUi.js',
+      './bgmBeatSyncUi.js',
       './publishRightsUi.js',
       './productionAssistantUi.js',
       './productionPipelineUi.js',
