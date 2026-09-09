@@ -71,15 +71,18 @@ function assetName(project, assetId) {
   return asset?.fileName || asset?.name || '画像素材';
 }
 
+function localMatchText(project, scene, fallbackText) {
+  const best = rankProjectAssetsForScene(project, scene, { limit: 1 })[0];
+  if (!best) return fallbackText;
+  if (best.assetId === scene?.imageAssetId) return '素材候補：現在の画像と一致（ローカル照合）';
+  return `素材候補：${assetName(project, best.assetId)}（ローカル照合）`;
+}
+
 function renderLocalMatches(project, learningText) {
   document.querySelectorAll('.scene-card').forEach(card => {
     const index = Number(card.dataset.index);
     const scene = project.scenes?.[index];
-    const best = rankProjectAssetsForScene(project, scene, { limit: 1 })[0];
-    const note = noteFor(card);
-    if (!best) setNoteText(note, learningText);
-    else if (best.assetId === scene?.imageAssetId) setNoteText(note, '素材候補：現在の画像と一致（ローカル照合）');
-    else setNoteText(note, `素材候補：${assetName(project, best.assetId)}（ローカル照合）`);
+    setNoteText(noteFor(card), localMatchText(project, scene, learningText));
   });
 }
 
@@ -123,7 +126,7 @@ async function render() {
       const ranked = rankSceneImageVisualCandidates(runtime.model, candidates);
       const best = ranked[0];
       const note = noteFor(card);
-      if (!best) renderLocalMatches(project, 'AI画像提案：候補を分析できません');
+      if (!best) setNoteText(note, localMatchText(project, scene, 'AI画像提案：候補を分析できません'));
       else if (best.assetId === scene?.imageAssetId) setNoteText(note, 'AI画像提案：現在の画像と一致');
       else setNoteText(note, `AI画像提案：${assetName(project, best.assetId)}`);
     });
