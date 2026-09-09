@@ -20,6 +20,7 @@ function routeForAction(projectId, actionId) {
 function stepLabel(step) {
   const labels = {
     scenes: 'Scene構成',
+    autofill: '安全な自動補完',
     images: '画像素材',
     narration: 'ナレーション',
     duration: '尺調整',
@@ -43,7 +44,7 @@ async function install() {
     section.id = 'productionPipelinePanel';
     section.className = 'card';
     section.innerHTML = `<h2>半自動制作 v1.2</h2>
-      <p class="notice">台本から完成までの不足工程をOSが整理します。既存Sceneは勝手に再分割しません。</p>
+      <p class="notice">台本から完成までの不足工程をOSが整理します。手動設定は上書きせず、空欄だけを安全に補完します。</p>
       <div class="actions">
         <button type="button" class="primary" data-run-pipeline>制作を整理して次へ</button>
         <button type="button" data-review-pipeline>制作状況を見る</button>
@@ -73,15 +74,17 @@ async function install() {
         const hadScenes = Array.isArray(current.scenes) && current.scenes.length > 0;
         const plan = buildProductionPlan(current);
         const createdScenes = !hadScenes && Array.isArray(plan.project.scenes) && plan.project.scenes.length > 0;
+        const autofillChanged = plan.steps.find(step => step.id === 'autofill')?.status === 'prepared';
         const durationChanged = plan.steps.find(step => step.id === 'duration')?.status === 'prepared';
 
-        if (createdScenes || durationChanged) {
+        if (createdScenes || autofillChanged || durationChanged) {
           plan.project.updatedAt = new Date().toISOString();
           await saveProject(plan.project);
         }
 
         const next = renderPlan(plan);
         output.textContent += createdScenes ? '\n\nScene構成案を保存しました。' : '';
+        output.textContent += autofillChanged ? '\n空欄だった字幕・読み上げ・基本演出を補完しました。' : '';
         output.textContent += durationChanged ? '\n音声実尺に合わせたScene尺を保存しました。' : '';
         setTimeout(routeForAction(projectId, next.id), 250);
       } catch (error) {
