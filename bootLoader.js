@@ -43,7 +43,8 @@ import('./main.js')
       './datasetExportUi.js',
       './optionalAiModuleLoader.js',
       './bgmLibraryUi.js',
-      './productionAssistantUi.js'
+      './productionAssistantUi.js',
+      './productionPipelineUi.js'
     ];
     for (const modulePath of optionalModules) {
       import(modulePath).catch(error => console.warn(`Optional module failed to load: ${modulePath}`, error));
