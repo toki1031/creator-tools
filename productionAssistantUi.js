@@ -3,6 +3,8 @@ import { syncProjectSceneDurationsToNarration } from './productionEfficiency.js'
 import { inspectSmartFinish, firstSmartFinishAction } from './smartFinish.js';
 import { createProductionPreset, applyProductionPreset } from './productionPreset.js';
 import { readProductionPresets, upsertProductionPreset, removeProductionPreset } from './productionPresetStore.js';
+import { createProjectSnapshot, restoreProjectSnapshot } from './projectSnapshot.js';
+import { readProjectSnapshots, saveProjectSnapshot, removeProjectSnapshot } from './projectSnapshotStore.js';
 
 const app = document.querySelector('#app');
 let installing = false;
@@ -27,6 +29,12 @@ function routeTo(projectId, route) {
     return;
   }
   location.hash = `#/project/${encodeURIComponent(projectId)}/${route || 'scenes'}`;
+}
+
+function snapshotOption(snapshot) {
+  const label = escapeHtml(snapshot.label || '復元点');
+  const date = snapshot.createdAt ? new Date(snapshot.createdAt).toLocaleString('ja-JP') : '';
+  return `<option value="${escapeHtml(snapshot.createdAt || '')}">${label}${date ? `｜${escapeHtml(date)}` : ''}</option>`;
 }
 
 async function install() {
@@ -57,6 +65,15 @@ async function install() {
           <button type="button" data-delete-preset>削除</button>
         </div>
       </div>
+      <div style="margin-top:12px">
+        <label>編集の復元点<select data-snapshot-select></select></label>
+        <div class="actions">
+          <button type="button" data-save-snapshot>復元点を保存</button>
+          <button type="button" data-restore-snapshot>この復元点に戻す</button>
+          <button type="button" data-delete-snapshot>復元点を削除</button>
+        </div>
+        <small>台本・Scene構成・字幕・見た目設定を最大5件保存します。画像・音声ファイル本体は複製しません。</small>
+      </div>
       <pre data-assistant-result style="white-space:pre-wrap"></pre>`;
     main.appendChild(section);
     const output = section.querySelector('[data-assistant-result]');
@@ -64,6 +81,9 @@ async function install() {
     const applyButton = section.querySelector('[data-apply-preset]');
     const deleteButton = section.querySelector('[data-delete-preset]');
     const repairButton = section.querySelector('[data-repair]');
+    const snapshotSelect = section.querySelector('[data-snapshot-select]');
+    const restoreSnapshotButton = section.querySelector('[data-restore-snapshot]');
+    const deleteSnapshotButton = section.querySelector('[data-delete-snapshot]');
     let repairRoute = '';
 
     const refreshPresets = preferredName => {
@@ -75,7 +95,17 @@ async function install() {
       return presets;
     };
 
+    const refreshSnapshots = preferredCreatedAt => {
+      const snapshots = readProjectSnapshots(projectId);
+      snapshotSelect.innerHTML = snapshots.length ? snapshots.map(snapshotOption).join('') : '<option value="">保存済み復元点なし</option>';
+      if (preferredCreatedAt && snapshots.some(item => item.createdAt === preferredCreatedAt)) snapshotSelect.value = preferredCreatedAt;
+      restoreSnapshotButton.disabled = !snapshots.length;
+      deleteSnapshotButton.disabled = !snapshots.length;
+      return snapshots;
+    };
+
     refreshPresets();
+    refreshSnapshots();
 
     section.querySelector('[data-sync-duration]').onclick = async () => {
       const current = await getProject(projectId);
@@ -127,6 +157,35 @@ async function install() {
       removeProductionPreset(name);
       refreshPresets();
       output.textContent = `「${name}」をプリセット一覧から削除しました。プロジェクト本体は変更していません。`;
+    };
+
+    section.querySelector('[data-save-snapshot]').onclick = async () => {
+      const current = await getProject(projectId);
+      if (!current) return;
+      const label = `復元点 ${new Date().toLocaleString('ja-JP')}`;
+      const snapshot = createProjectSnapshot(current, { label });
+      saveProjectSnapshot(snapshot);
+      refreshSnapshots(snapshot.createdAt);
+      output.textContent = '復元点を保存しました。画像・音声ファイル本体は複製していません。';
+    };
+
+    restoreSnapshotButton.onclick = async () => {
+      const snapshot = readProjectSnapshots(projectId).find(item => item.createdAt === snapshotSelect.value);
+      if (!snapshot) return;
+      if (!confirm('この復元点の編集状態へ戻します。現在の画像・音声ファイル本体は削除しません。続けますか？')) return;
+      const current = await getProject(projectId);
+      if (!current) return;
+      const next = restoreProjectSnapshot(current, snapshot);
+      await saveProject(next);
+      output.textContent = `「${snapshot.label || '復元点'}」の編集状態へ戻しました。画像・音声ファイル本体は保持しています。`;
+    };
+
+    deleteSnapshotButton.onclick = () => {
+      const createdAt = snapshotSelect.value;
+      if (!createdAt) return;
+      removeProjectSnapshot(projectId, createdAt);
+      refreshSnapshots();
+      output.textContent = '復元点を一覧から削除しました。プロジェクト本体は変更していません。';
     };
   } finally {
     installing = false;
