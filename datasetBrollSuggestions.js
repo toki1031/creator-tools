@@ -1,3 +1,5 @@
+import { feedbackAdjustmentForSuggestion } from './datasetBrollFeedback.js';
+
 const normalize = value => String(value ?? '').toLowerCase().normalize('NFKC').replace(/\s+/g, ' ').trim();
 
 function grams(value) {
@@ -72,8 +74,7 @@ export function suggestBrollFromDataset(targetProject, targetScene, projects = [
       if (item.aspectRatio && item.aspectRatio === targetProject?.aspectRatio) score += 4;
       const reusableAsset = currentAssets.get(item.asset.id) || null;
       if (reusableAsset) score += 10;
-      return {
-        score: Math.round(score),
+      const base = {
         evidenceProjectId: item.projectId,
         evidenceProjectTitle: item.projectTitle,
         evidenceSceneId: item.sceneId,
@@ -81,10 +82,19 @@ export function suggestBrollFromDataset(targetProject, targetScene, projects = [
         assetId: item.asset.id,
         assetLabel: assetLabel(item.asset) || item.asset.fileName,
         assetSource: item.asset.source,
-        reusableInCurrentProject: Boolean(reusableAsset),
+        reusableInCurrentProject: Boolean(reusableAsset)
+      };
+      const feedback = feedbackAdjustmentForSuggestion(projects, base);
+      score += feedback.adjustment;
+      return {
+        ...base,
+        score: Math.max(0, Math.round(score)),
+        feedbackAccepted: feedback.accepted,
+        feedbackRejected: feedback.rejected,
+        feedbackAdjustment: feedback.adjustment,
         reason: reusableAsset
-          ? '似たSceneで過去に採用され、同じ素材がこのプロジェクトにもあります。'
-          : '似たSceneで過去に採用されたB-rollの傾向です。素材そのものはコピーしません。'
+          ? `似たSceneで過去に採用され、同じ素材がこのプロジェクトにもあります。${feedback.adjustment ? ` 過去の提案評価も${feedback.adjustment > 0 ? '加点' : '減点'}しています。` : ''}`
+          : `似たSceneで過去に採用されたB-rollの傾向です。素材そのものはコピーしません。${feedback.adjustment ? ` 過去の提案評価も${feedback.adjustment > 0 ? '加点' : '減点'}しています。` : ''}`
       };
     })
     .filter(item => item.score >= 12)
