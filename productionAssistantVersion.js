@@ -1,0 +1,1 @@
+export const PRODUCTION_ASSISTANT_UI_VERSION = 1;
