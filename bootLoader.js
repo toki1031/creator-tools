@@ -47,6 +47,7 @@ import('./main.js')
       './bgmRightsSummaryUi.js',
       './bgmBeatSyncUi.js',
       './smartReframeUi.js',
+      './smartReframeRendererBridge.js',
       './publishRightsUi.js',
       './productionAssistantUi.js',
       './productionPipelineUi.js',
