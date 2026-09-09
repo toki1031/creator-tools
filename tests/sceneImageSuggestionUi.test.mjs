@@ -10,6 +10,9 @@ test('image suggestion UI is optional and advisory-only', () => {
   assert.match(source, /AI画像提案：学習中/);
   assert.match(source, /assessSceneImageSuggestionReadiness/);
   assert.match(source, /rankSceneImageVisualCandidates/);
+  assert.match(source, /rankProjectAssetsForScene/);
+  assert.match(source, /素材候補：/);
+  assert.match(source, /ローカル照合/);
   assert.doesNotMatch(source, /scene\.imageAssetId\s*=/);
   assert.doesNotMatch(source, /saveProject\s*\(/);
   assert.doesNotMatch(source, /recordSceneImageSelection\s*\(/);
