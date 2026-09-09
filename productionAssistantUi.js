@@ -1,6 +1,6 @@
 import { getProject, saveProject } from './db.js';
 import { syncProjectSceneDurationsToNarration } from './productionEfficiency.js';
-import { inspectProductionProject } from './productionPreflight.js';
+import { inspectSmartFinish, firstSmartFinishAction } from './smartFinish.js';
 import { createProductionPreset, applyProductionPreset } from './productionPreset.js';
 import { readProductionPresets, upsertProductionPreset, removeProductionPreset } from './productionPresetStore.js';
 
@@ -21,6 +21,14 @@ function escapeHtml(value='') {
   return String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+function routeTo(projectId, route) {
+  if (route === 'narration') {
+    location.href = `voice-lab.html?projectId=${encodeURIComponent(projectId)}`;
+    return;
+  }
+  location.hash = `#/project/${encodeURIComponent(projectId)}/${route || 'scenes'}`;
+}
+
 async function install() {
   if (installing || !app) return;
   const projectId = projectIdFromHash();
@@ -38,7 +46,8 @@ async function install() {
       <p class="notice">実制作の手戻りを減らす補助機能です。既存データを自動変更せず、実行した項目だけ保存します。</p>
       <div class="actions">
         <button type="button" data-sync-duration>音声尺にScene尺を合わせる</button>
-        <button type="button" data-preflight>完成前チェック</button>
+        <button type="button" data-preflight>スマート仕上げチェック</button>
+        <button type="button" data-repair hidden>最初の修正箇所へ</button>
       </div>
       <div style="margin-top:12px">
         <label>制作プリセット<select data-preset-select></select></label>
@@ -54,6 +63,8 @@ async function install() {
     const select = section.querySelector('[data-preset-select]');
     const applyButton = section.querySelector('[data-apply-preset]');
     const deleteButton = section.querySelector('[data-delete-preset]');
+    const repairButton = section.querySelector('[data-repair]');
+    let repairRoute = '';
 
     const refreshPresets = preferredName => {
       const presets = readProductionPresets();
@@ -79,8 +90,16 @@ async function install() {
     section.querySelector('[data-preflight]').onclick = async () => {
       const current = await getProject(projectId);
       if (!current) return;
-      const report = inspectProductionProject(current);
+      const report = inspectSmartFinish(current);
+      const action = firstSmartFinishAction(current);
+      repairRoute = action.code === 'ready' ? '' : action.route;
+      repairButton.hidden = !repairRoute;
+      repairButton.textContent = repairRoute ? `修正へ：${action.message}` : '最初の修正箇所へ';
       output.textContent = `要修正 ${report.errors}件 / 確認 ${report.warnings}件\n${resultText(report)}`;
+    };
+
+    repairButton.onclick = () => {
+      if (repairRoute) routeTo(projectId, repairRoute);
     };
 
     section.querySelector('[data-save-preset]').onclick = async () => {
