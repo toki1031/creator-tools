@@ -1,6 +1,7 @@
 import { getProject, saveProject } from './db.js';
 import { createAudioAssetIdFromFile } from './audioAssetIdentity.js';
 import { recordBgmSelectionChange } from './decisionLog.js';
+import { rankBgmTracks, bgmRecommendationReason } from './bgmRecommendation.js';
 
 const DB_NAME='creator-os-bgm-library';
 const STORE='tracks';
@@ -60,9 +61,16 @@ async function renderLibrary(container){
   const tracks=await listTracks();
   const list=container.querySelector('[data-bgm-library-list]');
   if(!tracks.length){list.innerHTML='<p class="muted">まだ登録がありません。無料BGMを一度登録すると、次回からここで選べます。</p>';return;}
-  list.innerHTML=tracks.map(track=>{
+  const project=await getProject(projectIdFromHash());
+  const ranked=rankBgmTracks(tracks,project||{},3);
+  const recommendedIds=new Set(ranked.map(row=>row.track.id));
+  const scoreById=new Map(ranked.map(row=>[row.track.id,row.score]));
+  const displayTracks=[...tracks].sort((a,b)=>(scoreById.get(b.id)??-Infinity)-(scoreById.get(a.id)??-Infinity)||String(b.updatedAt).localeCompare(String(a.updatedAt)));
+  list.innerHTML=displayTracks.map(track=>{
     const url=URL.createObjectURL(track.blob);objectUrls.push(url);
-    return `<article class="bgm-library-item" data-bgm-id="${esc(track.id)}"><div><b>${esc(track.title||track.fileName)}</b><small>${esc(track.category||'未分類')} / ${esc(track.license||'ライセンス未記入')}</small>${track.sourceUrl?`<small>${esc(track.sourceUrl)}</small>`:''}</div><audio controls preload="none" src="${url}"></audio><div class="tool-row"><button type="button" class="primary" data-use-bgm="${esc(track.id)}">このBGMを使う</button><button type="button" class="danger" data-delete-bgm="${esc(track.id)}">ライブラリから削除</button></div></article>`;
+    const recommended=recommendedIds.has(track.id);
+    const reason=recommended?`<small><strong>おすすめ</strong> ${esc(bgmRecommendationReason(track,project||{}))}</small>`:'';
+    return `<article class="bgm-library-item" data-bgm-id="${esc(track.id)}"><div><b>${recommended?'★ ':''}${esc(track.title||track.fileName)}</b><small>${esc(track.category||'未分類')} / ${esc(track.license||'ライセンス未記入')}</small>${reason}${track.sourceUrl?`<small>${esc(track.sourceUrl)}</small>`:''}</div><audio controls preload="none" src="${url}"></audio><div class="tool-row"><button type="button" class="primary" data-use-bgm="${esc(track.id)}">このBGMを使う</button><button type="button" class="danger" data-delete-bgm="${esc(track.id)}">ライブラリから削除</button></div></article>`;
   }).join('');
   list.querySelectorAll('[data-use-bgm]').forEach(btn=>btn.onclick=async()=>{const track=tracks.find(x=>x.id===btn.dataset.useBgm);if(!track)return;btn.disabled=true;try{await useTrack(track);}catch(e){alert(`BGM設定に失敗しました：${e?.message||e}`);}finally{btn.disabled=false;}});
   list.querySelectorAll('[data-delete-bgm]').forEach(btn=>btn.onclick=async()=>{if(!confirm('このBGMをライブラリから削除しますか？\n現在のプロジェクトに設定済みのBGMは消しません。'))return;await deleteTrack(btn.dataset.deleteBgm);await renderLibrary(container);});
@@ -77,7 +85,7 @@ function install(){
   if(!host||host.querySelector('[data-bgm-library]')) return;
   const section=document.createElement('section');
   section.className='bgm-library-panel';section.dataset.bgmLibrary='1';
-  section.innerHTML=`<hr><div class="section-head"><div><h3>マイBGMライブラリ</h3><p>一度登録した無料BGMを次の動画でもすぐ使えます。</p></div><button type="button" data-add-bgm>＋ BGMを登録</button></div><input type="file" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg" data-add-bgm-file hidden><div data-bgm-library-list></div><dialog data-bgm-meta><form method="dialog"><h3>BGM情報</h3><label>曲名<input name="title" required></label><label>用途<select name="category"><option value="calm">落ち着き</option><option value="inspiring">前向き</option><option value="dramatic">ドラマチック</option><option value="traditional">和・伝統</option><option value="ambient">環境・アンビエント</option><option value="other">その他</option></select></label><label>配布元URL<input name="sourceUrl" inputmode="url" placeholder="https://..."></label><label>ライセンス<input name="license" placeholder="例：CC0 / 配布サイト利用規約"></label><label>商用利用<select name="commercialUse"><option value="unknown">未確認</option><option value="allowed">可</option><option value="not-allowed">不可</option></select></label><label>クレジット表記<input name="credit" placeholder="不要なら空欄"></label><p class="notice">「動画で無料利用できる」と「音源の再配布ができる」は別です。このライブラリはあなたの端末内で再利用するためのものです。</p><div class="dialog-actions"><button value="cancel">キャンセル</button><button value="default" class="primary">登録</button></div></form></dialog>`;
+  section.innerHTML=`<hr><div class="section-head"><div><h3>マイBGMライブラリ</h3><p>一度登録した無料BGMを次の動画でもすぐ使えます。動画ジャンルに合う候補を上に表示します。</p></div><button type="button" data-add-bgm>＋ BGMを登録</button></div><input type="file" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg" data-add-bgm-file hidden><div data-bgm-library-list></div><dialog data-bgm-meta><form method="dialog"><h3>BGM情報</h3><label>曲名<input name="title" required></label><label>用途<select name="category"><option value="calm">落ち着き</option><option value="inspiring">前向き</option><option value="dramatic">ドラマチック</option><option value="traditional">和・伝統</option><option value="ambient">環境・アンビエント</option><option value="other">その他</option></select></label><label>配布元URL<input name="sourceUrl" inputmode="url" placeholder="https://..."></label><label>ライセンス<input name="license" placeholder="例：CC0 / 配布サイト利用規約"></label><label>商用利用<select name="commercialUse"><option value="unknown">未確認</option><option value="allowed">可</option><option value="not-allowed">不可</option></select></label><label>クレジット表記<input name="credit" placeholder="不要なら空欄"></label><p class="notice">「動画で無料利用できる」と「音源の再配布ができる」は別です。このライブラリはあなたの端末内で再利用するためのものです。</p><div class="dialog-actions"><button value="cancel">キャンセル</button><button value="default" class="primary">登録</button></div></form></dialog>`;
   host.appendChild(section);
   const picker=section.querySelector('[data-add-bgm-file]');const dialog=section.querySelector('[data-bgm-meta]');const form=dialog.querySelector('form');let pendingFile=null;
   section.querySelector('[data-add-bgm]').onclick=()=>{picker.value='';picker.click();};
