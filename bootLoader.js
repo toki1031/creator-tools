@@ -42,6 +42,7 @@ import('./main.js')
       './subtitleCardEditorUi.js',
       './editorUndo.js',
       './datasetExportUi.js',
+      './datasetBrollSuggestionsUi.js',
       './optionalAiModuleLoader.js',
       './bgmLibraryUi.js',
       './bgmRightsSummaryUi.js',
