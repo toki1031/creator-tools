@@ -7,7 +7,9 @@ const boot = fs.readFileSync(new URL('../bootLoader.js', import.meta.url), 'utf8
 
 test('production assistant is isolated as optional module', () => {
   assert.match(boot, /productionAssistantUi\.js/);
-  assert.match(source, /inspectProductionProject/);
+  assert.match(source, /inspectSmartFinish/);
+  assert.match(source, /firstSmartFinishAction/);
+  assert.match(source, /data-repair/);
   assert.match(source, /syncProjectSceneDurationsToNarration/);
 });
 
