@@ -47,10 +47,13 @@ export function splitIntoScenes(text, targetDuration = 60) {
 
   for (const unit of units) {
     const chars = Array.from(unit.text).length;
-    const hardParagraphBreak = unit.paragraphStart && current.length > 0;
+    // Blank lines are a strong semantic boundary, but a very short lead-in (for
+    // example a one-line hook) may stay with the next paragraph so Shorts do not
+    // become over-fragmented.
+    const paragraphBreak = unit.paragraphStart && current.length > 0 && currentChars >= minCharsBeforeBeatSplit;
     const visualBeatBreak = startsNewVisualBeat(unit.text) && currentChars >= minCharsBeforeBeatSplit;
     const wouldOverflow = current.length > 0 && currentChars + chars > maxChars;
-    if (hardParagraphBreak || visualBeatBreak || wouldOverflow) flush();
+    if (paragraphBreak || visualBeatBreak || wouldOverflow) flush();
     current.push(unit);
     currentChars += chars;
     if (currentChars >= targetChars && groups.length + 1 < desiredCount) flush();
@@ -60,6 +63,19 @@ export function splitIntoScenes(text, targetDuration = 60) {
   if (groups.length > 1) {
     const lastChars = Array.from(groups.at(-1)).length;
     if (lastChars < Math.max(6, targetChars * 0.3)) groups[groups.length - 2] += groups.pop();
+  }
+
+  // Keep the visual plan close to the duration-derived target. Merge the
+  // shortest adjacent pair first; this only affects auto-created scenes and
+  // never rewrites an existing manual scene list.
+  while (groups.length > desiredCount && groups.length > 1) {
+    let bestIndex = 0;
+    let bestSize = Infinity;
+    for (let i = 0; i < groups.length - 1; i++) {
+      const size = Array.from(groups[i]).length + Array.from(groups[i + 1]).length;
+      if (size < bestSize) { bestSize = size; bestIndex = i; }
+    }
+    groups.splice(bestIndex, 2, groups[bestIndex] + groups[bestIndex + 1]);
   }
 
   const safeDuration = Math.max(5, Number(targetDuration) || 60);
@@ -155,7 +171,11 @@ export function splitSubtitleTimelineCards(text, maxChars = 13, maxLines = 2) {
   for (const card of explicitCards) {
     const manualLines = card.split('\n').map(line => line.trim()).filter(Boolean);
     if (manualLines.length > 1) {
-      for (let i = 0; i < manualLines.length; i += safeMaxLines) result.push(manualLines.slice(i, i + safeMaxLines).join('\n'));
+      // Manual single line breaks remain layout hints. If one of those lines is
+      // itself too long, split only that line semantically before packing the
+      // visible lines into timed cards.
+      const expandedLines = manualLines.flatMap(line => naturalSubtitlePhrases(line, maxChars));
+      for (let i = 0; i < expandedLines.length; i += safeMaxLines) result.push(expandedLines.slice(i, i + safeMaxLines).join('\n'));
       continue;
     }
     result.push(...naturalSubtitlePhrases(card, maxChars));
