@@ -39,6 +39,7 @@ import('./main.js')
     const optionalModules = [
       './subtitlePreviewNavigation.js',
       './subtitleAlignUi.js',
+      './subtitleCardEditorUi.js',
       './editorUndo.js',
       './datasetExportUi.js',
       './optionalAiModuleLoader.js',
