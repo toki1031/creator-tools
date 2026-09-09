@@ -1,0 +1,1 @@
+export const BGM_RECOMMENDATION_VERSION = 1;
