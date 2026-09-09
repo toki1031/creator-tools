@@ -7,6 +7,7 @@ import { evaluateSceneImageVisualRanker } from './sceneImageVisualRankerEvaluati
 import { assessSceneImageSuggestionReadiness } from './sceneImageSuggestionReadiness.js';
 import { trainSceneImageVisualRanker, rankSceneImageVisualCandidates } from './sceneImageVisualRanker.js';
 import { createImageAiRuntimeSignature } from './imageAiRuntimeSignature.js';
+import { rankProjectAssetsForScene } from './assetSearch.js';
 
 const MIN_BASE_PAIRS = 5;
 const MIN_PROJECTS = 3;
@@ -70,6 +71,18 @@ function assetName(project, assetId) {
   return asset?.fileName || asset?.name || '画像素材';
 }
 
+function renderLocalMatches(project, learningText) {
+  document.querySelectorAll('.scene-card').forEach(card => {
+    const index = Number(card.dataset.index);
+    const scene = project.scenes?.[index];
+    const best = rankProjectAssetsForScene(project, scene, { limit: 1 })[0];
+    const note = noteFor(card);
+    if (!best) setNoteText(note, learningText);
+    else if (best.assetId === scene?.imageAssetId) setNoteText(note, '素材候補：現在の画像と一致（ローカル照合）');
+    else setNoteText(note, `素材候補：${assetName(project, best.assetId)}（ローカル照合）`);
+  });
+}
+
 async function render() {
   const projectId = currentProjectId();
   if (!projectId || !document.querySelector('[data-image]')) return;
@@ -82,7 +95,7 @@ async function render() {
     const corpus = createLocalLearningCorpus(projects);
     const evidence = baseEvidence(corpus.decisions);
     if (evidence.pairs < MIN_BASE_PAIRS || evidence.projects < MIN_PROJECTS) {
-      setNotes(`AI画像提案：学習中（${evidence.pairs}件・${evidence.projects}プロジェクト）`);
+      renderLocalMatches(project, `AI画像提案：学習中（${evidence.pairs}件・${evidence.projects}プロジェクト）`);
       return;
     }
 
@@ -96,7 +109,7 @@ async function render() {
     }
     const runtime = await cachedPromise;
     if (!runtime.readiness.ready || !runtime.model) {
-      setNotes(`AI画像提案：学習中（${runtime.trainingSet.examples.length}件・${runtime.evaluation.summary.evaluatedProjects}プロジェクト）`);
+      renderLocalMatches(project, `AI画像提案：学習中（${runtime.trainingSet.examples.length}件・${runtime.evaluation.summary.evaluatedProjects}プロジェクト）`);
       return;
     }
 
@@ -110,7 +123,7 @@ async function render() {
       const ranked = rankSceneImageVisualCandidates(runtime.model, candidates);
       const best = ranked[0];
       const note = noteFor(card);
-      if (!best) setNoteText(note, 'AI画像提案：候補を分析できません');
+      if (!best) renderLocalMatches(project, 'AI画像提案：候補を分析できません');
       else if (best.assetId === scene?.imageAssetId) setNoteText(note, 'AI画像提案：現在の画像と一致');
       else setNoteText(note, `AI画像提案：${assetName(project, best.assetId)}`);
     });
