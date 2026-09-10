@@ -28,7 +28,7 @@ function storageTimeoutError(stage) {
   return error;
 }
 
-function withStorageTimeout(executor, stage) {
+function withStorageTimeout(executor, stage, timeoutMs = STORAGE_TIMEOUT_MS) {
   return new Promise((resolve, reject) => {
     let settled = false;
     const finish = (fn, value) => {
@@ -37,13 +37,38 @@ function withStorageTimeout(executor, stage) {
       clearTimeout(timer);
       fn(value);
     };
-    const timer = setTimeout(() => finish(reject, storageTimeoutError(stage)), STORAGE_TIMEOUT_MS);
+    const timer = setTimeout(() => finish(reject, (()=>{const error=new Error(`端末保存の${stage}が${Math.round(timeoutMs / 1000)}秒以内に完了しませんでした。SafariのWebサイトデータは削除せず、ページを閉じてから再度お試しください。`);error.name='StorageTimeoutError';return error;})()), timeoutMs);
     try {
       executor(value => finish(resolve, value), error => finish(reject, error));
     } catch (error) {
       finish(reject, error);
     }
   });
+}
+
+function estimateProjectPayloadBytes(project) {
+  if (!project || typeof project !== 'object') return 0;
+  let chars = 0;
+  const add = value => { if (typeof value === 'string') chars += value.length; };
+  add(project.displayScript); add(project.speechScript); add(project.bgm?.audioData); add(project.narration?.audioData);
+  for (const scene of Array.isArray(project.scenes) ? project.scenes : []) {
+    add(scene?.text); add(scene?.speechText); add(scene?.subtitleText); add(scene?.imageData); add(scene?.videoData); add(scene?.narration?.audioData);
+  }
+  for (const asset of Array.isArray(project.mediaLibrary) ? project.mediaLibrary : []) add(asset?.data);
+  return chars * 2;
+}
+
+function projectListSummary(project) {
+  return {
+    id: project?.id,
+    title: project?.title,
+    genre: project?.genre,
+    platform: project?.platform,
+    targetDurationSec: project?.targetDurationSec,
+    updatedAt: project?.updatedAt,
+    createdAt: project?.createdAt,
+    schemaVersion: project?.schemaVersion
+  };
 }
 
 export function queueProjectDecision(projectId, decision) {
@@ -129,14 +154,20 @@ export async function listProjects() {
   setBootStorageStage('保存済みプロジェクトを読み込んでいます…');
   return withStorageTimeout((resolve, reject) => {
     const tx = db.transaction(PROJECTS, "readonly");
-    const request = tx.objectStore(PROJECTS).getAll();
-    let result = [];
-    request.onsuccess = () => { result = sortProjectsByUpdatedAt(request.result); };
+    const store = tx.objectStore(PROJECTS);
+    const request = store.openCursor();
+    const summaries = [];
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) return;
+      summaries.push(projectListSummary(cursor.value));
+      cursor.continue();
+    };
     request.onerror = () => reject(request.error);
-    tx.oncomplete = () => { db.close(); resolve(result); };
+    tx.oncomplete = () => { db.close(); resolve(sortProjectsByUpdatedAt(summaries)); };
     tx.onerror = () => { try { db.close(); } catch {} reject(tx.error ?? request.error); };
     tx.onabort = () => { try { db.close(); } catch {} reject(tx.error ?? request.error ?? new Error('プロジェクト読み込みが中断されました。')); };
-  }, 'プロジェクト読み込み').catch(error => {
+  }, 'プロジェクト一覧読み込み').catch(error => {
     try { db.close(); } catch {}
     throw error;
   });
@@ -162,6 +193,8 @@ export async function saveProject(project) {
   const projectId = String(project?.id || '').trim();
   const queuedDecisionIds = applyQueuedProjectDecisions(project);
   const db = await openDb();
+  const payloadBytes = estimateProjectPayloadBytes(project);
+  const saveTimeoutMs = payloadBytes >= 20 * 1024 * 1024 ? 30000 : payloadBytes >= 8 * 1024 * 1024 ? 15000 : STORAGE_TIMEOUT_MS;
   return withStorageTimeout((resolve, reject) => {
     const tx = db.transaction(PROJECTS, "readwrite");
     const request = tx.objectStore(PROJECTS).put(project);
@@ -182,7 +215,7 @@ export async function saveProject(project) {
     };
     tx.onerror = () => fail(tx.error || request.error);
     tx.onabort = () => fail(tx.error || request.error);
-  }, 'プロジェクト保存').catch(error => {
+  }, 'プロジェクト保存', saveTimeoutMs).catch(error => {
     try { db.close(); } catch {}
     throw normalizeStorageError(error);
   });
