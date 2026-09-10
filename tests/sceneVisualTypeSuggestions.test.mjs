@@ -1,0 +1,24 @@
+import assert from 'node:assert/strict';
+import { suggestSceneVisualTypes } from '../sceneVisualTypeSuggestions.js';
+import { recordSceneVisualTypeFeedback, getSceneVisualTypeFeedbackState } from '../sceneVisualTypeFeedback.js';
+
+const scene={id:'s1',text:'北斎は何度も絵を描き、作品を生み出した。手元の作業を見せたい。'};
+const project={id:'p1',platform:'YouTube',aspectRatio:'9:16',learning:{decisions:[]}};
+const initial=suggestSceneVisualTypes(scene,[project],{limit:3});
+assert.ok(initial.length>0);
+assert.equal(initial[0].typeId,'hands');
+assert.ok(initial[0].matchedKeywords.length>0);
+const hands=initial.find(x=>x.typeId==='hands');
+const before=hands.score;
+const rec=recordSceneVisualTypeFeedback(project,{scene,sceneIndex:0,suggestion:hands,action:'accept'},{now:()=> '2026-09-10T00:00:00.000Z',createId:()=> 'd1'});
+assert.ok(rec);
+assert.equal(getSceneVisualTypeFeedbackState(project,'s1','hands'),'accepted');
+const duplicate=recordSceneVisualTypeFeedback(project,{scene,sceneIndex:0,suggestion:hands,action:'accept'},{now:()=> '2026-09-10T00:01:00.000Z',createId:()=> 'd2'});
+assert.equal(duplicate,null);
+const after=suggestSceneVisualTypes(scene,[project],{limit:3}).find(x=>x.typeId==='hands').score;
+assert.ok(after>before);
+const reversed=recordSceneVisualTypeFeedback(project,{scene,sceneIndex:0,suggestion:hands,action:'reject'},{now:()=> '2026-09-10T00:02:00.000Z',createId:()=> 'd3'});
+assert.ok(reversed);
+assert.equal(getSceneVisualTypeFeedbackState(project,'s1','hands'),'rejected');
+assert.equal(project.mediaLibrary,undefined);
+console.log('sceneVisualTypeSuggestions tests passed');
