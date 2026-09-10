@@ -95,18 +95,23 @@ async function loadImageSafely(source, timeoutMs = 12000) {
 export async function prepareVideoProject(project, { onStatus = () => {} } = {}) {
   const scenes = Array.isArray(project.scenes) ? project.scenes : [];
   const imageFailures = [];
-  onStatus('シーン画像を準備しています…');
-  const images = await Promise.all(scenes.map(async (scene, index) => {
-    const imageSource = resolveSceneImageSource(project, scene).data;
-    if (!imageSource) return null;
+  const images = [];
+  onStatus('シーン画像を順番に準備しています…');
+  for (let index = 0; index < scenes.length; index++) {
+    const imageSource = resolveSceneImageSource(project, scenes[index]).data;
+    if (!imageSource) {
+      images.push(null);
+      continue;
+    }
     try {
-      return await loadImageSafely(imageSource);
+      images.push(await loadImageSafely(imageSource));
     } catch (error) {
       imageFailures.push({ index, message: error instanceof Error ? error.message : String(error) });
       console.warn(`Scene ${index + 1} image load failed`, error);
-      return null;
+      images.push(null);
     }
-  }));
+    onStatus(`シーン画像を準備しています… ${index + 1}/${scenes.length}`);
+  }
 
   let audioArrayBuffer = null;
   let audioMimeType = bgmDataMime(project);
@@ -130,11 +135,12 @@ export async function prepareVideoProject(project, { onStatus = () => {} } = {})
     }
   }
 
+  const hasSceneNarrations = scenes.some(scene => scene?.narration?.audioData);
   let narrationArrayBuffer = null;
   let narrationMimeType = narrationDataMime(project);
   let narrationFetchError = '';
   let narrationInvalid = false;
-  if (project.narration?.audioData) {
+  if (!hasSceneNarrations && project.narration?.audioData) {
     onStatus('ナレーション音声を確認しています…');
     if (narrationLooksLikeVideo(project)) {
       narrationInvalid = true;
@@ -151,33 +157,35 @@ export async function prepareVideoProject(project, { onStatus = () => {} } = {})
       }
     }
   }
+
   const sceneNarrations = [];
-  if (scenes.some(scene => scene?.narration?.audioData)) {
+  if (hasSceneNarrations) {
     onStatus('シーン別ナレーションを確認しています…');
-    for (let index=0; index<scenes.length; index++) {
-      const n=scenes[index]?.narration;
+    for (let index = 0; index < scenes.length; index++) {
+      const n = scenes[index]?.narration;
       if (!n?.audioData) { sceneNarrations.push(null); continue; }
       try {
-        const response=await fetch(n.audioData);
-        if(!response.ok) throw new Error(`HTTP ${response.status}`);
+        const response = await fetch(n.audioData);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
         sceneNarrations.push({
           arrayBuffer: await response.arrayBuffer(),
           mimeType: response.headers.get('content-type') || n.mimeType || 'audio/wav',
-          durationSec: Number(n.durationSec)||0
+          durationSec: Number(n.durationSec) || 0
         });
-      } catch(error) {
-        console.warn(`Scene ${index+1} narration load failed`,error);
-        sceneNarrations.push({error:error instanceof Error?error.message:String(error)});
+      } catch (error) {
+        console.warn(`Scene ${index + 1} narration load failed`, error);
+        sceneNarrations.push({ error: error instanceof Error ? error.message : String(error) });
       }
+      onStatus(`シーン別ナレーションを確認しています… ${index + 1}/${scenes.length}`);
     }
   }
+
   const loadedImageCount = images.filter(Boolean).length;
   const notes = [];
   if (audioInvalid) notes.push('BGM形式エラー'); else if (audioFetchError) notes.push('BGM読込失敗');
   if (narrationInvalid) notes.push('ナレーション形式エラー'); else if (narrationFetchError) notes.push('ナレーション読込失敗');
   onStatus(`素材準備完了：画像 ${loadedImageCount}/${scenes.length}${notes.length ? `／${notes.join('／')}` : ''}`);
   return { images, imageFailures, loadedImageCount, audioArrayBuffer, audioMimeType, audioFetchError, audioInvalid, narrationArrayBuffer, narrationMimeType, narrationFetchError, narrationInvalid, sceneNarrations };
-
 }
 
 function clamp(value, min, max) { return Math.min(max, Math.max(min, value)); }
@@ -227,11 +235,7 @@ function drawCover(ctx, image, width, height, motion, progress, alpha = 1) {
 function subtitleLines(text, maxChars = 16, maxLines = 2) {
   const raw = String(text || '').replace(/\r\n?/g, '\n').trim();
   if (!raw) return [];
-
-  if (raw.includes('\n')) {
-    return raw.split('\n').map(v => v.trim()).filter(Boolean).slice(0, Math.max(1, maxLines));
-  }
-
+  if (raw.includes('\n')) return raw.split('\n').map(v => v.trim()).filter(Boolean).slice(0, Math.max(1, maxLines));
   const result = [];
   const chars = Array.from(raw);
   while (chars.length) result.push(chars.splice(0, Math.max(1, maxChars)).join(''));
@@ -248,14 +252,14 @@ function activeSubtitlePhrase(scene, localTime, start, end, maxChars = 13) {
     const pause = /[。！？!?]$/.test(phrase) ? 4 : /[、，,]$/.test(phrase) ? 2 : 0;
     return chars + pause;
   });
-  const total = weights.reduce((a,b)=>a+b,0) || 1;
+  const total = weights.reduce((a, b) => a + b, 0) || 1;
   const position = clamp((localTime - start) / span, 0, 0.999999) * total;
   let cursor = 0;
-  for (let i=0;i<phrases.length;i++) {
+  for (let i = 0; i < phrases.length; i++) {
     cursor += weights[i];
     if (position < cursor) return phrases[i];
   }
-  return phrases[phrases.length-1];
+  return phrases[phrases.length - 1];
 }
 
 function roundedRect(ctx, x, y, width, height, radius) {
@@ -286,7 +290,6 @@ function drawSubtitle(ctx, project, item, localTime, width, height) {
   const phraseText = activeSubtitlePhrase(scene, localTime, start, end, Math.min(14, Math.max(8, Number(style.maxCharsPerLine || 16))));
   const lines = subtitleLines(phraseText, style.maxCharsPerLine || 16, style.maxLines || 2);
   if (!lines.length) return;
-
   const scale = width / 1080;
   const fontSize = Math.max(18, Number(style.fontSize || 54) * scale);
   const lineHeight = fontSize * 1.35;
@@ -338,7 +341,6 @@ export function drawProjectFrame(project, prepared, canvas, timeSec) {
   const local = clamp(timeSec - item.start, 0, item.duration);
   const progress = clamp(local / item.duration, 0, 1);
   drawCover(ctx, prepared.images[item.index], width, height, item.scene.motion || 'none', progress, 1);
-
   const transitionSec = item.scene.transition === 'cut' ? 0 : Math.min(.45, item.duration * .18);
   if (transitionSec > 0 && item.index < map.length - 1 && local > item.duration - transitionSec) {
     const fade = clamp((local - (item.duration - transitionSec)) / transitionSec, 0, 1);
@@ -353,72 +355,40 @@ export function drawProjectFrame(project, prepared, canvas, timeSec) {
   drawSubtitle(ctx, project, item, local, width, height);
 }
 
-export async function runVisualPreview(project, prepared, canvas, {
-  durationLimit = 10,
-  signal,
-  onProgress = () => {}
-} = {}) {
+export async function runVisualPreview(project, prepared, canvas, { durationLimit = 10, signal, onProgress = () => {} } = {}) {
   const total = Math.min(getProjectDuration(project), Math.max(.1, Number(durationLimit) || 10));
   if (!total) throw new Error('プレビューできるシーンがありません。');
   const start = performance.now();
   return await new Promise((resolve, reject) => {
     let frameId = 0;
-    const abort = () => {
-      cancelAnimationFrame(frameId);
-      reject(new DOMException('プレビューを中止しました。', 'AbortError'));
-    };
+    const abort = () => { cancelAnimationFrame(frameId); reject(new DOMException('プレビューを中止しました。', 'AbortError')); };
     signal?.addEventListener('abort', abort, { once: true });
     const frame = now => {
       if (signal?.aborted) return;
       const elapsed = Math.min(total, (now - start) / 1000);
       drawProjectFrame(project, prepared, canvas, elapsed);
       onProgress(elapsed, total);
-      if (elapsed >= total) {
-        signal?.removeEventListener('abort', abort);
-        resolve();
-        return;
-      }
+      if (elapsed >= total) { signal?.removeEventListener('abort', abort); resolve(); return; }
       frameId = requestAnimationFrame(frame);
     };
     frameId = requestAnimationFrame(frame);
   });
 }
 
-export function getRecorderMimeCandidates(hasAudio) {
-  return [...(hasAudio ? MIME_CANDIDATES_AUDIO : MIME_CANDIDATES_VIDEO)];
-}
-
-function chooseMime(hasAudio) {
-  return getRecorderMimeCandidates(hasAudio).find(type => MediaRecorder.isTypeSupported(type)) || '';
-}
-
-function createRecorder(stream, mimeType, videoBitsPerSecond) {
-  const options = { videoBitsPerSecond };
-  if (mimeType) options.mimeType = mimeType;
-  return new MediaRecorder(stream, options);
-}
-
-function bitrateFor(project) {
-  const width = Number(project.output?.width) || 720;
-  const high = project.output?.quality === 'high';
-  if (width >= 1080) return high ? 8_000_000 : 5_000_000;
-  return high ? 5_000_000 : 3_000_000;
-}
+export function getRecorderMimeCandidates(hasAudio) { return [...(hasAudio ? MIME_CANDIDATES_AUDIO : MIME_CANDIDATES_VIDEO)]; }
+function chooseMime(hasAudio) { return getRecorderMimeCandidates(hasAudio).find(type => MediaRecorder.isTypeSupported(type)) || ''; }
+function createRecorder(stream, mimeType, videoBitsPerSecond) { const options = { videoBitsPerSecond }; if (mimeType) options.mimeType = mimeType; return new MediaRecorder(stream, options); }
+function bitrateFor(project) { const width = Number(project.output?.width) || 720; const high = project.output?.quality === 'high'; if (width >= 1080) return high ? 8_000_000 : 5_000_000; return high ? 5_000_000 : 3_000_000; }
 
 export function validatePreparedAudioForExport(project, prepared) {
   const errors = [];
-  if (project?.output?.bgmEnabled && project?.bgm?.audioData && !prepared?.audioArrayBuffer) {
-    errors.push(`BGMを読み込めませんでした${prepared?.audioFetchError ? `（${prepared.audioFetchError}）` : ''}`);
-  }
+  if (project?.output?.bgmEnabled && project?.bgm?.audioData && !prepared?.audioArrayBuffer) errors.push(`BGMを読み込めませんでした${prepared?.audioFetchError ? `（${prepared.audioFetchError}）` : ''}`);
   const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
   const expectedSceneNarration = scenes.reduce((count, scene) => count + (scene?.narration?.audioData ? 1 : 0), 0);
   if (expectedSceneNarration) {
     const preparedScenes = Array.isArray(prepared?.sceneNarrations) ? prepared.sceneNarrations : [];
     const failed = [];
-    scenes.forEach((scene, index) => {
-      if (!scene?.narration?.audioData) return;
-      if (!preparedScenes[index]?.arrayBuffer) failed.push(index + 1);
-    });
+    scenes.forEach((scene, index) => { if (scene?.narration?.audioData && !preparedScenes[index]?.arrayBuffer) failed.push(index + 1); });
     if (failed.length) errors.push(`シーン別ナレーションを読み込めませんでした（シーン${failed.join('・')}）`);
   } else if (project?.narration?.audioData && !prepared?.narrationArrayBuffer) {
     errors.push(`ナレーションを読み込めませんでした${prepared?.narrationFetchError ? `（${prepared.narrationFetchError}）` : ''}`);
@@ -429,14 +399,10 @@ export function validatePreparedAudioForExport(project, prepared) {
 async function createAudio(project, prepared, providedContext = null) {
   const preparedErrors = validatePreparedAudioForExport(project, prepared);
   if (preparedErrors.length) throw new Error(`${preparedErrors.join('／')}。BGM・ナレーション画面で音声ファイルを確認してください。`);
-  if (project.output?.bgmEnabled && (prepared.audioInvalid || bgmLooksLikeVideo(project))) {
-    throw new Error('BGMに動画ファイルが登録されています。MP3・M4A・AAC・WAVなどの音声ファイルへ差し替えてください。');
-  }
-  if (prepared.narrationInvalid || narrationLooksLikeVideo(project)) {
-    throw new Error('ナレーションに動画ファイルが登録されています。MP3・M4A・AAC・WAVなどの音声ファイルへ差し替えてください。');
-  }
+  if (project.output?.bgmEnabled && (prepared.audioInvalid || bgmLooksLikeVideo(project))) throw new Error('BGMに動画ファイルが登録されています。MP3・M4A・AAC・WAVなどの音声ファイルへ差し替えてください。');
+  if (prepared.narrationInvalid || narrationLooksLikeVideo(project)) throw new Error('ナレーションに動画ファイルが登録されています。MP3・M4A・AAC・WAVなどの音声ファイルへ差し替えてください。');
   const hasBgm = Boolean(project.output?.bgmEnabled && prepared.audioArrayBuffer);
-  const hasSceneNarration = Array.isArray(prepared.sceneNarrations) && prepared.sceneNarrations.some(x=>x?.arrayBuffer);
+  const hasSceneNarration = Array.isArray(prepared.sceneNarrations) && prepared.sceneNarrations.some(x => x?.arrayBuffer);
   const hasNarration = !hasSceneNarration && Boolean(prepared.narrationArrayBuffer);
   if (!hasBgm && !hasNarration && !hasSceneNarration) return { audio: null, warning: '' };
   const AudioContextClass = globalThis.AudioContext || globalThis.webkitAudioContext;
@@ -452,226 +418,84 @@ async function createAudio(project, prepared, providedContext = null) {
     let narrationGain = null;
     let narrationDuration = 0;
     const sceneNarrationWindows = [];
-
     if (hasBgm) {
       try {
         const buffer = await context.decodeAudioData(prepared.audioArrayBuffer.slice(0));
-        const source = context.createBufferSource();
-        source.buffer = buffer;
-        source.loop = calculateBgmLoopCount(getProjectDuration(project), buffer.duration, project.bgm?.loop !== false) > 1;
-        bgmGain = context.createGain();
-        source.connect(bgmGain);
-        bgmGain.connect(destination);
-        starts.push(baseTime=>source.start(baseTime));
-        sources.push(source);
-      } catch (error) {
-        console.warn('BGM decode failed; continue without BGM', error, prepared.audioMimeType);
-        warnings.push(`BGMをデコードできなかったためBGMなしで続行します${prepared.audioMimeType ? `（${prepared.audioMimeType}）` : ''}`);
-      }
+        const source = context.createBufferSource(); source.buffer = buffer; source.loop = calculateBgmLoopCount(getProjectDuration(project), buffer.duration, project.bgm?.loop !== false) > 1;
+        bgmGain = context.createGain(); source.connect(bgmGain); bgmGain.connect(destination); starts.push(baseTime => source.start(baseTime)); sources.push(source);
+      } catch (error) { console.warn('BGM decode failed; continue without BGM', error, prepared.audioMimeType); warnings.push(`BGMをデコードできなかったためBGMなしで続行します${prepared.audioMimeType ? `（${prepared.audioMimeType}）` : ''}`); }
     }
-
     if (hasSceneNarration) {
-      let cursor=0;
-      for(let index=0; index<(project.scenes||[]).length; index++){
-        const scene=project.scenes[index];
-        const preparedScene=prepared.sceneNarrations[index];
-        const sceneDuration=Math.max(0,Number(scene?.durationSec)||0);
-        if(preparedScene?.arrayBuffer){
-          try{
-            const buffer=await context.decodeAudioData(preparedScene.arrayBuffer.slice(0));
-            const source=context.createBufferSource();
-            source.buffer=buffer;
-            source.loop=false;
-            const gain=context.createGain();
-            gain.gain.value=clamp(Number(project.narration?.volume ?? 1),0,1.5);
-            source.connect(gain);
-            gain.connect(destination);
-            const sceneOffset=cursor;
-            starts.push(baseTime=>source.start(baseTime+sceneOffset));
-            sources.push(source);
-            sceneNarrationWindows.push({start:cursor,end:cursor+(buffer.duration||sceneDuration),gain});
-          }catch(error){
-            console.warn(`Scene ${index+1} narration decode failed`,error,preparedScene.mimeType);
-            warnings.push(`シーン${index+1}のナレーションをデコードできませんでした`);
-          }
+      let cursor = 0;
+      for (let index = 0; index < (project.scenes || []).length; index++) {
+        const scene = project.scenes[index]; const preparedScene = prepared.sceneNarrations[index]; const sceneDuration = Math.max(0, Number(scene?.durationSec) || 0);
+        if (preparedScene?.arrayBuffer) {
+          try {
+            const buffer = await context.decodeAudioData(preparedScene.arrayBuffer.slice(0));
+            const source = context.createBufferSource(); source.buffer = buffer; source.loop = false;
+            const gain = context.createGain(); gain.gain.value = clamp(Number(project.narration?.volume ?? 1), 0, 1.5); source.connect(gain); gain.connect(destination);
+            const sceneOffset = cursor; starts.push(baseTime => source.start(baseTime + sceneOffset)); sources.push(source); sceneNarrationWindows.push({ start: cursor, end: cursor + (buffer.duration || sceneDuration), gain });
+          } catch (error) { console.warn(`Scene ${index + 1} narration decode failed`, error, preparedScene.mimeType); warnings.push(`シーン${index + 1}のナレーションをデコードできませんでした`); }
         }
-        cursor+=sceneDuration;
+        cursor += sceneDuration;
       }
     }
-
     if (hasNarration) {
       try {
-        const buffer = await context.decodeAudioData(prepared.narrationArrayBuffer.slice(0));
-        narrationDuration = buffer.duration || 0;
-        const source = context.createBufferSource();
-        source.buffer = buffer;
-        source.loop = false;
-        narrationGain = context.createGain();
-        narrationGain.gain.value = clamp(Number(project.narration?.volume ?? 1), 0, 1.5);
-        source.connect(narrationGain);
-        narrationGain.connect(destination);
-        starts.push(baseTime=>source.start(baseTime));
-        sources.push(source);
-      } catch (error) {
-        console.warn('Narration decode failed; continue without narration', error, prepared.narrationMimeType);
-        warnings.push(`ナレーションをデコードできなかったためナレーションなしで続行します${prepared.narrationMimeType ? `（${prepared.narrationMimeType}）` : ''}`);
-      }
+        const buffer = await context.decodeAudioData(prepared.narrationArrayBuffer.slice(0)); narrationDuration = buffer.duration || 0;
+        const source = context.createBufferSource(); source.buffer = buffer; source.loop = false; narrationGain = context.createGain(); narrationGain.gain.value = clamp(Number(project.narration?.volume ?? 1), 0, 1.5); source.connect(narrationGain); narrationGain.connect(destination); starts.push(baseTime => source.start(baseTime)); sources.push(source);
+      } catch (error) { console.warn('Narration decode failed; continue without narration', error, prepared.narrationMimeType); warnings.push(`ナレーションをデコードできなかったためナレーションなしで続行します${prepared.narrationMimeType ? `（${prepared.narrationMimeType}）` : ''}`); }
     }
-
-    if (warnings.length) {
-      throw new Error(`${warnings.join('／')}。BGM・ナレーション画面で音声ファイルを再登録してください。`);
-    }
-    if (!sources.length) {
-      if (!providedContext && context.state !== 'closed') await context.close();
-      return { audio: null, warning: '' };
-    }
-
-    let started=false;
-    return {
-      audio: {
-        context, sources, bgmGain, narrationGain, narrationDuration, tracks: destination.stream.getAudioTracks(),
-        start() {
-          if(started)return;
-          started=true;
-          const baseTime=context.currentTime;
-          starts.forEach(start=>start(baseTime));
-        },
-        update(timeSec, totalSec) {
-          if (bgmGain) {
-            const base = clamp(Number(project.bgm?.volume) || 0, 0, 1);
-            const fadeIn = Math.max(0, Number(project.bgm?.fadeInSec) || 0);
-            const fadeOut = Math.max(0, Number(project.bgm?.fadeOutSec) || 0);
-            let factor = 1;
-            if (fadeIn > 0) factor = Math.min(factor, timeSec / fadeIn);
-            if (fadeOut > 0) factor = Math.min(factor, (totalSec - timeSec) / fadeOut);
-            const sceneSpeaking=sceneNarrationWindows.some(w=>timeSec>=w.start&&timeSec<w.end); const duck = project.bgm?.ducking !== false && ((narrationGain && timeSec < narrationDuration)||sceneSpeaking) ? 0.35 : 1;
-            bgmGain.gain.value = base * clamp(factor, 0, 1) * duck;
-          }
-          if (narrationGain) narrationGain.gain.value = clamp(Number(project.narration?.volume ?? 1), 0, 1.5); sceneNarrationWindows.forEach(w=>w.gain.gain.value=clamp(Number(project.narration?.volume ?? 1),0,1.5));
-        },
-        async stop() {
-          for (const source of sources) { try { source.stop(); } catch {} }
-          try { if (context.state !== 'closed') await context.close(); } catch {}
-        }
-      }, warning: warnings.join('／')
-    };
-  } catch (error) {
-    try { if (context.state !== 'closed') await context.close(); } catch {}
-    throw error;
-  }
+    if (warnings.length) throw new Error(`${warnings.join('／')}。BGM・ナレーション画面で音声ファイルを再登録してください。`);
+    if (!sources.length) { if (!providedContext && context.state !== 'closed') await context.close(); return { audio: null, warning: '' }; }
+    let started = false;
+    return { audio: { context, sources, bgmGain, narrationGain, narrationDuration, tracks: destination.stream.getAudioTracks(), start() { if (started) return; started = true; const baseTime = context.currentTime; starts.forEach(start => start(baseTime)); }, update(timeSec, totalSec) { if (bgmGain) { const base = clamp(Number(project.bgm?.volume) || 0, 0, 1); const fadeIn = Math.max(0, Number(project.bgm?.fadeInSec) || 0); const fadeOut = Math.max(0, Number(project.bgm?.fadeOutSec) || 0); let factor = 1; if (fadeIn > 0) factor = Math.min(factor, timeSec / fadeIn); if (fadeOut > 0) factor = Math.min(factor, (totalSec - timeSec) / fadeOut); const sceneSpeaking = sceneNarrationWindows.some(w => timeSec >= w.start && timeSec < w.end); const duck = project.bgm?.ducking !== false && ((narrationGain && timeSec < narrationDuration) || sceneSpeaking) ? 0.35 : 1; bgmGain.gain.value = base * clamp(factor, 0, 1) * duck; } if (narrationGain) narrationGain.gain.value = clamp(Number(project.narration?.volume ?? 1), 0, 1.5); sceneNarrationWindows.forEach(w => w.gain.gain.value = clamp(Number(project.narration?.volume ?? 1), 0, 1.5)); }, async stop() { for (const source of sources) { try { source.stop(); } catch {} } try { if (context.state !== 'closed') await context.close(); } catch {} } }, warning: warnings.join('／') };
+  } catch (error) { try { if (context.state !== 'closed') await context.close(); } catch {} throw error; }
 }
 
-export async function exportProjectVideo(project, prepared, canvas, {
-  durationLimit,
-  signal,
-  onProgress = () => {},
-  onStatus = () => {},
-  audioContext = null
-} = {}) {
+export async function exportProjectVideo(project, prepared, canvas, { durationLimit, signal, onProgress = () => {}, onStatus = () => {}, audioContext = null } = {}) {
   const caps = getVideoCapabilities();
   if (!caps.supported) throw new Error('このブラウザは動画生成に必要なMediaRecorderまたはCanvas録画に対応していません。');
   const fullDuration = getProjectDuration(project);
   const total = durationLimit ? Math.min(fullDuration, Math.max(.1, Number(durationLimit))) : fullDuration;
   if (!total) throw new Error('動画にできるシーンがありません。');
-
   const fps = clamp(Number(project.output?.fps) || 30, 1, 60);
-  canvas.width = Number(project.output?.width) || 720;
-  canvas.height = Number(project.output?.height) || 1280;
+  canvas.width = Number(project.output?.width) || 720; canvas.height = Number(project.output?.height) || 1280;
   drawProjectFrame(project, prepared, canvas, 0);
   onStatus('音声と録画機能を準備しています…');
-  const audioResult = await createAudio(project, prepared, audioContext);
-  const audio = audioResult.audio;
-  if (audioResult.warning) onStatus(audioResult.warning);
+  const audioResult = await createAudio(project, prepared, audioContext); const audio = audioResult.audio; if (audioResult.warning) onStatus(audioResult.warning);
   const canvasStream = canvas.captureStream(fps);
   const captureVideoTrack = canvasStream.getVideoTracks()[0] || null;
   const captureTrackSettings = captureVideoTrack?.getSettings ? captureVideoTrack.getSettings() : {};
   const stream = new MediaStream([...canvasStream.getVideoTracks(), ...(audio?.tracks || [])]);
   const mimeType = chooseMime(Boolean(audio?.tracks?.length));
   let recorder;
-  try {
-    recorder = createRecorder(stream, mimeType, bitrateFor(project));
-  } catch (error) {
-    recorder = new MediaRecorder(stream);
-  }
+  try { recorder = createRecorder(stream, mimeType, bitrateFor(project)); } catch { recorder = new MediaRecorder(stream); }
   const actualMime = recorder.mimeType || mimeType || 'video/webm';
   const chunks = [];
-  let frameId = 0;
-  let stopped = false;
-  let wakeLock = null;
-
-  const cleanup = async () => {
-    cancelAnimationFrame(frameId);
-    stream.getTracks().forEach(track => track.stop());
-    await audio?.stop();
-    try { await wakeLock?.release(); } catch {}
-  };
-
+  let frameId = 0, stopped = false, wakeLock = null;
+  const cleanup = async () => { cancelAnimationFrame(frameId); stream.getTracks().forEach(track => track.stop()); await audio?.stop(); try { await wakeLock?.release(); } catch {} };
   return await new Promise(async (resolve, reject) => {
-    const abort = () => {
-      if (stopped) return;
-      stopped = true;
-      try { recorder.stop(); } catch {}
-      cleanup().finally(() => reject(new DOMException('動画生成を中止しました。', 'AbortError')));
-    };
+    const abort = () => { if (stopped) return; stopped = true; try { recorder.stop(); } catch {} cleanup().finally(() => reject(new DOMException('動画生成を中止しました。', 'AbortError'))); };
     signal?.addEventListener('abort', abort, { once: true });
     recorder.ondataavailable = event => { if (event.data?.size) chunks.push(event.data); };
-    recorder.onerror = event => {
-      if (stopped) return;
-      stopped = true;
-      signal?.removeEventListener('abort', abort);
-      cleanup().finally(() => reject(event.error || new Error('録画中にエラーが発生しました。')));
-    };
+    recorder.onerror = event => { if (stopped) return; stopped = true; signal?.removeEventListener('abort', abort); cleanup().finally(() => reject(event.error || new Error('録画中にエラーが発生しました。'))); };
     recorder.onstop = async () => {
       if (stopped && signal?.aborted) return;
-      stopped = true;
-      signal?.removeEventListener('abort', abort);
-      await cleanup();
+      stopped = true; signal?.removeEventListener('abort', abort); await cleanup();
       if (!chunks.length) return reject(new Error('動画データを生成できませんでした。画面を開いたまま再試行してください。'));
-      const blob = new Blob(chunks, { type: actualMime });
-      const extension = actualMime.includes('mp4') ? 'mp4' : 'webm';
-      resolve({
-        blob, mimeType: actualMime, extension, durationSec: total,
-        diagnostics: {
-          requestedWidth: Number(project.output?.width) || 720,
-          requestedHeight: Number(project.output?.height) || 1280,
-          canvasWidth: canvas.width,
-          canvasHeight: canvas.height,
-          captureWidth: Number(captureTrackSettings?.width) || null,
-          captureHeight: Number(captureTrackSettings?.height) || null,
-          captureFrameRate: Number(captureTrackSettings?.frameRate) || null,
-          selectedMimeType: mimeType,
-          actualMimeType: actualMime,
-          hasAudio: Boolean(audio?.tracks?.length)
-        }
-      });
+      const blob = new Blob(chunks, { type: actualMime }); const extension = actualMime.includes('mp4') ? 'mp4' : 'webm';
+      resolve({ blob, mimeType: actualMime, extension, durationSec: total, diagnostics: { requestedWidth: Number(project.output?.width) || 720, requestedHeight: Number(project.output?.height) || 1280, canvasWidth: canvas.width, canvasHeight: canvas.height, captureWidth: Number(captureTrackSettings?.width) || null, captureHeight: Number(captureTrackSettings?.height) || null, captureFrameRate: Number(captureTrackSettings?.frameRate) || null, selectedMimeType: mimeType, actualMimeType: actualMime, hasAudio: Boolean(audio?.tracks?.length) } });
     };
-
-    try {
-      if (navigator.wakeLock?.request) wakeLock = await navigator.wakeLock.request('screen');
-    } catch {}
+    try { if (navigator.wakeLock?.request) wakeLock = await navigator.wakeLock.request('screen'); } catch {}
     onStatus(`動画を生成しています（実時間：約${Math.ceil(total)}秒）…`);
-    try {
-      recorder.start(1000);
-      audio?.start?.();
-    } catch (error) {
-      stopped=true;
-      signal?.removeEventListener('abort', abort);
-      await cleanup();
-      reject(error instanceof Error ? error : new Error(String(error)));
-      return;
-    }
+    try { recorder.start(1000); audio?.start?.(); } catch (error) { stopped = true; signal?.removeEventListener('abort', abort); await cleanup(); reject(error instanceof Error ? error : new Error(String(error))); return; }
     const start = performance.now();
     const frame = now => {
       if (signal?.aborted || stopped) return;
       const elapsed = Math.min(total, (now - start) / 1000);
-      drawProjectFrame(project, prepared, canvas, elapsed);
-      audio?.update(elapsed, total);
-      onProgress(elapsed, total);
-      if (elapsed >= total) {
-        drawProjectFrame(project, prepared, canvas, Math.max(0, total - .001));
-        recorder.stop();
-        return;
-      }
+      drawProjectFrame(project, prepared, canvas, elapsed); audio?.update(elapsed, total); onProgress(elapsed, total);
+      if (elapsed >= total) { drawProjectFrame(project, prepared, canvas, Math.max(0, total - .001)); recorder.stop(); return; }
       frameId = requestAnimationFrame(frame);
     };
     frameId = requestAnimationFrame(frame);
