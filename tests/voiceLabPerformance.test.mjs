@@ -10,7 +10,7 @@ test('Voice Lab初期表示では大容量projectや旧音声Blobを自動読込
   assert.match(html, /画面を開いただけでは大容量音声を読み込みません/);
 });
 
-test('音声エンジン準備時にprojectを1回だけ遅延読込する', () => {
+test('音声エンジン準備時にprojectを遅延読込し同一page内では再利用する', () => {
   assert.match(html, /プロジェクト情報を読み込み中/);
   assert.match(html, /await loadProjectIntoVoiceLab\(\);/);
   assert.match(html, /if\(currentProject\) return currentProject;/);
