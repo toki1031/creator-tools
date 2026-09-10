@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizeStorageError, sortProjectsByUpdatedAt } from '../db.js';
+import { readFile } from 'node:fs/promises';
+
+const dbSource = await readFile(new URL('../db.js', import.meta.url), 'utf8');
 
 test('updatedAtがない旧projectを含んでも安全に一覧を並べ替える', () => {
   const input=[
@@ -18,6 +21,16 @@ test('project一覧が不正値でも空配列として扱う', () => {
   assert.deepEqual(sortProjectsByUpdatedAt(null),[]);
 });
 
+test('一覧表示はgetAllで巨大projectを一括保持せずcursorで軽量要約する', () => {
+  assert.match(dbSource, /openCursor\(\)/);
+  assert.match(dbSource, /projectListSummary\(cursor\.value\)/);
+  assert.doesNotMatch(dbSource, /objectStore\(PROJECTS\)\.getAll\(\)/);
+});
+
+test('大容量project保存は固定8秒ではなく容量に応じて猶予を延長する', () => {
+  assert.match(dbSource, /payloadBytes >= 20 \* 1024 \* 1024 \? 30000/);
+  assert.match(dbSource, /payloadBytes >= 8 \* 1024 \* 1024 \? 15000/);
+});
 
 test('IndexedDB容量不足を原因と整理方法が分かるエラーへ変換する', () => {
   const source=new Error('quota');
