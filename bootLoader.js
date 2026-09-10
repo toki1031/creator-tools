@@ -43,6 +43,7 @@ import('./main.js')
       './editorUndo.js',
       './datasetExportUi.js',
       './datasetBrollSuggestionsUi.js',
+      './sceneVisualTypeSuggestionsUi.js',
       './optionalAiModuleLoader.js',
       './bgmLibraryUi.js',
       './bgmRightsSummaryUi.js',
