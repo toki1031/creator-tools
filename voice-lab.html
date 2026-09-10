@@ -70,7 +70,7 @@ import { recordNarrationVoiceDecision } from "./decisionLog.js";
 import { canReuseSceneNarration, createNarrationFingerprint, sceneNarrationStatus } from "./narrationResume.js";
 const $=s=>document.querySelector(s);
 document.documentElement.dataset.voiceLabBoot = 'js-started';
-let tts=null, wavBlob=null, wavUrl=null;
+let tts=null, wavBlob=null, wavUrl=null, currentProject=null;
 const params=new URLSearchParams(location.search);
 const projectId=params.get('project') || 'default';
 const returnLink=$('#returnToProject');
@@ -89,11 +89,12 @@ const blobToDataUrl = blob => new Promise((resolve,reject)=>{
 });
 const sceneText = scene => String(scene?.speechText||scene?.subtitleText||scene?.text||'').trim();
 
-async function updateResumeSummary(){
+async function updateResumeSummary(projectOverride=null){
   if(projectId==='default') return;
   try{
-    const project=await getProject(projectId);
+    const project=projectOverride || currentProject || await getProject(projectId);
     if(!project) return;
+    currentProject=project;
     const voice=$('#voice').value;
     const scenes=Array.isArray(project.scenes)?project.scenes:[];
     const states=scenes.map(scene=>sceneNarrationStatus(scene,{text:sceneText(scene),voiceId:voice}));
@@ -112,13 +113,14 @@ async function loadProjectIntoVoiceLab(){
   try{
     const project=await getProject(projectId);
     if(!project) return;
+    currentProject=project;
     if(project.speechScript) $('#text').value=project.speechScript;
     const n=project.narration||{};
     if(n.voiceId && [...$('#voice').options].some(o=>o.value===n.voiceId)) $('#voice').value=n.voiceId;
     if(n.audioData){
       setLog('#registered',`プロジェクト登録済み ✓\nproject=${projectId}\nvoice=${n.voiceId||n.fileName||'不明'}\nsource=${n.source||'不明'}\n出力画面でそのまま使用できます。`,'ok');
     }
-    await updateResumeSummary();
+    await updateResumeSummary(project);
   }catch(e){
     setLog('#registered','プロジェクト読込警告:\n'+(e?.message||e),'warn');
   }
@@ -142,7 +144,7 @@ async function loadRegistered(){
 }
 loadRegistered();
 await loadProjectIntoVoiceLab();
-$('#voice').onchange=()=>{ void updateResumeSummary(); };
+$('#voice').onchange=()=>{ void updateResumeSummary(currentProject); };
 
 $('#prepare').onclick=async()=>{
  $('#prepare').disabled=true; $('#prog').value=5;
@@ -189,6 +191,7 @@ $('#register').onclick=async()=>{
   const audioData=await blobToDataUrl(wavBlob);
   const project=await getProject(projectId);
   if(!project) throw new Error(`対象プロジェクトが見つかりません: ${projectId}`);
+  currentProject=project;
   const narrationVoiceBefore=project.narration?.voiceId;
   const hadProjectNarrationBefore=Boolean(project.narration?.audioData);
   const sceneNarrationCountBefore=(Array.isArray(project.scenes)?project.scenes:[]).filter(scene=>Boolean(scene?.narration?.audioData)).length;
@@ -228,6 +231,7 @@ $('#generateScenes').onclick=async()=>{
     if(projectId==='default') throw new Error('Creator OSのプロジェクトからVoice Labを開いてください。');
     const project=await getProject(projectId);
     if(!project) throw new Error(`対象プロジェクトが見つかりません: ${projectId}`);
+    currentProject=project;
     const scenes=Array.isArray(project.scenes)?project.scenes:[];
     if(!scenes.length) throw new Error('シーンがありません。Creator OSの「2. シーン」で台本を分割してください。');
 
@@ -293,6 +297,7 @@ $('#generateScenes').onclick=async()=>{
     }
     project.updatedAt=new Date().toISOString();
     await saveProject(project);
+    currentProject=project;
 
     setLog('#sceneResult',`シーン同期完了 ✓\n${results.join('\n')}\n\n再利用 ${reused}件 / 新規生成 ${generated}件\n合計 ${total.toFixed(2)}秒\n映像尺・字幕尺をWAV実尺へ同期しました。`,'ok');
     if(!document.querySelector('#afterSceneSync')){
