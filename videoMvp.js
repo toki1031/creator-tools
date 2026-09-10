@@ -1,4 +1,4 @@
-export const MVP_SHORTS_SPEC = Object.freeze({ width:1080, height:1920, fps:30, maxDurationSec:60, format:'mp4' });
+export const MVP_SHORTS_SPEC = Object.freeze({ width:1080, height:1920, fps:30, maxDurationSec:180, format:'mp4' });
 
 export function isMvpShortsProject(project) {
   return project?.platform === 'youtube-shorts' && project?.genre !== 'bgm';
@@ -12,8 +12,8 @@ export function validateMvpShortsOutput(project, durationSec = 0) {
   if(width!==1080||height!==1920) errors.push('解像度を1080×1920にしてください。');
   if(fps!==30) errors.push('フレームレートを30fpsにしてください。');
   if(format!=='mp4') errors.push('出力形式をMP4にしてください。');
-  if(duration>60.001) errors.push('YouTube ShortsのMVP検証では動画を60秒以内にしてください。');
-  if(duration>55&&duration<=60.001) warnings.push('60秒上限に近いため、完成後の再生時間も確認してください。');
+  if(duration>MVP_SHORTS_SPEC.maxDurationSec+0.001) errors.push(`YouTube Shortsは${MVP_SHORTS_SPEC.maxDurationSec}秒以内にしてください。`);
+  if(duration>170&&duration<=MVP_SHORTS_SPEC.maxDurationSec+0.001) warnings.push('3分上限に近いため、完成後の再生時間も確認してください。');
   return {applicable,pass:errors.length===0,errors,warnings,width,height,fps,format,durationSec:duration};
 }
 
