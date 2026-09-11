@@ -9,13 +9,16 @@ test('recording chunks can be streamed to OPFS instead of retained in JS memory'
   assert.match(renderer, /navigator\.storage\.getDirectory\(\)/);
   assert.match(renderer, /handle\.createWritable\(\)/);
   assert.match(renderer, /writable\.write\(blob\)/);
+  assert.match(renderer, /mode: 'opfs'/);
   assert.match(renderer, /const recordingSink = await createRecordingSink\(actualMime\)/);
   assert.match(renderer, /recordingSink\.write\(event\.data\)/);
   assert.match(renderer, /blob = await recordingSink\.finish\(\)/);
   assert.doesNotMatch(renderer, /const chunks = \[\]/);
 });
 
-test('recording sink falls back safely when OPFS is unavailable', () => {
+test('recording sink falls back safely when OPFS is unavailable and abort remains bounded', () => {
   assert.match(renderer, /if \(!globalThis\.navigator\?\.storage\?\.getDirectory\) return memorySink\(\)/);
+  assert.match(renderer, /mode: 'memory'/);
   assert.match(renderer, /using in-memory chunks/);
+  assert.match(renderer, /cleanup\(\{ abortSink: true \}\)/);
 });
