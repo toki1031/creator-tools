@@ -5,8 +5,8 @@ import fs from 'node:fs';
 const source = fs.readFileSync(new URL('../productionAssistantUi.js', import.meta.url), 'utf8');
 const boot = fs.readFileSync(new URL('../bootLoader.js', import.meta.url), 'utf8');
 
-test('production assistant is isolated as optional module', () => {
-  assert.match(boot, /productionAssistantUi\.js/);
+test('production assistant remains isolated but is not auto-loaded on boot', () => {
+  assert.doesNotMatch(boot, /['"]\.\/productionAssistantUi\.js['"]/);
   assert.match(source, /inspectSmartFinish/);
   assert.match(source, /firstSmartFinishAction/);
   assert.match(source, /data-repair/);
