@@ -8,6 +8,7 @@ const project = {
   scenes: [{
     id: 's1', durationSec: 4, motion: 'zoom-in', transition: 'fade',
     text: '本文', subtitleText: '字幕', subtitleEnabled: true,
+    subtitlePosition: 'bottom', subtitlePositionOffsetPercent: 7,
     imageAssetId: 'asset-1',
     narration: { audioData: audio, mimeType: 'audio/wav', durationSec: 3.5 },
     smartReframe: { focusX: .2, focusY: .3, zoom: 1.5 },
@@ -30,6 +31,8 @@ assert.equal(job.__renderJob, true);
 assert.equal(job.scenes.length, 1);
 assert.equal(job.scenes[0].imageData, image);
 assert.equal(job.scenes[0].narration.audioData, audio);
+assert.equal(job.scenes[0].subtitlePosition, 'bottom');
+assert.equal(job.scenes[0].subtitlePositionOffsetPercent, 7);
 assert.equal(job.scenes[0].smartReframe, undefined);
 assert.equal(job.scenes[0].aiSuggestion, undefined);
 assert.deepEqual(job.mediaLibrary, []);
