@@ -4,6 +4,7 @@ import fs from 'node:fs';
 
 const source = fs.readFileSync(new URL('../main.js', import.meta.url), 'utf8');
 
+// Keep normal output generation free from whole-video verification copies on iPhone Safari.
 test('normal video generation does not copy the completed Blob for SHA-256 verification', () => {
   assert.doesNotMatch(source, /result\.blob\.arrayBuffer\(\)/);
   assert.doesNotMatch(source, /generatedHash/);
