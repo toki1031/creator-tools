@@ -24,7 +24,7 @@ function pickScene(project, scene) {
     subtitleEndSec: Number(scene?.subtitleEndSec) || 0,
     subtitlePhraseSync: scene?.subtitlePhraseSync !== false,
     subtitlePosition: scene?.subtitlePosition,
-    subtitleOffsetPercent: scene?.subtitleOffsetPercent,
+    subtitlePositionOffsetPercent: scene?.subtitlePositionOffsetPercent,
     imageData,
     narration: pickNarration(scene?.narration)
   };
