@@ -21,6 +21,7 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           import re
+          import textwrap
 
           path = Path('main.js')
           s = path.read_text()
@@ -50,10 +51,16 @@ jobs:
           if n != 1:
               raise SystemExit('final review handler not found')
 
-          s = s.replace('  const validation=validateVideoProject(project); const currentReviewSignature=finalReviewSignature(project);\n  const mvpValidation=validateMvpShortsOutput(project,total);\n  const finalReviewApproved=Boolean(project.finalReview?.approved && project.finalReview?.signature===currentReviewSignature);', '  const validation=validateVideoProject(project);\n  const mvpValidation=validateMvpShortsOutput(project,total);', 1)
+          old_defs = '  const validation=validateVideoProject(project); const currentReviewSignature=finalReviewSignature(project);\n  const mvpValidation=validateMvpShortsOutput(project,total);\n  const finalReviewApproved=Boolean(project.finalReview?.approved && project.finalReview?.signature===currentReviewSignature);'
+          if old_defs not in s:
+              raise SystemExit('review definitions not found')
+          s = s.replace(old_defs, '  const validation=validateVideoProject(project);\n  const mvpValidation=validateMvpShortsOutput(project,total);', 1)
           s = s.replace('  const longProject=total>180;\n', '', 1)
 
-          s = s.replace("  let previewController=null,renderController=null,resultUrl='';let resultFile=null;let generatedHash='';let generatedMeta=null;", "  let renderController=null,resultUrl='';let resultFile=null;let generatedHash='';let generatedMeta=null;", 1)
+          old_decl = "  let previewController=null,renderController=null,resultUrl='';let resultFile=null;let generatedHash='';let generatedMeta=null;"
+          if old_decl not in s:
+              raise SystemExit('preview controller declaration not found')
+          s = s.replace(old_decl, "  let renderController=null,resultUrl='';let resultFile=null;let generatedHash='';let generatedMeta=null;", 1)
 
           s, n = re.subn(r"\n  root\.querySelector\('#previewVideo'\)\.onclick=async\(\)=>\{.*?\n  root\.querySelector\('#stopPreview'\)\.onclick=\(\)=>previewController\?\.abort\(\);\n", '\n', s, count=1, flags=re.S)
           if n != 1:
@@ -70,15 +77,23 @@ jobs:
               raise SystemExit('render range logic target not found')
           s = s.replace(old, new, 1)
 
-          s = s.replace("renderController=new AbortController();root.querySelector('#cancelRender').disabled=false;root.querySelector('#generateVideo').disabled=true;root.querySelector('#previewVideo').disabled=true;progress.value=0;", "renderController=new AbortController();root.querySelector('#cancelRender').disabled=false;root.querySelector('#generateVideo').disabled=true;progress.value=0;", 1)
-          s = s.replace("root.querySelector('#generateVideo').disabled=!(capabilities.supported && project.finalReview?.approved && project.finalReview?.signature===finalReviewSignature(project));root.querySelector('#previewVideo').disabled=false;", "root.querySelector('#generateVideo').disabled=!capabilities.supported;", 1)
+          old = "renderController=new AbortController();root.querySelector('#cancelRender').disabled=false;root.querySelector('#generateVideo').disabled=true;root.querySelector('#previewVideo').disabled=true;progress.value=0;"
+          if old not in s:
+              raise SystemExit('generation busy controls not found')
+          s = s.replace(old, "renderController=new AbortController();root.querySelector('#cancelRender').disabled=false;root.querySelector('#generateVideo').disabled=true;progress.value=0;", 1)
+
+          old = "root.querySelector('#generateVideo').disabled=!(capabilities.supported && project.finalReview?.approved && project.finalReview?.signature===finalReviewSignature(project));root.querySelector('#previewVideo').disabled=false;"
+          if old not in s:
+              raise SystemExit('generation reset controls not found')
+          s = s.replace(old, "root.querySelector('#generateVideo').disabled=!capabilities.supported;", 1)
 
           if s == before:
               raise SystemExit('no main.js changes made')
           path.write_text(s)
 
           test_path = Path('tests/outputLazyPreparation.test.mjs')
-          test_path.write_text("""import test from 'node:test';
+          test_path.write_text(textwrap.dedent("""
+          import test from 'node:test';
           import assert from 'node:assert/strict';
           import fs from 'node:fs';
 
@@ -110,7 +125,7 @@ jobs:
             assert.match(source, /操作時に素材を準備します/);
             assert.match(source, /1フレーム確認または動画生成時に素材を読み込みます/);
           });
-          """.replace(/^          /gm, ''))
+          """))
           PY
       - name: Remove temporary workflow
         run: git rm .github/workflows/patch-output-slim.yml
