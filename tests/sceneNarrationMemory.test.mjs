@@ -4,6 +4,7 @@ import fs from 'node:fs';
 
 const renderer = fs.readFileSync(new URL('../videoRenderer.js', import.meta.url), 'utf8');
 
+// Guard the v1.4 iPhone Safari policy: Scene narration must not be fully decoded up front.
 test('scene narration preparation keeps references instead of encoded buffers', () => {
   assert.match(renderer, /const sceneNarrationSources = scenes\.map/);
   assert.match(renderer, /再生直前に順番に読み込みます/);
