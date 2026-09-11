@@ -1,3 +1,4 @@
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -9,15 +10,24 @@ test('output route does not eagerly prepare heavy video media', () => {
   assert.match(source, /const ensurePreparedAssets=\(\)=>/);
   assert.doesNotMatch(source, /let preparedPromise=prepareVideoProject/);
   assert.match(source, /const assets=await ensurePreparedAssets\(\);drawProjectFrame/);
-  assert.match(source, /const assets=await ensurePreparedAssets\(\);await runVisualPreview/);
   assert.match(source, /let assets=await ensurePreparedAssets\(\);/);
 });
 
-test('final review images ask the browser to decode offscreen thumbnails lazily', () => {
-  assert.match(source, /loading="lazy" decoding="async" alt="シーン\$\{index\+1\}素材"/);
+test('output route omits duplicate final-review image grid', () => {
+  assert.doesNotMatch(source, /final-review-card/);
+  assert.doesNotMatch(source, /approveFinalReview/);
+  assert.match(source, /<h2>生成前チェック<\/h2>/);
+});
+
+test('output route removes 10 second preview controls and render range', () => {
+  assert.doesNotMatch(source, /id=\"previewVideo\"/);
+  assert.doesNotMatch(source, /id=\"stopPreview\"/);
+  assert.doesNotMatch(source, /id=\"renderRange\"/);
+  assert.match(source, /1フレーム確認/);
+  assert.match(source, /🎬 動画を生成/);
 });
 
 test('output route tells the user that media is prepared only when needed', () => {
   assert.match(source, /操作時に素材を準備します/);
-  assert.match(source, /プレビューまたは動画生成時に素材を読み込みます/);
+  assert.match(source, /1フレーム確認または動画生成時に素材を読み込みます/);
 });
