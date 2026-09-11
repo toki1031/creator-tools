@@ -36,7 +36,13 @@ const bootWatchdog = setTimeout(() => {
 import('./main.js')
   .then(() => {
     clearTimeout(bootWatchdog);
+    // 起動直後に大容量projectを再読込する補助UIは自動起動しない。
+    // iPhone Safariでは別タブ/別アプリから戻った際にタブが再生成されることがあり、
+    // main.jsの画面復元直後に複数のgetProject/saveProjectが重なると復帰不能になりやすいため。
+    // productionAssistantUi / productionPipelineUi / productionTimingTracker はファイルを残し、
+    // 将来必要になった場合のみ明示操作で読み込む。
     const optionalModules = [
+      './dedicatedRenderHandoff.js',
       './subtitlePreviewNavigation.js',
       './subtitleAlignUi.js',
       './subtitleCardEditorUi.js',
@@ -53,10 +59,7 @@ import('./main.js')
       './shortsHighlightUi.js',
       './shortsWorkspaceUi.js',
       './shortsOutputUi.js',
-      './publishRightsUi.js',
-      './productionAssistantUi.js',
-      './productionPipelineUi.js',
-      './productionTimingTracker.js'
+      './publishRightsUi.js'
     ];
     for (const modulePath of optionalModules) {
       import(modulePath).catch(error => console.warn(`Optional module failed to load: ${modulePath}`, error));
