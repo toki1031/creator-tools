@@ -189,34 +189,19 @@ export async function prepareVideoProject(project, { onStatus = () => {} } = {})
     }
   }
 
-  const sceneNarrations = [];
-  if (hasSceneNarrations) {
-    onStatus('シーン別ナレーションを確認しています…');
-    for (let index = 0; index < scenes.length; index++) {
-      const n = scenes[index]?.narration;
-      if (!n?.audioData) { sceneNarrations.push(null); continue; }
-      try {
-        const response = await fetch(n.audioData);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        sceneNarrations.push({
-          arrayBuffer: await response.arrayBuffer(),
-          mimeType: response.headers.get('content-type') || n.mimeType || 'audio/wav',
-          durationSec: Number(n.durationSec) || 0
-        });
-      } catch (error) {
-        console.warn(`Scene ${index + 1} narration load failed`, error);
-        sceneNarrations.push({ error: error instanceof Error ? error.message : String(error) });
-      }
-      onStatus(`シーン別ナレーションを確認しています… ${index + 1}/${scenes.length}`);
-    }
-  }
+  const sceneNarrationSources = scenes.map(scene => {
+    const n = scene?.narration;
+    return n?.audioData ? { audioData: n.audioData, mimeType: n.mimeType || 'audio/wav', durationSec: Number(n.durationSec) || 0 } : null;
+  });
+  const sceneNarrations = sceneNarrationSources.map(item => item ? { arrayBuffer: true, lazy: true } : null);
+  if (hasSceneNarrations) onStatus('シーン別ナレーションは再生直前に順番に読み込みます。');
 
   const loadedImageCount = imageSources.filter(Boolean).length;
   const notes = [];
   if (audioInvalid) notes.push('BGM形式エラー'); else if (audioFetchError) notes.push('BGM読込失敗');
   if (narrationInvalid) notes.push('ナレーション形式エラー'); else if (narrationFetchError) notes.push('ナレーション読込失敗');
   onStatus(`素材準備完了：画像 ${loadedImageCount}/${scenes.length}${notes.length ? `／${notes.join('／')}` : ''}`);
-  return { images, imageSources, imageFailures, imageLoadPromises, imageWindowIndex: imagePreparation.imageWindowIndex, loadedImageCount, audioArrayBuffer, audioMimeType, audioFetchError, audioInvalid, narrationArrayBuffer, narrationMimeType, narrationFetchError, narrationInvalid, sceneNarrations };
+  return { images, imageSources, imageFailures, imageLoadPromises, imageWindowIndex: imagePreparation.imageWindowIndex, loadedImageCount, audioArrayBuffer, audioMimeType, audioFetchError, audioInvalid, narrationArrayBuffer, narrationMimeType, narrationFetchError, narrationInvalid, sceneNarrations, sceneNarrationSources };
 }
 
 function clamp(value, min, max) { return Math.min(max, Math.max(min, value)); }
@@ -434,54 +419,118 @@ async function createAudio(project, prepared, providedContext = null) {
   if (project.output?.bgmEnabled && (prepared.audioInvalid || bgmLooksLikeVideo(project))) throw new Error('BGMに動画ファイルが登録されています。MP3・M4A・AAC・WAVなどの音声ファイルへ差し替えてください。');
   if (prepared.narrationInvalid || narrationLooksLikeVideo(project)) throw new Error('ナレーションに動画ファイルが登録されています。MP3・M4A・AAC・WAVなどの音声ファイルへ差し替えてください。');
   const hasBgm = Boolean(project.output?.bgmEnabled && prepared.audioArrayBuffer);
-  const hasSceneNarration = Array.isArray(prepared.sceneNarrations) && prepared.sceneNarrations.some(x => x?.arrayBuffer);
+  const sceneSources = Array.isArray(prepared.sceneNarrationSources) ? prepared.sceneNarrationSources : [];
+  const hasSceneNarration = sceneSources.some(x => x?.audioData);
   const hasNarration = !hasSceneNarration && Boolean(prepared.narrationArrayBuffer);
   if (!hasBgm && !hasNarration && !hasSceneNarration) return { audio: null, warning: '' };
   const AudioContextClass = globalThis.AudioContext || globalThis.webkitAudioContext;
   if (!AudioContextClass) throw new Error('この端末ではBGM・ナレーション合成に必要なWeb Audioを利用できません。別の対応端末で再試行してください。');
   const context = providedContext || new AudioContextClass();
-  const warnings = [];
-  const sources = [];
-  const starts = [];
+  const staticSources = [];
+  const staticStarts = [];
   try {
     if (context.state !== 'running') await context.resume();
     const destination = context.createMediaStreamDestination();
     let bgmGain = null;
     let narrationGain = null;
     let narrationDuration = 0;
-    const sceneNarrationWindows = [];
     if (hasBgm) {
-      try {
-        const buffer = await context.decodeAudioData(prepared.audioArrayBuffer.slice(0));
-        const source = context.createBufferSource(); source.buffer = buffer; source.loop = calculateBgmLoopCount(getProjectDuration(project), buffer.duration, project.bgm?.loop !== false) > 1;
-        bgmGain = context.createGain(); source.connect(bgmGain); bgmGain.connect(destination); starts.push(baseTime => source.start(baseTime)); sources.push(source);
-      } catch (error) { console.warn('BGM decode failed; continue without BGM', error, prepared.audioMimeType); warnings.push(`BGMをデコードできなかったためBGMなしで続行します${prepared.audioMimeType ? `（${prepared.audioMimeType}）` : ''}`); }
-    }
-    if (hasSceneNarration) {
-      let cursor = 0;
-      for (let index = 0; index < (project.scenes || []).length; index++) {
-        const scene = project.scenes[index]; const preparedScene = prepared.sceneNarrations[index]; const sceneDuration = Math.max(0, Number(scene?.durationSec) || 0);
-        if (preparedScene?.arrayBuffer) {
-          try {
-            const buffer = await context.decodeAudioData(preparedScene.arrayBuffer.slice(0));
-            const source = context.createBufferSource(); source.buffer = buffer; source.loop = false;
-            const gain = context.createGain(); gain.gain.value = clamp(Number(project.narration?.volume ?? 1), 0, 1.5); source.connect(gain); gain.connect(destination);
-            const sceneOffset = cursor; starts.push(baseTime => source.start(baseTime + sceneOffset)); sources.push(source); sceneNarrationWindows.push({ start: cursor, end: cursor + (buffer.duration || sceneDuration), gain });
-          } catch (error) { console.warn(`Scene ${index + 1} narration decode failed`, error, preparedScene.mimeType); warnings.push(`シーン${index + 1}のナレーションをデコードできませんでした`); }
-        }
-        cursor += sceneDuration;
-      }
+      const buffer = await context.decodeAudioData(prepared.audioArrayBuffer);
+      prepared.audioArrayBuffer = null;
+      const source = context.createBufferSource(); source.buffer = buffer; source.loop = calculateBgmLoopCount(getProjectDuration(project), buffer.duration, project.bgm?.loop !== false) > 1;
+      bgmGain = context.createGain(); source.connect(bgmGain); bgmGain.connect(destination); staticStarts.push(baseTime => source.start(baseTime)); staticSources.push(source);
     }
     if (hasNarration) {
-      try {
-        const buffer = await context.decodeAudioData(prepared.narrationArrayBuffer.slice(0)); narrationDuration = buffer.duration || 0;
-        const source = context.createBufferSource(); source.buffer = buffer; source.loop = false; narrationGain = context.createGain(); narrationGain.gain.value = clamp(Number(project.narration?.volume ?? 1), 0, 1.5); source.connect(narrationGain); narrationGain.connect(destination); starts.push(baseTime => source.start(baseTime)); sources.push(source);
-      } catch (error) { console.warn('Narration decode failed; continue without narration', error, prepared.narrationMimeType); warnings.push(`ナレーションをデコードできなかったためナレーションなしで続行します${prepared.narrationMimeType ? `（${prepared.narrationMimeType}）` : ''}`); }
+      const buffer = await context.decodeAudioData(prepared.narrationArrayBuffer); prepared.narrationArrayBuffer = null; narrationDuration = buffer.duration || 0;
+      const source = context.createBufferSource(); source.buffer = buffer; source.loop = false; narrationGain = context.createGain(); narrationGain.gain.value = clamp(Number(project.narration?.volume ?? 1), 0, 1.5); source.connect(narrationGain); narrationGain.connect(destination); staticStarts.push(baseTime => source.start(baseTime)); staticSources.push(source);
     }
-    if (warnings.length) throw new Error(`${warnings.join('／')}。BGM・ナレーション画面で音声ファイルを再登録してください。`);
-    if (!sources.length) { if (!providedContext && context.state !== 'closed') await context.close(); return { audio: null, warning: '' }; }
+
+    const scenes = Array.isArray(project.scenes) ? project.scenes : [];
+    const sceneStarts = [];
+    let cursor = 0;
+    for (const scene of scenes) { sceneStarts.push(cursor); cursor += Math.max(0, Number(scene?.durationSec) || 0); }
+    const dynamicScenes = new Map();
+    const loadingScenes = new Map();
     let started = false;
-    return { audio: { context, sources, bgmGain, narrationGain, narrationDuration, tracks: destination.stream.getAudioTracks(), start() { if (started) return; started = true; const baseTime = context.currentTime; starts.forEach(start => start(baseTime)); }, update(timeSec, totalSec) { if (bgmGain) { const base = clamp(Number(project.bgm?.volume) || 0, 0, 1); const fadeIn = Math.max(0, Number(project.bgm?.fadeInSec) || 0); const fadeOut = Math.max(0, Number(project.bgm?.fadeOutSec) || 0); let factor = 1; if (fadeIn > 0) factor = Math.min(factor, timeSec / fadeIn); if (fadeOut > 0) factor = Math.min(factor, (totalSec - timeSec) / fadeOut); const sceneSpeaking = sceneNarrationWindows.some(w => timeSec >= w.start && timeSec < w.end); const duck = project.bgm?.ducking !== false && ((narrationGain && timeSec < narrationDuration) || sceneSpeaking) ? 0.35 : 1; bgmGain.gain.value = base * clamp(factor, 0, 1) * duck; } if (narrationGain) narrationGain.gain.value = clamp(Number(project.narration?.volume ?? 1), 0, 1.5); sceneNarrationWindows.forEach(w => w.gain.gain.value = clamp(Number(project.narration?.volume ?? 1), 0, 1.5)); }, async stop() { for (const source of sources) { try { source.stop(); } catch {} } try { if (context.state !== 'closed') await context.close(); } catch {} } }, warning: warnings.join('／') };
+    let lastProjectTime = 0;
+
+    const decodeScene = async index => {
+      if (!hasSceneNarration || index < 0 || index >= scenes.length || !sceneSources[index]?.audioData) return null;
+      if (dynamicScenes.has(index)) return dynamicScenes.get(index);
+      if (loadingScenes.has(index)) return await loadingScenes.get(index);
+      const task = (async () => {
+        const meta = sceneSources[index];
+        const response = await fetch(meta.audioData);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const encoded = await response.arrayBuffer();
+        const buffer = await context.decodeAudioData(encoded);
+        const source = context.createBufferSource(); source.buffer = buffer; source.loop = false;
+        const gain = context.createGain(); gain.gain.value = clamp(Number(project.narration?.volume ?? 1), 0, 1.5); source.connect(gain); gain.connect(destination);
+        const entry = { index, source, gain, duration: buffer.duration || meta.durationSec || Math.max(0, Number(scenes[index]?.durationSec) || 0), scheduled: false };
+        dynamicScenes.set(index, entry);
+        return entry;
+      })().finally(() => loadingScenes.delete(index));
+      loadingScenes.set(index, task);
+      return await task;
+    };
+
+    const scheduleEntry = (entry, projectTime = lastProjectTime) => {
+      if (!entry || entry.scheduled || !started) return;
+      const sceneStart = sceneStarts[entry.index] || 0;
+      const elapsed = Math.max(0, projectTime - sceneStart);
+      if (elapsed >= entry.duration) return;
+      entry.source.start(context.currentTime + Math.max(0, sceneStart - projectTime), elapsed);
+      entry.scheduled = true;
+    };
+
+    const releaseBefore = index => {
+      for (const [key, entry] of dynamicScenes) {
+        if (key >= index) continue;
+        try { entry.source.disconnect(); } catch {}
+        try { entry.gain.disconnect(); } catch {}
+        entry.source.buffer = null;
+        dynamicScenes.delete(key);
+      }
+    };
+
+    const primeSceneWindow = async index => {
+      if (!hasSceneNarration) return;
+      const targets = [index, index + 1].filter(i => i >= 0 && i < scenes.length && sceneSources[i]?.audioData);
+      for (const target of targets) {
+        const entry = await decodeScene(target);
+        scheduleEntry(entry);
+      }
+      releaseBefore(Math.max(0, index - 1));
+    };
+
+    if (hasSceneNarration) await primeSceneWindow(0);
+    if (!staticSources.length && !hasSceneNarration) { if (!providedContext && context.state !== 'closed') await context.close(); return { audio: null, warning: '' }; }
+
+    return { audio: {
+      context, sources: staticSources, bgmGain, narrationGain, narrationDuration, tracks: destination.stream.getAudioTracks(),
+      start() { if (started) return; started = true; const baseTime = context.currentTime; staticStarts.forEach(start => start(baseTime)); dynamicScenes.forEach(entry => scheduleEntry(entry, 0)); },
+      update(timeSec, totalSec) {
+        lastProjectTime = timeSec;
+        if (hasSceneNarration) {
+          let index = scenes.length - 1;
+          for (let i = 0; i < sceneStarts.length; i++) { const end = sceneStarts[i] + Math.max(0, Number(scenes[i]?.durationSec) || 0); if (timeSec < end) { index = i; break; } }
+          void primeSceneWindow(index).catch(error => console.warn('Scene narration window load failed', error));
+        }
+        if (bgmGain) {
+          const base = clamp(Number(project.bgm?.volume) || 0, 0, 1); const fadeIn = Math.max(0, Number(project.bgm?.fadeInSec) || 0); const fadeOut = Math.max(0, Number(project.bgm?.fadeOutSec) || 0); let factor = 1; if (fadeIn > 0) factor = Math.min(factor, timeSec / fadeIn); if (fadeOut > 0) factor = Math.min(factor, (totalSec - timeSec) / fadeOut);
+          const sceneSpeaking = [...dynamicScenes.values()].some(entry => entry.scheduled && timeSec >= (sceneStarts[entry.index] || 0) && timeSec < (sceneStarts[entry.index] || 0) + entry.duration);
+          const duck = project.bgm?.ducking !== false && ((narrationGain && timeSec < narrationDuration) || sceneSpeaking) ? 0.35 : 1; bgmGain.gain.value = base * clamp(factor, 0, 1) * duck;
+        }
+        if (narrationGain) narrationGain.gain.value = clamp(Number(project.narration?.volume ?? 1), 0, 1.5);
+        dynamicScenes.forEach(entry => { entry.gain.gain.value = clamp(Number(project.narration?.volume ?? 1), 0, 1.5); });
+      },
+      async stop() {
+        for (const source of staticSources) { try { source.stop(); } catch {} }
+        for (const entry of dynamicScenes.values()) { try { entry.source.stop(); } catch {} try { entry.source.disconnect(); } catch {} entry.source.buffer = null; }
+        dynamicScenes.clear(); loadingScenes.clear();
+        try { if (context.state !== 'closed') await context.close(); } catch {}
+      }
+    }, warning: '' };
   } catch (error) { try { if (context.state !== 'closed') await context.close(); } catch {} throw error; }
 }
 
