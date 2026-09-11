@@ -1,0 +1,102 @@
+name: Patch Smart Reframe render ownership
+
+on:
+  push:
+    branches:
+      - v1.4/fix-narration-performance-shorts-limit
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v1.4/fix-narration-performance-shorts-limit
+      - name: Move Smart Reframe into renderer and stop bridge auto-load
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          vr = Path('videoRenderer.js')
+          s = vr.read_text()
+          before = s
+
+          marker = "import { calculateBgmLoopCount, splitSubtitlePhrases } from './qualityLogic.js';\n"
+          addition = marker + "import { calculateReframedDrawRect } from './smartReframeRenderPlacement.js';\n"
+          if "smartReframeRenderPlacement.js" not in s:
+              if marker not in s:
+                  raise SystemExit('videoRenderer import marker not found')
+              s = s.replace(marker, addition, 1)
+
+          old_sig = "function drawCover(ctx, image, width, height, motion, progress, alpha = 1) {"
+          new_sig = "function drawCover(ctx, image, width, height, motion, progress, alpha = 1, reframe = null) {"
+          if old_sig not in s:
+              raise SystemExit('drawCover signature not found')
+          s = s.replace(old_sig, new_sig, 1)
+
+          old_draw = "  ctx.drawImage(image, (width - drawWidth) / 2 + moveX, (height - drawHeight) / 2, drawWidth, drawHeight);"
+          new_draw = "  const dx = (width - drawWidth) / 2 + moveX;\n  const dy = (height - drawHeight) / 2;\n  if (reframe) {\n    const rect = calculateReframedDrawRect(width, height, dx, dy, drawWidth, drawHeight, reframe);\n    ctx.drawImage(image, rect.x, rect.y, rect.drawWidth, rect.drawHeight);\n  } else {\n    ctx.drawImage(image, dx, dy, drawWidth, drawHeight);\n  }"
+          if old_draw not in s:
+              raise SystemExit('drawCover drawImage target not found')
+          s = s.replace(old_draw, new_draw, 1)
+
+          old_current = "  drawCover(ctx, prepared.images[item.index], width, height, item.scene.motion || 'none', progress, 1);"
+          new_current = "  drawCover(ctx, prepared.images[item.index], width, height, item.scene.motion || 'none', progress, 1, item.scene.smartReframe || null);"
+          if old_current not in s:
+              raise SystemExit('current scene drawCover call not found')
+          s = s.replace(old_current, new_current, 1)
+
+          old_next = "    drawCover(ctx, prepared.images[item.index + 1], width, height, map[item.index + 1].scene.motion || 'none', 0, fade);"
+          new_next = "    drawCover(ctx, prepared.images[item.index + 1], width, height, map[item.index + 1].scene.motion || 'none', 0, fade, map[item.index + 1].scene.smartReframe || null);"
+          if old_next not in s:
+              raise SystemExit('next scene drawCover call not found')
+          s = s.replace(old_next, new_next, 1)
+
+          if s == before:
+              raise SystemExit('no videoRenderer changes made')
+          vr.write_text(s)
+
+          boot = Path('bootLoader.js')
+          b = boot.read_text()
+          target = "      './smartReframeRendererBridge.js',\n"
+          if target not in b:
+              raise SystemExit('bridge auto-load entry not found')
+          b = b.replace(target, '', 1)
+          b = b.replace('    // productionAssistantUi / productionPipelineUi / productionTimingTracker はファイルを残し、', '    // productionAssistantUi / productionPipelineUi / productionTimingTracker / smartReframeRendererBridge はファイルを残し、', 1)
+          boot.write_text(b)
+
+          test = Path('tests/smartReframeRendererOwnership.test.mjs')
+          test.write_text("""import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+
+const renderer = fs.readFileSync(new URL('../videoRenderer.js', import.meta.url), 'utf8');
+const boot = fs.readFileSync(new URL('../bootLoader.js', import.meta.url), 'utf8');
+
+test('video renderer applies Smart Reframe directly', () => {
+  assert.match(renderer, /calculateReframedDrawRect/);
+  assert.match(renderer, /item\.scene\.smartReframe \|\| null/);
+  assert.match(renderer, /map\[item\.index \+ 1\]\.scene\.smartReframe \|\| null/);
+});
+
+test('boot loader no longer auto-loads the project-reading Smart Reframe bridge', () => {
+  const optionalModules = boot.match(/const optionalModules = \[([\s\S]*?)\];/)?.[1] || '';
+  assert.doesNotMatch(optionalModules, /smartReframeRendererBridge/);
+});
+""")
+          PY
+      - name: Remove temporary workflow
+        run: git rm .github/workflows/patch-smart-reframe-render.yml
+      - name: Run focused tests
+        run: node --test tests/smartReframeRendererOwnership.test.mjs tests/smartReframeRenderPlacement.test.mjs
+      - name: Commit patch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Move Smart Reframe rendering into video renderer'
+          git push origin HEAD:v1.4/fix-narration-performance-shorts-limit
