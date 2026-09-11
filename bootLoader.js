@@ -42,6 +42,7 @@ import('./main.js')
     // productionAssistantUi / productionPipelineUi / productionTimingTracker はファイルを残し、
     // 将来必要になった場合のみ明示操作で読み込む。
     const optionalModules = [
+      './dedicatedRenderHandoff.js',
       './subtitlePreviewNavigation.js',
       './subtitleAlignUi.js',
       './subtitleCardEditorUi.js',
