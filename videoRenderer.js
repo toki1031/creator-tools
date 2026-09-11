@@ -534,6 +534,45 @@ async function createAudio(project, prepared, providedContext = null) {
   } catch (error) { try { if (context.state !== 'closed') await context.close(); } catch {} throw error; }
 }
 
+async function createRecordingSink(mimeType) {
+  const memoryChunks = [];
+  const memorySink = () => ({
+    mode: 'memory',
+    write: async blob => { if (blob?.size) memoryChunks.push(blob); },
+    finish: async () => new Blob(memoryChunks, { type: mimeType }),
+    abort: async () => { memoryChunks.length = 0; }
+  });
+  if (!globalThis.navigator?.storage?.getDirectory) return memorySink();
+  try {
+    const root = await navigator.storage.getDirectory();
+    const handle = await root.getFileHandle('creator-os-recording.tmp', { create: true });
+    const writable = await handle.createWritable();
+    let writeChain = Promise.resolve();
+    let writeError = null;
+    return {
+      mode: 'opfs',
+      write(blob) {
+        if (!blob?.size) return writeChain;
+        writeChain = writeChain.then(() => writable.write(blob)).catch(error => {
+          writeError = error;
+          throw error;
+        });
+        return writeChain;
+      },
+      async finish() {
+        await writeChain;
+        if (writeError) throw writeError;
+        await writable.close();
+        return await handle.getFile();
+      },
+      async abort() { try { await writable.abort(); } catch {} }
+    };
+  } catch (error) {
+    console.warn('OPFS recording sink unavailable; using in-memory chunks', error);
+    return memorySink();
+  }
+}
+
 export async function exportProjectVideo(project, prepared, canvas, { durationLimit, signal, onProgress = () => {}, onStatus = () => {}, audioContext = null } = {}) {
   const caps = getVideoCapabilities();
   if (!caps.supported) throw new Error('このブラウザは動画生成に必要なMediaRecorderまたはCanvas録画に対応していません。');
@@ -554,24 +593,34 @@ export async function exportProjectVideo(project, prepared, canvas, { durationLi
   let recorder;
   try { recorder = createRecorder(stream, mimeType, bitrateFor(project)); } catch { recorder = new MediaRecorder(stream); }
   const actualMime = recorder.mimeType || mimeType || 'video/webm';
-  const chunks = [];
+  const recordingSink = await createRecordingSink(actualMime);
+  let chunkWriteError = null;
   let frameId = 0, stopped = false, wakeLock = null;
-  const cleanup = async () => { cancelAnimationFrame(frameId); stream.getTracks().forEach(track => track.stop()); await audio?.stop(); releasePreparedImages(prepared); try { await wakeLock?.release(); } catch {} };
+  const cleanup = async ({ abortSink = false } = {}) => { cancelAnimationFrame(frameId); stream.getTracks().forEach(track => track.stop()); await audio?.stop(); releasePreparedImages(prepared); if (abortSink) await recordingSink.abort?.(); try { await wakeLock?.release(); } catch {} };
   return await new Promise(async (resolve, reject) => {
-    const abort = () => { if (stopped) return; stopped = true; try { recorder.stop(); } catch {} cleanup().finally(() => reject(new DOMException('動画生成を中止しました。', 'AbortError'))); };
+    const abort = () => { if (stopped) return; stopped = true; try { recorder.stop(); } catch {} cleanup({ abortSink: true }).finally(() => reject(new DOMException('動画生成を中止しました。', 'AbortError'))); };
     signal?.addEventListener('abort', abort, { once: true });
-    recorder.ondataavailable = event => { if (event.data?.size) chunks.push(event.data); };
-    recorder.onerror = event => { if (stopped) return; stopped = true; signal?.removeEventListener('abort', abort); cleanup().finally(() => reject(event.error || new Error('録画中にエラーが発生しました。'))); };
+    recorder.ondataavailable = event => {
+      if (!event.data?.size) return;
+      recordingSink.write(event.data).catch(error => {
+        chunkWriteError = error instanceof Error ? error : new Error(String(error));
+        if (!stopped) { try { recorder.stop(); } catch {} }
+      });
+    };
+    recorder.onerror = event => { if (stopped) return; stopped = true; signal?.removeEventListener('abort', abort); cleanup({ abortSink: true }).finally(() => reject(event.error || new Error('録画中にエラーが発生しました。'))); };
     recorder.onstop = async () => {
       if (stopped && signal?.aborted) return;
       stopped = true; signal?.removeEventListener('abort', abort); await cleanup();
-      if (!chunks.length) return reject(new Error('動画データを生成できませんでした。画面を開いたまま再試行してください。'));
-      const blob = new Blob(chunks, { type: actualMime }); const extension = actualMime.includes('mp4') ? 'mp4' : 'webm';
+      if (chunkWriteError) { await recordingSink.abort?.(); return reject(new Error(`動画データの一時保存に失敗しました：${chunkWriteError.message}`)); }
+      let blob;
+      try { blob = await recordingSink.finish(); } catch (error) { await recordingSink.abort?.(); return reject(error instanceof Error ? error : new Error(String(error))); }
+      if (!blob?.size) return reject(new Error('動画データを生成できませんでした。画面を開いたまま再試行してください。'));
+      const extension = actualMime.includes('mp4') ? 'mp4' : 'webm';
       resolve({ blob, mimeType: actualMime, extension, durationSec: total, diagnostics: { requestedWidth: Number(project.output?.width) || 720, requestedHeight: Number(project.output?.height) || 1280, canvasWidth: canvas.width, canvasHeight: canvas.height, captureWidth: Number(captureTrackSettings?.width) || null, captureHeight: Number(captureTrackSettings?.height) || null, captureFrameRate: Number(captureTrackSettings?.frameRate) || null, selectedMimeType: mimeType, actualMimeType: actualMime, hasAudio: Boolean(audio?.tracks?.length) } });
     };
     try { if (navigator.wakeLock?.request) wakeLock = await navigator.wakeLock.request('screen'); } catch {}
     onStatus(`動画を生成しています（実時間：約${Math.ceil(total)}秒）…`);
-    try { recorder.start(1000); audio?.start?.(); } catch (error) { stopped = true; signal?.removeEventListener('abort', abort); await cleanup(); reject(error instanceof Error ? error : new Error(String(error))); return; }
+    try { recorder.start(1000); audio?.start?.(); } catch (error) { stopped = true; signal?.removeEventListener('abort', abort); await cleanup({ abortSink: true }); reject(error instanceof Error ? error : new Error(String(error))); return; }
     const start = performance.now();
     const frame = now => {
       if (signal?.aborted || stopped) return;
