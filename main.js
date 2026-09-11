@@ -1022,7 +1022,7 @@ async function renderOutput(id) {
     <div class="section-head"><div><h2>最終素材チェック</h2><p>動画へ焼き込む直前のシーン素材を目視確認します。ここでは素材の内容を自動判定せず、選択した画像・字幕・ナレーション・尺が意図どおりかを確認します。</p></div><span id="finalReviewStatus" class="status-chip ${finalReviewApproved?'':'status-warn'}">${finalReviewApproved?'確認済み':'未確認'}</span></div>
     <div class="final-review-grid">
       ${scenes.map((scene,index)=>{const reviewImage=resolveSceneImageSource(project,scene).data;return `<article class="final-review-item">
-        <div class="final-review-thumb">${reviewImage?`<img src="${reviewImage}" alt="シーン${index+1}素材">`:`<div class="warn">映像素材なし</div>`}</div>
+        <div class="final-review-thumb">${reviewImage?`<img src="${reviewImage}" loading="lazy" decoding="async" alt="シーン${index+1}素材">`:`<div class="warn">映像素材なし</div>`}</div>
         <div><strong>シーン${index+1}</strong>
         <p>${escapeHtml((scene.subtitleText||scene.text||scene.speechText||'字幕なし').slice(0,90))}</p>
         <small>${scene.narration?.audioData?`✓ 音声 ${Number(scene.narration?.durationSec||0).toFixed(2)}秒`:'! ナレーションなし'} / ${Number(scene.durationSec||0).toFixed(2)}秒</small></div>
@@ -1033,7 +1033,7 @@ async function renderOutput(id) {
   </section>
 
   <section class="editor-card video-render-card">
-    <div class="section-head"><div><h2>動画プレビュー・生成</h2><p>画像、動き、字幕、BGMをブラウザ内で合成します。</p></div><span id="renderStatus">素材準備中…</span></div><div id="assetDiagnostics" class="asset-diagnostics">素材を確認しています…</div>
+    <div class="section-head"><div><h2>動画プレビュー・生成</h2><p>画像、動き、字幕、BGMをブラウザ内で合成します。</p></div><span id="renderStatus">操作時に素材を準備します</span></div><div id="assetDiagnostics" class="asset-diagnostics">プレビューまたは動画生成時に素材を読み込みます。</div>
     <div class="video-canvas-wrap"><canvas id="renderCanvas" width="${o.width}" height="${o.height}"></canvas></div>
     <div class="render-options"><label>生成範囲<select id="renderRange"><option value="10">先頭10秒（動作テスト）</option><option value="full" ${longProject?'disabled':''}>全編（${Math.ceil(total)}秒）</option></select></label><p>${longProject?'全編が3分を超えるため、初版では10秒テストのみです。長時間BGMは今後のサーバー／高速エンジンで対応します。':'全編生成は実時間と同程度かかります。画面を閉じずにお待ちください。'}</p></div>
     <div class="render-progress"><progress id="renderProgress" max="1" value="0"></progress><span id="renderProgressText">0%</span></div>
@@ -1097,12 +1097,21 @@ async function renderOutput(id) {
     diagnostics.textContent=`${imageText}${imageWarning}／${audioText}／${narrationText}`;
     diagnostics.classList.toggle('warn',Boolean(value.imageFailures?.length||value.audioFetchError||value.audioInvalid||value.narrationFetchError||value.narrationInvalid||failedSceneNarrations));
   };
-  let preparedPromise=prepareVideoProject(project,{onStatus:text=>renderStatus.textContent=text}).then(value=>{prepared=value;describeAssets(value);drawProjectFrame(project,prepared,canvas,0);return value;}).catch(error=>{renderStatus.textContent='素材準備エラー';diagnostics.textContent=error.message;diagnostics.classList.add('warn');throw error;});
+  let preparedPromise=null;
+  const ensurePreparedAssets=()=>{
+    if(prepared)return Promise.resolve(prepared);
+    if(preparedPromise)return preparedPromise;
+    renderStatus.textContent='素材を準備しています…';
+    diagnostics.textContent='必要な画像・音声を読み込んでいます…';
+    diagnostics.classList.remove('warn');
+    preparedPromise=prepareVideoProject(project,{onStatus:text=>renderStatus.textContent=text}).then(value=>{prepared=value;describeAssets(value);return value;}).catch(error=>{preparedPromise=null;renderStatus.textContent='素材準備エラー';diagnostics.textContent=error.message;diagnostics.classList.add('warn');throw error;});
+    return preparedPromise;
+  };
   let previewController=null,renderController=null,resultUrl='';let resultFile=null;let generatedHash='';let generatedMeta=null;
-  root.querySelector('#showFirstFrame').onclick=async()=>{try{await persistSettings();const assets=await preparedPromise;drawProjectFrame(project,assets,canvas,0);canvas.scrollIntoView({behavior:'smooth',block:'center'});renderStatus.textContent='先頭フレームを表示しました。';}catch(error){alert(`画像確認に失敗しました：${error.message}`);}};
+  root.querySelector('#showFirstFrame').onclick=async()=>{try{await persistSettings();const assets=await ensurePreparedAssets();drawProjectFrame(project,assets,canvas,0);canvas.scrollIntoView({behavior:'smooth',block:'center'});renderStatus.textContent='先頭フレームを表示しました。';}catch(error){alert(`画像確認に失敗しました：${error.message}`);}};
   root.querySelector('#previewVideo').onclick=async()=>{
     if(previewController)return;previewController=new AbortController();root.querySelector('#stopPreview').disabled=false;root.querySelector('#previewVideo').disabled=true;renderStatus.textContent='映像プレビュー中（音なし）…';progress.value=0;canvas.scrollIntoView({behavior:'smooth',block:'center'});
-    try{await persistSettings();const assets=await preparedPromise;await runVisualPreview(project,assets,canvas,{durationLimit:10,signal:previewController.signal,onProgress:updateProgress});renderStatus.textContent='プレビュー完了';}
+    try{await persistSettings();const assets=await ensurePreparedAssets();await runVisualPreview(project,assets,canvas,{durationLimit:10,signal:previewController.signal,onProgress:updateProgress});renderStatus.textContent='プレビュー完了';}
     catch(error){if(error.name!=='AbortError'){console.error(error);alert(`プレビューに失敗しました：${error.message}`);}renderStatus.textContent=error.name==='AbortError'?'プレビューを停止しました':'プレビューエラー';}
     finally{previewController=null;root.querySelector('#stopPreview').disabled=true;root.querySelector('#previewVideo').disabled=false;}
   };
@@ -1161,7 +1170,7 @@ async function renderOutput(id) {
     }
     renderController=new AbortController();root.querySelector('#cancelRender').disabled=false;root.querySelector('#generateVideo').disabled=true;root.querySelector('#previewVideo').disabled=true;progress.value=0;
     try{
-      let assets=await preparedPromise;
+      let assets=await ensurePreparedAssets();
       const preparedSceneNarrations=Array.isArray(assets.sceneNarrations)?assets.sceneNarrations.filter(item=>item?.arrayBuffer).length:0;
       if((project.output?.bgmEnabled&&project.bgm?.audioData&&!assets.audioArrayBuffer)||(project.narration?.audioData&&!expectedSceneNarrations&&!assets.narrationArrayBuffer)||(expectedSceneNarrations&&preparedSceneNarrations<expectedSceneNarrations)){assets=await prepareVideoProject(project,{onStatus:text=>renderStatus.textContent=text});prepared=assets;describeAssets(assets);}
       const result=await exportProjectVideo(project,assets,canvas,{durationLimit:limit,signal:renderController.signal,onProgress:updateProgress,onStatus:text=>renderStatus.textContent=text,audioContext:unlockedAudioContext});
