@@ -90,7 +90,7 @@ export function normalizeImportedProject(input, { createId } = {}) {
   if (!Array.isArray(input.scenes)) fixes.push('シーン配列を空の状態で補完');
   const usedSceneIds = new Set();
   source.scenes = scenes.map((item, index) => {
-    const scene = safeClone(item);
+    const scene = { ...item };
     let id = typeof scene.id === 'string' && scene.id.trim() ? scene.id.trim() : '';
     if (!id || usedSceneIds.has(id)) {
       let attempts=0;
@@ -122,15 +122,15 @@ export function normalizeImportedProject(input, { createId } = {}) {
     };
   });
   const narration = normalizeNarration(source.narration, warnings, '全体ナレーション');
-  const bgmSource = isRecord(source.bgm) ? safeClone(source.bgm) : {};
+  const bgmSource = isRecord(source.bgm) ? { ...source.bgm } : {};
   if (!isRecord(source.bgm)) fixes.push('BGM設定を補完');
   const requestedBgmAudioAssetId = stringOr(bgmSource.audioAssetId).trim();
   const bgmAudioAssetId = normalizeAudioAssetId(requestedBgmAudioAssetId);
   if (requestedBgmAudioAssetId && !bgmAudioAssetId) warnings.push('BGM音源IDを無効な値として除外しました。');
-  const subtitleSource = isRecord(source.subtitleStyle) ? safeClone(source.subtitleStyle) : {};
+  const subtitleSource = isRecord(source.subtitleStyle) ? { ...source.subtitleStyle } : {};
   const offset = Math.min(15, Math.max(-15, Math.round(finiteOr(subtitleSource.positionOffsetPercent, 0))));
-  const outputSource = isRecord(source.output) ? safeClone(source.output) : {};
-  const publishSource = isRecord(source.publish) ? safeClone(source.publish) : {};
+  const outputSource = isRecord(source.output) ? { ...source.output } : {};
+  const publishSource = isRecord(source.publish) ? { ...source.publish } : {};
   source.narration = narration;
   source.bgm = {
     ...bgmSource, source:stringOr(bgmSource.source, 'none'), title:stringOr(bgmSource.title), category:stringOr(bgmSource.category, 'calm'),
@@ -176,7 +176,7 @@ export function normalizeImportedProject(input, { createId } = {}) {
 }
 
 export function createRestoredProject(normalizedProject, { title, createId, now = () => new Date().toISOString() } = {}) {
-  const project = safeClone(normalizedProject);
+  const project = { ...normalizedProject };
   const restoredAt = now();
   const originalId=project.id;
   project.id = newId('project', createId);

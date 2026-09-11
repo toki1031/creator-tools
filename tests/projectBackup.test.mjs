@@ -45,6 +45,18 @@ test('schemaVersion 4の完全バックアップを新規projectとして復元�
   assert.deepEqual(normalized.pronunciationDictionary,[{from:'語',to:'ご'}]);
 });
 
+test('復元確定では正規化済みprojectを再deep cloneせず元projectのトップレベルも変更しない', () => {
+  const normalized=normalizeImportedProject(sample()).project;
+  const originalId=normalized.id, originalTitle=normalized.title, scenes=normalized.scenes, mediaLibrary=normalized.mediaLibrary;
+  const restored=createRestoredProject(normalized,{title:'軽量復元',createId:()=> 'restored-lightweight',now:()=> '2026-09-11T00:00:00.000Z'});
+  assert.equal(normalized.id,originalId);
+  assert.equal(normalized.title,originalTitle);
+  assert.equal(restored.scenes,scenes,'正規化済みscene配列を再deep cloneしない');
+  assert.equal(restored.mediaLibrary,mediaLibrary,'正規化済みmediaLibraryを再deep cloneしない');
+  assert.equal(restored.id,'restored-lightweight');
+  assert.equal(restored.title,'軽量復元');
+});
+
 test('旧projectの不足フィールドと未設定schemaVersionを補完する', () => {
   const old={title:'旧版',genre:'other',platform:'tiktok',displayScript:'旧台本'};
   const normalized=normalizeImportedProject(old);
