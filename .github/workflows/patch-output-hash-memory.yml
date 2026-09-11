@@ -1,0 +1,66 @@
+name: Patch output hash memory
+
+on:
+  push:
+    branches:
+      - v1.4/fix-narration-performance-shorts-limit
+    paths:
+      - .github/workflows/patch-output-hash-memory.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v1.4/fix-narration-performance-shorts-limit
+          fetch-depth: 0
+      - name: Patch main.js and add regression test
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('main.js')
+          s = p.read_text()
+
+          old = '''<div id="renderResult" class="render-result" hidden><h3>生成完了</h3><video id="resultVideo" controls playsinline></video><div class="tool-row"><a id="downloadVideo" class="button-link primary" download>動画を保存</a><button id="shareVideo">共有</button></div><div class="tool-row"><button id="verifySavedVideo">保存後ファイルを検証</button><input id="verifySavedVideoInput" type="file" accept="video/*" hidden></div><p id="verifySavedVideoInfo" class="muted"></p><p id="resultInfo"></p></div>'''
+          new = '''<div id="renderResult" class="render-result" hidden><h3>生成完了</h3><video id="resultVideo" controls playsinline></video><div class="tool-row"><a id="downloadVideo" class="button-link primary" download>動画を保存</a><button id="shareVideo">共有</button></div><p id="resultInfo"></p></div>'''
+          assert old in s, 'render result verification UI pattern not found'
+          s = s.replace(old, new, 1)
+
+          old = "let renderController=null,resultUrl='';let resultFile=null;let generatedHash='';let generatedMeta=null;"
+          new = "let renderController=null,resultUrl='';let resultFile=null;"
+          assert old in s, 'generated hash state pattern not found'
+          s = s.replace(old, new, 1)
+
+          old = "const resultBox=root.querySelector('#renderResult');resultBox.hidden=false;const resultVideo=root.querySelector('#resultVideo');resultVideo.src=resultUrl;const link=root.querySelector('#downloadVideo');link.href=resultUrl;link.download=resultFile.name;const info=root.querySelector('#resultInfo');const verifyInfo=root.querySelector('#verifySavedVideoInfo');verifyInfo.textContent='保存後に「保存後ファイルを検証」で同じ動画を選ぶと、変換・縮小の有無を確認できます。';const d=result.diagnostics||{};const captureSize=d.captureWidth&&d.captureHeight?`${d.captureWidth}×${d.captureHeight}`:'取得不可';const captureFps=d.captureFrameRate?`・約${Number(d.captureFrameRate).toFixed(1)}fps`:'';const baseInfo=`${result.extension.toUpperCase()}・${result.mimeType}・${(result.blob.size/1024/1024).toFixed(1)}MB・${result.durationSec.toFixed(1)}秒`;generatedMeta={size:result.blob.size,width:null,height:null,mime:result.mimeType};try{if(globalThis.crypto?.subtle){const buf=await result.blob.arrayBuffer();const digest=await crypto.subtle.digest('SHA-256',buf);generatedHash=Array.from(new Uint8Array(digest)).map(b=>b.toString(16).padStart(2,'0')).join('');}}catch{}info.textContent=`${baseInfo}\\n要求 ${d.requestedWidth||'?'}×${d.requestedHeight||'?'} ／ Canvas ${d.canvasWidth||'?'}×${d.canvasHeight||'?'} ／ captureStream ${captureSize}`;resultVideo.onloadedmetadata=()=>{generatedMeta.width=resultVideo.videoWidth||null;generatedMeta.height=resultVideo.videoHeight||null;info.textContent=`${baseInfo}\\n要求 ${d.requestedWidth||'?'}×${d.requestedHeight||'?'} ／ Canvas ${d.canvasWidth||'?'}×${d.canvasHeight||'?'} ／ captureStream ${captureSize}${captureFps} ／ 生成Blob ${resultVideo.videoWidth||'?'}×${resultVideo.videoHeight||'?'}${isMvpShortsProject(project)?`\\nMVP確認：${assessMvpVideoResult({project,durationSec:result.durationSec,mimeType:result.mimeType,selectedMimeType:d.selectedMimeType,videoWidth:resultVideo.videoWidth,videoHeight:resultVideo.videoHeight,captureFrameRate:d.captureFrameRate,hasAudio:d.hasAudio}).text}`:''}`;};renderStatus.textContent='動画生成が完了しました。';"
+          new = "const resultBox=root.querySelector('#renderResult');resultBox.hidden=false;const resultVideo=root.querySelector('#resultVideo');resultVideo.src=resultUrl;const link=root.querySelector('#downloadVideo');link.href=resultUrl;link.download=resultFile.name;const info=root.querySelector('#resultInfo');const d=result.diagnostics||{};const captureSize=d.captureWidth&&d.captureHeight?`${d.captureWidth}×${d.captureHeight}`:'取得不可';const captureFps=d.captureFrameRate?`・約${Number(d.captureFrameRate).toFixed(1)}fps`:'';const baseInfo=`${result.extension.toUpperCase()}・${result.mimeType}・${(result.blob.size/1024/1024).toFixed(1)}MB・${result.durationSec.toFixed(1)}秒`;info.textContent=`${baseInfo}\\n要求 ${d.requestedWidth||'?'}×${d.requestedHeight||'?'} ／ Canvas ${d.canvasWidth||'?'}×${d.canvasHeight||'?'} ／ captureStream ${captureSize}`;resultVideo.onloadedmetadata=()=>{info.textContent=`${baseInfo}\\n要求 ${d.requestedWidth||'?'}×${d.requestedHeight||'?'} ／ Canvas ${d.canvasWidth||'?'}×${d.canvasHeight||'?'} ／ captureStream ${captureSize}${captureFps} ／ 生成Blob ${resultVideo.videoWidth||'?'}×${resultVideo.videoHeight||'?'}${isMvpShortsProject(project)?`\\nMVP確認：${assessMvpVideoResult({project,durationSec:result.durationSec,mimeType:result.mimeType,selectedMimeType:d.selectedMimeType,videoWidth:resultVideo.videoWidth,videoHeight:resultVideo.videoHeight,captureFrameRate:d.captureFrameRate,hasAudio:d.hasAudio}).text}`:''}`;};renderStatus.textContent='動画生成が完了しました。';"
+          assert old in s, 'generation hash block pattern not found'
+          s = s.replace(old, new, 1)
+
+          start = "  const verifyInput=root.querySelector('#verifySavedVideoInput');\n"
+          end = "\n\n  root.querySelector('#exportSrt').onclick="
+          i = s.find(start)
+          assert i >= 0, 'verify block start not found'
+          j = s.find(end, i)
+          assert j >= 0, 'verify block end not found'
+          s = s[:i] + "  root.querySelector('#exportSrt').onclick=" + s[j+len(end):]
+
+          assert "result.blob.arrayBuffer()" not in s
+          assert "verifySavedVideo" not in s
+          assert "generatedHash" not in s
+          p.write_text(s)
+
+          test = Path('tests/outputGenerationMemoryPolicy.test.mjs')
+          test.write_text("""import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport fs from 'node:fs';\n\nconst source = fs.readFileSync(new URL('../main.js', import.meta.url), 'utf8');\n\ntest('normal video generation does not copy the completed Blob for SHA-256 verification', () => {\n  assert.doesNotMatch(source, /result\\.blob\\.arrayBuffer\\(\\)/);\n  assert.doesNotMatch(source, /generatedHash/);\n});\n\ntest('post-save heavy video verification is removed from the normal output flow', () => {\n  assert.doesNotMatch(source, /verifySavedVideo/);\n  assert.match(source, /id=\\\"generateVideo\\\"/);\n  assert.match(source, /id=\\\"showFirstFrame\\\"/);\n});\n""")
+          PY
+      - name: Remove temporary workflow and commit
+        run: |
+          git rm .github/workflows/patch-output-hash-memory.yml
+          git add -A
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Reduce output completion memory pressure"
+          git push origin HEAD:v1.4/fix-narration-performance-shorts-limit
