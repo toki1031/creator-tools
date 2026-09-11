@@ -13,4 +13,5 @@ test('video generation applies output settings without forcing a full project sa
 test('output settings still persist through the normal save controller', () => {
   assert.match(source, /const persistSettings=async\(\)=>\{applySettings\(\);project\.updatedAt=/);
   assert.match(source, /createSaveController\(\{delay:350,persist:async\(\)=>\{await persistSettings\(\)/);
+  assert.match(source, /applySettings[\s\S]*?canvas\.width=w;canvas\.height=h/);
 });
