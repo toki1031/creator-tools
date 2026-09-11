@@ -15,26 +15,57 @@ jobs:
         with:
           ref: v1.4/fix-narration-performance-shorts-limit
       - name: Patch iPhone safe export profile
-        env:
-          PATCH_B64: "CmZyb20gcGF0aGxpYiBpbXBvcnQgUGF0aApwPVBhdGgoInZpZGVvUmVuZGVyZXIuanMiKQpzPXAucmVhZF90ZXh0KCkKb2xkPSIiImZ1bmN0aW9uIGJpdHJhdGVGb3IocHJvamVjdCkgeyBjb25zdCB3aWR0aCA9IE51bWJlcihwcm9qZWN0Lm91dHB1dD8ud2lkdGgpIHx8IDcyMDsgY29uc3QgaGlnaCA9IHByb2plY3Qub3V0cHV0Py5xdWFsaXR5ID09PSAnaGlnaCc7IGlmICh3aWR0aCA+PSAxMDgwKSByZXR1cm4gaGlnaCA/IDhfMDAwXzAwMCA6IDVfMDAwXzAwMDsgcmV0dXJuIGhpZ2ggPyA1XzAwMF8wMDAgOiAzXzAwMF8wMDA7IH0KIiIiCm5ldz0iIiJmdW5jdGlvbiBpc0lPU0RldmljZSh1c2VyQWdlbnQgPSBnbG9iYWxUaGlzLm5hdmlnYXRvcj8udXNlckFnZW50IHx8ICcnKSB7IHJldHVyIC9pUGhvbmV8aVBhZHxpUG9kL2kudGVzdChTdHJpbmcodXNlckFnZW50KSk7IH0KCmV4cG9ydCBmdW5jdGlvbiByZXNvbHZlRXhwb3J0UHJvZmlsZShwcm9qZWN0LCB7IHVzZXJBZ2VudCA9IGdsb2JhbFRoaXMubmF2aWdhdG9yPy51c2VyQWdlbnQgfHwgJycgfSA9IHt9KSB7CiAgY29uc3QgcmVxdWVzdGVkV2lkdGggPSBNYXRoLm1heCgyLCBOdW1iZXIocHJvamVjdD8ub3V0cHV0Py53aWR0aCkgfHwgNzIwKTsKICBjb25zdCByZXF1ZXN0ZWRIZWlnaHQgPSBNYXRoLm1heCgyLCBOdW1iZXIocHJvamVjdD8ub3V0cHV0Py5oZWlnaHQpIHx8IDEyODApOwogIGNvbnN0IGlvc1NhZmVNb2RlID0gaXNJT1NEZXZpY2UodXNlckFnZW50KTsKICBjb25zdCBtYXhQaXhlbHMgPSA3MjAgKiAxMjgwOwogIGlmICghaW9zU2FmZU1vZGUgfHwgcmVxdWVzdGVkV2lkdGggKiByZXF1ZXN0ZWRIZWlnaHQgPD0gbWF4UGl4ZWxzKSB7CiAgICByZXR1cm4geyByZXF1ZXN0ZWRXaWR0aCwgcmVxdWVzdGVkSGVpZ2h0LCB3aWR0aDogcmVxdWVzdGVkV2lkdGgsIGhlaWdodDogcmVxdWVzdGVkSGVpZ2h0LCBpb3NTYWZlTW9kZTogZmFsc2UgfTsKICB9CiAgY29uc3Qgc2NhbGUgPSBNYXRoLnNxcnQobWF4UGl4ZWxzIC8gKHJlcXVlc3RlZFdpZHRoICogcmVxdWVzdGVkSGVpZ2h0KSk7CiAgY29uc3QgZXZlbiA9IHZhbHVlID0+IE1hdGgubWF4KDIsIE1hdGgucm91bmQodmFsdWUgLyAyKSAqIDIpOwogIHJldHVybiB7IHJlcXVlc3RlZFdpZHRoLCByZXF1ZXN0ZWRIZWlnaHQsIHdpZHRoOiBldmVuKHJlcXVlc3RlZFdpZHRoICogc2NhbGUpLCBoZWlnaHQ6IGV2ZW4ocmVxdWVzdGVkSGVpZ2h0ICogc2NhbGUpLCBpb3NTYWZlTW9kZTogdHJ1ZSB9Owp9CgpmdW5jdGlvbiBiaXRyYXRlRm9yKHByb2plY3QsIGV4cG9ydFdpZHRoLCBpb3NTYWZlTW9kZSA9IGZhbHNlKSB7CiAgaWYgKGlvc1NhZmVNb2RlKSByZXR1cm4gM18wMDBfMDAwOwogIGNvbnN0IHdpZHRoID0gTnVtYmVyKGV4cG9ydFdpZHRoKSB8fCBOdW1iZXIocHJvamVjdC5vdXRwdXQ/LndpZHRoKSB8fCA3MjA7CiAgY29uc3QgaGlnaCA9IHByb2plY3Qub3V0cHV0Py5xdWFsaXR5ID09PSAnaGlnaCc7CiAgaWYgKHdpZHRoID49IDEwODApIHJldHVybiBoaWdoID8gOF8wMDBfMDAwIDogNV8wMDBfMDAwOwogIHJldHVybiBoaWdoID8gNV8wMDBfMDAwIDogM18wMDBfMDAwOwp9CiIiIgphc3NlcnQgb2xkIGluIHMsICJiaXRyYXRlIGJsb2NrIG5vdCBmb3VuZCIKcz1zLnJlcGxhY2Uob2xkLG5ldyw xKS
-
-b2xkPSIiIiAgY29uc3QgZnBzID0gY2xhbXAoTnVtYmVyKHByb2plY3Qub3V0cHV0Py5mcHMpIHx8IDMwLCAxLCA2MCk7CiAgY2FudmFzLndpZHRoID0gTnVtYmVyKHByb2plY3Qub3V0cHV0Py53aWR0aCkgfHwgNzIwOyBjYW52YXMuaGVpZ2h0ID0gTnVtYmVyKHByb2plY3Qub3V0cHV0Py5oZWlnaHQpIHx8IDEyODA7CiAgYXdhaXQgZW5zdXJlUHJlcGFyZWRJbWFnZVdpbmRvdyhwcm9qZWN0LCBwcmVwYXJlZCwgMCwgeyBvblN0YXR1cyB9KTsKIiIiCm5ldz0iIiIgIGNvbnN0IGV4cG9ydFByb2ZpbGUgPSByZXNvbHZlRXhwb3J0UHJvZmlsZShwcm9qZWN0KTsKICBjb25zdCBmcHMgPSBjbGFtcChOdW1iZXIocHJvamVjdC5vdXRwdXQ/LmZwcykgfHwgMzAsIDEsIGV4cG9ydFByb2ZpbGUuaW9zU2FmZU1vZGUgPyAzMCA6IDYwKTsKICBjYW52YXMud2lkdGggPSBleHBvcnRQcm9maWxlLndpZHRoOyBjYW52YXMuaGVpZ2h0ID0gZXhwb3J0UHJvZmlsZS5oZWlnaHQ7CiAgaWYgKGV4cG9ydFByb2ZpbGUuaW9zU2FmZU1vZGUpIG9uU3RhdHVzKGBpUGhvbmXlronlhajjg6Ljg7zjg4njg7rvvJoke2V4cG9ydFByb2ZpbGUud2lkdGh9w5cke2V4cG9ydFByb2ZpbGUuaGVpZ2h0fSAvICR7ZnBzfWZwcyDjgafnlJ/miJDjgZfjgb7jgZnjg6bigKZdKTsKICBhd2FpdCBlbnN1cmVQcmVwYXJlZEltYWdlV2luZG93KHByb2plY3QsIHByZXBhcmVkLCAwLCB7IG9uU3RhdHVzIH0pOwoiIiIKYXNzZXJ0IG9sZCBpbiBzLCAiY2FudmFzIHNldHVwIGJsb2NrIG5vdCBmb3VuZCIKcz1zLnJlcGxhY2Uob2xkLG5ldyw xKS
-
-b2xkPSIiIiAgdHJ5IHsgcmVjb3JkZXIgPSBjcmVhdGVSZWNvcmRlcihzdHJlYW0sIG1pbWVUeXBlLCBiaXRyYXRlRm9yKHByb2plY3QpKTsgfSBjYXRjaCB7IHJlY29yZGVyID0gbmV3IE1lZGlhUmVjb3JkZXIoc3RyZWFtKTsgfQoiIiIKbmV3PSIiIiAgdHJ5IHsgcmVjb3JkZXIgPSBjcmVhdGVSZWNvcmRlcihzdHJlYW0sIG1pbWVUeXBlLCBiaXRyYXRlRm9yKHByb2plY3QsIGV4cG9ydFByb2ZpbGUud2lkdGgsIGV4cG9ydFByb2ZpbGUuaW9zU2FmZU1vZGUpKTsgfSBjYXRjaCB7IHJlY29yZGVyID0gbmV3IE1lZGlhUmVjb3JkZXIoc3RyZWFtKTsgfQoiIiIKYXNzZXJ0IG9sZCBpbiBzLCAicmVjb3JkZXIgYml0cmF0ZSBjYWxsIG5vdCBmb3VuZCIKcz1zLnJlcGxhY2Uob2xkLG5ldyw xKS
-
-b2xkPSIiIiAgICAgIHJlc29sdmUoeyBibG9iLCBtaW1lVHlwZTogYWN0dWFsTWltZSwgZXh0ZW5zaW9uLCBkdXJhdGlvblNlYzogdG90YWwsIGRpYWdub3N0aWNzOiB7IHJlcXVlc3RlZFdpZHRoOiBOdW1iZXIocHJvamVjdC5vdXRwdXQ/LndpZHRoKSB8fCA3MjAsIHJlcXVlc3RlZEhlaWdodDogTnVtYmVyKHByb2plY3Qub3V0cHV0Py5oZWlnaHQpIHx8IDEyODAsIGNhbnZhc1dpZHRoOiBjYW52YXMud2lkdGgsIGNhbnZhc0hlaWdodDogY2FudmFzLmhlaWdodCwgY2FwdHVyZVdpZHRoOiBOdW1iZXIoY2FwdHVyZVRyYWNrU2V0dGluZ3M/LndpZHRoKSB8fCBudWxsLCBjYXB0dXJlSGVpZ2h0OiBOdW1iZXIoY2FwdHVyZVRyYWNrU2V0dGluZ3M/LmhlaWdodCkgfHwgbnVsbCwgY2FwdHVyZUZyYW1lUmF0ZTogTnVtYmVyKGNhcHR1cmVUcmFja1NldHRpbmdzPy5mcmFtZVJhdGUpIHx8IG51bGwsIHNlbGVjdGVkTWltZVR5cGU6IG1pbWVUeXBlLCBhY3R1YWxNaW1lVHlwZTogYWN0dWFsTWltZSwgaGFzQXVkaW86IEJvb2xlYW4oYXVkaW8/LnRyYWNrcz8ubGVuZ3RoKSB9IH0pOwoiIiIKbmV3PSIiIiAgICAgIHJlc29sdmUoeyBibG9iLCBtaW1lVHlwZTogYWN0dWFsTWltZSwgZXh0ZW5zaW9uLCBkdXJhdGlvblNlYzogdG90YWwsIGRpYWdub3N0aWNzOiB7IHJlcXVlc3RlZFdpZHRoOiBleHBvcnRQcm9maWxlLnJlcXVlc3RlZFdpZHRoLCByZXF1ZXN0ZWRIZWlnaHQ6IGV4cG9ydFByb2ZpbGUucmVxdWVzdGVkSGVpZ2h0LCBjYW52YXNXaWR0aDogY2FudmFzLndpZHRoLCBjYW52YXNIZWlnaHQ6IGNhbnZhcy5oZWlnaHQsIGNhcHR1cmVXaWR0aDogTnVtYmVyKGNhcHR1cmVUcmFja1NldHRpbmdzPy53aWR0aCkgfHwgbnVsbCwgY2FwdHVyZUhlaWdodDogTnVtYmVyKGNhcHR1cmVUcmFja1NldHRpbmdzPy5oZWlnaHQpIHx8IG51bGwsIGNhcHR1cmVGcmFtZVJhdGU6IE51bWJlcihjYXB0dXJlVHJhY2tTZXR0aW5ncz8uZnJhbWVSYXRlKSB8fCBudWxsLCBzZWxlY3RlZE1pbWVUeXBlOiBtaW1lVHlwZSwgYWN0dWFsTWltZVR5cGU6IGFjdHVhbE1pbWUsIGhhc0F1ZGlvOiBCb29sZWFuKGF1ZGlvPy50cmFja3M/Lmxlbmd0aCksIGlvc1NhZmVNb2RlOiBleHBvcnRQcm9maWxlLmlvc1NhZmVNb2RlIH0gfSk7CiIiIgphc3NlcnQgb2xkIGluIHMsICJkaWFnbm9zdGljcyByZXNvbHZlIG5vdCBmb3VuZCIKcz1zLnJlcGxhY2Uob2xkLG5ldyw xKS
-CnAud3JpdGVfdGV4dChzKQo="
         run: |
-          echo "$PATCH_B64" | base64 -d > /tmp/patch.py
-          python /tmp/patch.py
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('videoRenderer.js')
+          s=p.read_text()
+          old="function bitrateFor(project) { const width = Number(project.output?.width) || 720; const high = project.output?.quality === 'high'; if (width >= 1080) return high ? 8_000_000 : 5_000_000; return high ? 5_000_000 : 3_000_000; }\n"
+          new="""function isIOSDevice(userAgent = globalThis.navigator?.userAgent || '') { return /iPhone|iPad|iPod/i.test(String(userAgent)); }
+
+          export function resolveExportProfile(project, { userAgent = globalThis.navigator?.userAgent || '' } = {}) {
+            const requestedWidth = Math.max(2, Number(project?.output?.width) || 720);
+            const requestedHeight = Math.max(2, Number(project?.output?.height) || 1280);
+            const iosSafeMode = isIOSDevice(userAgent);
+            const maxPixels = 720 * 1280;
+            if (!iosSafeMode || requestedWidth * requestedHeight <= maxPixels) {
+              return { requestedWidth, requestedHeight, width: requestedWidth, height: requestedHeight, iosSafeMode: false };
+            }
+            const scale = Math.sqrt(maxPixels / (requestedWidth * requestedHeight));
+            const even = value => Math.max(2, Math.round(value / 2) * 2);
+            return { requestedWidth, requestedHeight, width: even(requestedWidth * scale), height: even(requestedHeight * scale), iosSafeMode: true };
+          }
+
+          function bitrateFor(project, exportWidth, iosSafeMode = false) {
+            if (iosSafeMode) return 3_000_000;
+            const width = Number(exportWidth) || Number(project.output?.width) || 720;
+            const high = project.output?.quality === 'high';
+            if (width >= 1080) return high ? 8_000_000 : 5_000_000;
+            return high ? 5_000_000 : 3_000_000;
+          }
+          """
+          assert old in s, 'bitrate block not found'
+          s=s.replace(old,new,1)
+          old="  const fps = clamp(Number(project.output?.fps) || 30, 1, 60);\n  canvas.width = Number(project.output?.width) || 720; canvas.height = Number(project.output?.height) || 1280;\n  await ensurePreparedImageWindow(project, prepared, 0, { onStatus });\n"
+          new="  const exportProfile = resolveExportProfile(project);\n  const fps = clamp(Number(project.output?.fps) || 30, 1, exportProfile.iosSafeMode ? 30 : 60);\n  canvas.width = exportProfile.width; canvas.height = exportProfile.height;\n  if (exportProfile.iosSafeMode) onStatus(`iPhone safe mode: ${exportProfile.width}x${exportProfile.height} / ${fps}fps`);\n  await ensurePreparedImageWindow(project, prepared, 0, { onStatus });\n"
+          assert old in s, 'canvas setup block not found'
+          s=s.replace(old,new,1)
+          old="  try { recorder = createRecorder(stream, mimeType, bitrateFor(project)); } catch { recorder = new MediaRecorder(stream); }\n"
+          new="  try { recorder = createRecorder(stream, mimeType, bitrateFor(project, exportProfile.width, exportProfile.iosSafeMode)); } catch { recorder = new MediaRecorder(stream); }\n"
+          assert old in s, 'recorder bitrate call not found'
+          s=s.replace(old,new,1)
+          old="      resolve({ blob, mimeType: actualMime, extension, durationSec: total, diagnostics: { requestedWidth: Number(project.output?.width) || 720, requestedHeight: Number(project.output?.height) || 1280, canvasWidth: canvas.width, canvasHeight: canvas.height, captureWidth: Number(captureTrackSettings?.width) || null, captureHeight: Number(captureTrackSettings?.height) || null, captureFrameRate: Number(captureTrackSettings?.frameRate) || null, selectedMimeType: mimeType, actualMimeType: actualMime, hasAudio: Boolean(audio?.tracks?.length) } });\n"
+          new="      resolve({ blob, mimeType: actualMime, extension, durationSec: total, diagnostics: { requestedWidth: exportProfile.requestedWidth, requestedHeight: exportProfile.requestedHeight, canvasWidth: canvas.width, canvasHeight: canvas.height, captureWidth: Number(captureTrackSettings?.width) || null, captureHeight: Number(captureTrackSettings?.height) || null, captureFrameRate: Number(captureTrackSettings?.frameRate) || null, selectedMimeType: mimeType, actualMimeType: actualMime, hasAudio: Boolean(audio?.tracks?.length), iosSafeMode: exportProfile.iosSafeMode } });\n"
+          assert old in s, 'diagnostics resolve not found'
+          s=s.replace(old,new,1)
+          p.write_text(s)
+          PY
           cat > tests/iosSafeExport.test.mjs <<'EOF'
           import test from 'node:test';
           import assert from 'node:assert/strict';
           import fs from 'node:fs';
-
           const source = fs.readFileSync(new URL('../videoRenderer.js', import.meta.url), 'utf8');
-
-          test('iPhone export profile caps 1080x1920 to a 720-class frame budget', () => {
+          test('iPhone export uses a 720-class safe profile', () => {
             assert.match(source, /export function resolveExportProfile/);
             assert.match(source, /const maxPixels = 720 \* 1280/);
             assert.match(source, /iPhone\|iPad\|iPod/);
