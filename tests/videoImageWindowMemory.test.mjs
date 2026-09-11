@@ -4,6 +4,7 @@ import fs from 'node:fs';
 
 const source = fs.readFileSync(new URL('../videoRenderer.js', import.meta.url), 'utf8');
 
+// iPhone Safari regression guard: decoded scene images must stay bounded during long-form export.
 test('video preparation keeps decoded images to a current plus next scene window', () => {
   assert.match(source, /export async function ensurePreparedImageWindow/);
   assert.match(source, /new Set\(\[current, current \+ 1\]/);
