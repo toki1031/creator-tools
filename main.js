@@ -1037,7 +1037,8 @@ async function renderOutput(id) {
   const progress=root.querySelector('#renderProgress');
   const progressText=root.querySelector('#renderProgressText');
   const updateProgress=(elapsed,duration)=>{const value=duration?Math.min(1,elapsed/duration):0;progress.value=value;progressText.textContent=`${Math.round(value*100)}%（${elapsed.toFixed(1)}/${duration.toFixed(1)}秒）`;};
-  const persistSettings=async()=>{const [w,h]=root.querySelector('#resolution').value.split('x').map(Number);Object.assign(o,{width:w,height:h,fps:Number(root.querySelector('#fps').value),quality:root.querySelector('#quality').value,subtitles:root.querySelector('#subtitles').checked,subtitlePosition:root.querySelector('#subtitlePosition').value,bgmEnabled:root.querySelector('#bgmEnabled').checked});st.enabled=o.subtitles;st.position=o.subtitlePosition;project.updatedAt=new Date().toISOString();await saveProject(project);canvas.width=w;canvas.height=h;};
+  const applySettings=()=>{const [w,h]=root.querySelector('#resolution').value.split('x').map(Number);Object.assign(o,{width:w,height:h,fps:Number(root.querySelector('#fps').value),quality:root.querySelector('#quality').value,subtitles:root.querySelector('#subtitles').checked,subtitlePosition:root.querySelector('#subtitlePosition').value,bgmEnabled:root.querySelector('#bgmEnabled').checked});st.enabled=o.subtitles;st.position=o.subtitlePosition;canvas.width=w;canvas.height=h;};
+  const persistSettings=async()=>{applySettings();project.updatedAt=new Date().toISOString();await saveProject(project);};
   const {scheduleSave,flushSave}=createSaveController({delay:350,persist:async()=>{await persistSettings();if(prepared)drawProjectFrame(project,prepared,canvas,0);},setStatus:text=>root.querySelector('#saveState').textContent=text});
   ['resolution','fps','quality','subtitles','subtitlePosition','bgmEnabled'].forEach(k=>root.querySelector('#'+k).onchange=scheduleSave);
   bindSavedNavigation(root.querySelector('#back'),flushSave,()=>goStudio(studioForGenre(project.genre)));
@@ -1076,11 +1077,11 @@ async function renderOutput(id) {
     return preparedPromise;
   };
   let renderController=null,resultUrl='';let resultFile=null;
-  root.querySelector('#showFirstFrame').onclick=async()=>{try{await persistSettings();const assets=await ensurePreparedAssets();drawProjectFrame(project,assets,canvas,0);canvas.scrollIntoView({behavior:'smooth',block:'center'});renderStatus.textContent='先頭フレームを表示しました。';}catch(error){alert(`画像確認に失敗しました：${error.message}`);}};
+  root.querySelector('#showFirstFrame').onclick=async()=>{try{applySettings();const assets=await ensurePreparedAssets();drawProjectFrame(project,assets,canvas,0);canvas.scrollIntoView({behavior:'smooth',block:'center'});renderStatus.textContent='先頭フレームを表示しました。';}catch(error){alert(`画像確認に失敗しました：${error.message}`);}};
 
   root.querySelector('#generateVideo').onclick=async()=>{
     if(renderController)return;
-    try{await persistSettings();}catch(error){console.error(error);alert(`出力設定を保存できませんでした：${error.message}`);return;}
+    applySettings();
     const check=validateVideoProject(project);if(check.errors.length)return alert(check.errors.join('\n'));
     const limit=undefined;const currentTotal=getProjectDuration(project);const duration=currentTotal;
     if(isMvpShortsProject(project)){const mvp=validateMvpShortsOutput(project,currentTotal);if(mvp.errors.length)return alert(`Shortsの全編生成条件を確認してください。\n\n${mvp.errors.join('\n')}`);}
