@@ -5,7 +5,8 @@ import { normalizeSceneReframe } from './smartReframe.js';
 import { calculateReframedDrawRect } from './smartReframeRenderPlacement.js';
 
 const PATCH_KEY = '__creatorOsSmartReframeDrawImagePatched';
-const state = { routeId: '', bySource: new Map() };
+const state = { routeId: '', bySourceKey: new Map() };
+const imageSourceKeyCache = new WeakMap();
 
 function reframeSignature(value) {
   if (!value) return 'none';
@@ -13,31 +14,54 @@ function reframeSignature(value) {
   return `${normalized.focusX.toFixed(4)}:${normalized.focusY.toFixed(4)}:${normalized.zoom.toFixed(4)}`;
 }
 
-async function refreshSourceMap() {
+function sourceKey(source) {
+  const text = typeof source === 'string' ? source : '';
+  if (!text) return '';
+  let hash = 2166136261;
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `${text.length}:${(hash >>> 0).toString(16)}`;
+}
+
+function keyForImage(image) {
+  if (!image || typeof image !== 'object') return '';
+  const cached = imageSourceKeyCache.get(image);
+  if (cached) return cached;
+  const key = sourceKey(typeof image.src === 'string' ? image.src : '');
+  if (key) imageSourceKeyCache.set(image, key);
+  return key;
+}
+
+async function refreshSourceMap({ force = false } = {}) {
   const route = readRoute();
   if (route.page !== 'output' || !route.id) {
     state.routeId = '';
-    state.bySource = new Map();
+    state.bySourceKey = new Map();
     return;
   }
+  if (!force && state.routeId === route.id && state.bySourceKey.size) return;
+
   const project = await getProject(route.id);
   if (!project) return;
   const grouped = new Map();
   for (const scene of Array.isArray(project.scenes) ? project.scenes : []) {
     const source = resolveSceneImageSource(project, scene).data;
-    if (!source) continue;
-    const entry = grouped.get(source) || [];
+    const key = sourceKey(source);
+    if (!key) continue;
+    const entry = grouped.get(key) || [];
     entry.push(scene.smartReframe ? normalizeSceneReframe(scene.smartReframe) : null);
-    grouped.set(source, entry);
+    grouped.set(key, entry);
   }
-  const bySource = new Map();
-  for (const [source, values] of grouped.entries()) {
+  const bySourceKey = new Map();
+  for (const [key, values] of grouped.entries()) {
     const signatures = new Set(values.map(reframeSignature));
     if (signatures.size !== 1 || signatures.has('none')) continue;
-    bySource.set(source, values[0]);
+    bySourceKey.set(key, values[0]);
   }
   state.routeId = route.id;
-  state.bySource = bySource;
+  state.bySourceKey = bySourceKey;
 }
 
 function patchCanvasDrawImage() {
@@ -46,10 +70,10 @@ function patchCanvasDrawImage() {
   const original = proto.drawImage;
   Object.defineProperty(proto, PATCH_KEY, { value: true, configurable: false });
   proto.drawImage = function patchedDrawImage(...args) {
-    if (args.length === 5 && state.bySource.size) {
+    if (args.length === 5 && state.bySourceKey.size) {
       const [image, dx, dy, drawWidth, drawHeight] = args;
-      const source = typeof image?.src === 'string' ? image.src : '';
-      const reframe = source ? state.bySource.get(source) : null;
+      const key = keyForImage(image);
+      const reframe = key ? state.bySourceKey.get(key) : null;
       const canvas = this?.canvas;
       const fw = Number(canvas?.width) || 0;
       const fh = Number(canvas?.height) || 0;
@@ -67,5 +91,7 @@ function patchCanvasDrawImage() {
 
 patchCanvasDrawImage();
 void refreshSourceMap();
-window.addEventListener('hashchange', () => { void refreshSourceMap(); });
+window.addEventListener('hashchange', () => { void refreshSourceMap({ force: true }); });
+// Safariで別アプリ/別タブから戻るたびに30MB級projectを再読込しない。
+// 同一outputルートでは既存の小さいreframe mapを再利用する。
 window.addEventListener('focus', () => { void refreshSourceMap(); });
