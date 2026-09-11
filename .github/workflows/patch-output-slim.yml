@@ -1,0 +1,125 @@
+name: Targeted output slimming patch
+
+on:
+  push:
+    branches:
+      - v1.4/fix-narration-performance-shorts-limit
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v1.4/fix-narration-performance-shorts-limit
+      - name: Slim output UI and remove 10 second preview
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('main.js')
+          s = path.read_text()
+          before = s
+
+          s = s.replace('<h2>素材チェック</h2><p>動画生成前に不足素材を確認します。</p>', '<h2>生成前チェック</h2><p>動画生成に必要な素材の不足だけを軽量に確認します。</p>', 1)
+
+          s, n = re.subn(r'\n  <section class="editor-card final-review-card">.*?\n  </section>\n\n  <section class="editor-card video-render-card">', '\n  <section class="editor-card video-render-card">', s, count=1, flags=re.S)
+          if n != 1:
+              raise SystemExit('final review section not found')
+
+          old = '<div class="render-options"><label>生成範囲<select id="renderRange"><option value="10">先頭10秒（動作テスト）</option><option value="full" ${longProject?\'disabled\':\'\'}>全編（${Math.ceil(total)}秒）</option></select></label><p>${longProject?\'全編が3分を超えるため、初版では10秒テストのみです。長時間BGMは今後のサーバー／高速エンジンで対応します。\':\'全編生成は実時間と同程度かかります。画面を閉じずにお待ちください。\'}</p></div>'
+          new = '<div class="render-options"><p>予定尺：${Math.ceil(total)}秒。全編生成は実時間と同程度かかります。生成中は画面を閉じずにお待ちください。</p></div>'
+          if old not in s:
+              raise SystemExit('render options target not found')
+          s = s.replace(old, new, 1)
+
+          old = '<div class="tool-row"><button id="showFirstFrame">🖼 1フレーム確認</button><button id="previewVideo">▶ 10秒プレビュー</button><button id="stopPreview" disabled>■ プレビュー停止</button><button class="primary" id="generateVideo" ${capabilities.supported&&finalReviewApproved?\'\':\'disabled\'}>🎬 動画を生成</button><button class="danger" id="cancelRender" disabled>生成を中止</button></div>'
+          new = '<div class="tool-row"><button id="showFirstFrame">🖼 1フレーム確認</button><button class="primary" id="generateVideo" ${capabilities.supported?\'\':\'disabled\'}>🎬 動画を生成</button><button class="danger" id="cancelRender" disabled>生成を中止</button></div>'
+          if old not in s:
+              raise SystemExit('tool row target not found')
+          s = s.replace(old, new, 1)
+
+          s = s.replace('プレビューまたは動画生成時に素材を読み込みます。', '1フレーム確認または動画生成時に素材を読み込みます。', 1)
+
+          s, n = re.subn(r"\n  root\.querySelector\('#approveFinalReview'\)\.onclick=async\(\)=>\{.*?\n  \};\n\n", '\n', s, count=1, flags=re.S)
+          if n != 1:
+              raise SystemExit('final review handler not found')
+
+          s = s.replace('  const validation=validateVideoProject(project); const currentReviewSignature=finalReviewSignature(project);\n  const mvpValidation=validateMvpShortsOutput(project,total);\n  const finalReviewApproved=Boolean(project.finalReview?.approved && project.finalReview?.signature===currentReviewSignature);', '  const validation=validateVideoProject(project);\n  const mvpValidation=validateMvpShortsOutput(project,total);', 1)
+          s = s.replace('  const longProject=total>180;\n', '', 1)
+
+          s = s.replace("  let previewController=null,renderController=null,resultUrl='';let resultFile=null;let generatedHash='';let generatedMeta=null;", "  let renderController=null,resultUrl='';let resultFile=null;let generatedHash='';let generatedMeta=null;", 1)
+
+          s, n = re.subn(r"\n  root\.querySelector\('#previewVideo'\)\.onclick=async\(\)=>\{.*?\n  root\.querySelector\('#stopPreview'\)\.onclick=\(\)=>previewController\?\.abort\(\);\n", '\n', s, count=1, flags=re.S)
+          if n != 1:
+              raise SystemExit('preview handlers not found')
+
+          gate = "    if(!(project.finalReview?.approved && project.finalReview?.signature===finalReviewSignature(project))){\n      alert('最終素材チェックが未確認、または確認後に素材・字幕設定が変更されています。もう一度「この素材で動画生成を許可」を押してください。');\n      return;\n    }\n"
+          if gate not in s:
+              raise SystemExit('generation final review gate not found')
+          s = s.replace(gate, '', 1)
+
+          old = "    const range=root.querySelector('#renderRange').value;const limit=range==='full'?undefined:10;const currentTotal=getProjectDuration(project);const duration=limit?Math.min(currentTotal,limit):currentTotal;\n    if(!limit&&isMvpShortsProject(project)){const mvp=validateMvpShortsOutput(project,currentTotal);if(mvp.errors.length)return alert(`MVP Shortsの全編生成条件を確認してください。\\n\\n${mvp.errors.join('\\n')}\\n\\n原因切り分けは「先頭10秒」なら実行できます。`);}\n    if(!limit&&duration>180)return alert('初版の全編生成は3分以内に制限しています。先頭10秒で動作確認してください。');"
+          new = "    const limit=undefined;const currentTotal=getProjectDuration(project);const duration=currentTotal;\n    if(isMvpShortsProject(project)){const mvp=validateMvpShortsOutput(project,currentTotal);if(mvp.errors.length)return alert(`Shortsの全編生成条件を確認してください。\\n\\n${mvp.errors.join('\\n')}`);}\n    if(duration>180)return alert('現在の全編生成は3分以内に制限しています。');"
+          if old not in s:
+              raise SystemExit('render range logic target not found')
+          s = s.replace(old, new, 1)
+
+          s = s.replace("renderController=new AbortController();root.querySelector('#cancelRender').disabled=false;root.querySelector('#generateVideo').disabled=true;root.querySelector('#previewVideo').disabled=true;progress.value=0;", "renderController=new AbortController();root.querySelector('#cancelRender').disabled=false;root.querySelector('#generateVideo').disabled=true;progress.value=0;", 1)
+          s = s.replace("root.querySelector('#generateVideo').disabled=!(capabilities.supported && project.finalReview?.approved && project.finalReview?.signature===finalReviewSignature(project));root.querySelector('#previewVideo').disabled=false;", "root.querySelector('#generateVideo').disabled=!capabilities.supported;", 1)
+
+          if s == before:
+              raise SystemExit('no main.js changes made')
+          path.write_text(s)
+
+          test_path = Path('tests/outputLazyPreparation.test.mjs')
+          test_path.write_text("""import test from 'node:test';
+          import assert from 'node:assert/strict';
+          import fs from 'node:fs';
+
+          const source = fs.readFileSync(new URL('../main.js', import.meta.url), 'utf8');
+
+          test('output route does not eagerly prepare heavy video media', () => {
+            assert.match(source, /let preparedPromise=null/);
+            assert.match(source, /const ensurePreparedAssets=\\(\\)=>/);
+            assert.doesNotMatch(source, /let preparedPromise=prepareVideoProject/);
+            assert.match(source, /const assets=await ensurePreparedAssets\\(\\);drawProjectFrame/);
+            assert.match(source, /let assets=await ensurePreparedAssets\\(\\);/);
+          });
+
+          test('output route omits duplicate final-review image grid', () => {
+            assert.doesNotMatch(source, /final-review-card/);
+            assert.doesNotMatch(source, /approveFinalReview/);
+            assert.match(source, /<h2>生成前チェック<\\/h2>/);
+          });
+
+          test('output route removes 10 second preview controls and render range', () => {
+            assert.doesNotMatch(source, /id=\\"previewVideo\\"/);
+            assert.doesNotMatch(source, /id=\\"stopPreview\\"/);
+            assert.doesNotMatch(source, /id=\\"renderRange\\"/);
+            assert.match(source, /1フレーム確認/);
+            assert.match(source, /🎬 動画を生成/);
+          });
+
+          test('output route tells the user that media is prepared only when needed', () => {
+            assert.match(source, /操作時に素材を準備します/);
+            assert.match(source, /1フレーム確認または動画生成時に素材を読み込みます/);
+          });
+          """.replace(/^          /gm, ''))
+          PY
+      - name: Remove temporary workflow
+        run: git rm .github/workflows/patch-output-slim.yml
+      - name: Run focused tests
+        run: node --test tests/outputLazyPreparation.test.mjs
+      - name: Commit patch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Slim output checks and remove 10 second preview'
+          git push origin HEAD:v1.4/fix-narration-performance-shorts-limit
