@@ -1,0 +1,39 @@
+name: Render Job Integration Patch
+
+on:
+  push:
+    branches:
+      - tmp/render-job-integration-patch
+    paths:
+      - scripts/patch_render_job_main.py
+      - .github/workflows/render-job-integration-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: tmp/render-job-integration-patch
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Patch main.js
+        run: python scripts/patch_render_job_main.py
+      - name: Regression tests
+        run: npm test
+      - name: Production build
+        run: npm run build
+      - name: Commit verified integration
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm scripts/patch_render_job_main.py .github/workflows/render-job-integration-patch.yml
+          git add main.js tests/renderJobIntegration.test.mjs renderJob.js tests/renderJob.test.mjs
+          git commit -m "Isolate video export with minimal render job"
+          git push origin HEAD:tmp/render-job-integration-patch
