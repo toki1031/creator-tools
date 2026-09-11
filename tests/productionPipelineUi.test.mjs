@@ -5,8 +5,9 @@ import fs from 'node:fs';
 const ui = fs.readFileSync(new URL('../productionPipelineUi.js', import.meta.url), 'utf8');
 const boot = fs.readFileSync(new URL('../bootLoader.js', import.meta.url), 'utf8');
 
-test('semi-auto production UI is loaded as an optional module', () => {
-  assert.match(boot, /productionPipelineUi\.js/);
+test('semi-auto production UI is retained but not auto-loaded on boot', () => {
+  assert.doesNotMatch(boot, /['"]\.\/productionPipelineUi\.js['"]/);
+  assert.match(ui, /data-run-pipeline/);
 });
 
 test('semi-auto production remains user-triggered and preserves existing scenes', () => {
