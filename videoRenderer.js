@@ -395,7 +395,28 @@ export async function runVisualPreview(project, prepared, canvas, { durationLimi
 export function getRecorderMimeCandidates(hasAudio) { return [...(hasAudio ? MIME_CANDIDATES_AUDIO : MIME_CANDIDATES_VIDEO)]; }
 function chooseMime(hasAudio) { return getRecorderMimeCandidates(hasAudio).find(type => MediaRecorder.isTypeSupported(type)) || ''; }
 function createRecorder(stream, mimeType, videoBitsPerSecond) { const options = { videoBitsPerSecond }; if (mimeType) options.mimeType = mimeType; return new MediaRecorder(stream, options); }
-function bitrateFor(project) { const width = Number(project.output?.width) || 720; const high = project.output?.quality === 'high'; if (width >= 1080) return high ? 8_000_000 : 5_000_000; return high ? 5_000_000 : 3_000_000; }
+function isIOSDevice(userAgent = globalThis.navigator?.userAgent || '') { return /iPhone|iPad|iPod/i.test(String(userAgent)); }
+
+export function resolveExportProfile(project, { userAgent = globalThis.navigator?.userAgent || '' } = {}) {
+  const requestedWidth = Math.max(2, Number(project?.output?.width) || 720);
+  const requestedHeight = Math.max(2, Number(project?.output?.height) || 1280);
+  const iosSafeMode = isIOSDevice(userAgent);
+  const maxPixels = 720 * 1280;
+  if (!iosSafeMode || requestedWidth * requestedHeight <= maxPixels) {
+    return { requestedWidth, requestedHeight, width: requestedWidth, height: requestedHeight, iosSafeMode: false };
+  }
+  const scale = Math.sqrt(maxPixels / (requestedWidth * requestedHeight));
+  const even = value => Math.max(2, Math.round(value / 2) * 2);
+  return { requestedWidth, requestedHeight, width: even(requestedWidth * scale), height: even(requestedHeight * scale), iosSafeMode: true };
+}
+
+function bitrateFor(project, exportWidth, iosSafeMode = false) {
+  if (iosSafeMode) return 3_000_000;
+  const width = Number(exportWidth) || Number(project.output?.width) || 720;
+  const high = project.output?.quality === 'high';
+  if (width >= 1080) return high ? 8_000_000 : 5_000_000;
+  return high ? 5_000_000 : 3_000_000;
+}
 
 export function validatePreparedAudioForExport(project, prepared) {
   const errors = [];
@@ -579,8 +600,10 @@ export async function exportProjectVideo(project, prepared, canvas, { durationLi
   const fullDuration = getProjectDuration(project);
   const total = durationLimit ? Math.min(fullDuration, Math.max(.1, Number(durationLimit))) : fullDuration;
   if (!total) throw new Error('動画にできるシーンがありません。');
-  const fps = clamp(Number(project.output?.fps) || 30, 1, 60);
-  canvas.width = Number(project.output?.width) || 720; canvas.height = Number(project.output?.height) || 1280;
+  const exportProfile = resolveExportProfile(project);
+  const fps = clamp(Number(project.output?.fps) || 30, 1, exportProfile.iosSafeMode ? 30 : 60);
+  canvas.width = exportProfile.width; canvas.height = exportProfile.height;
+  if (exportProfile.iosSafeMode) onStatus(`iPhone safe mode: ${exportProfile.width}x${exportProfile.height} / ${fps}fps`);
   await ensurePreparedImageWindow(project, prepared, 0, { onStatus });
   drawProjectFrame(project, prepared, canvas, 0);
   onStatus('音声と録画機能を準備しています…');
@@ -591,7 +614,7 @@ export async function exportProjectVideo(project, prepared, canvas, { durationLi
   const stream = new MediaStream([...canvasStream.getVideoTracks(), ...(audio?.tracks || [])]);
   const mimeType = chooseMime(Boolean(audio?.tracks?.length));
   let recorder;
-  try { recorder = createRecorder(stream, mimeType, bitrateFor(project)); } catch { recorder = new MediaRecorder(stream); }
+  try { recorder = createRecorder(stream, mimeType, bitrateFor(project, exportProfile.width, exportProfile.iosSafeMode)); } catch { recorder = new MediaRecorder(stream); }
   const actualMime = recorder.mimeType || mimeType || 'video/webm';
   const recordingSink = await createRecordingSink(actualMime);
   let chunkWriteError = null;
@@ -616,7 +639,7 @@ export async function exportProjectVideo(project, prepared, canvas, { durationLi
       try { blob = await recordingSink.finish(); } catch (error) { await recordingSink.abort?.(); return reject(error instanceof Error ? error : new Error(String(error))); }
       if (!blob?.size) return reject(new Error('動画データを生成できませんでした。画面を開いたまま再試行してください。'));
       const extension = actualMime.includes('mp4') ? 'mp4' : 'webm';
-      resolve({ blob, mimeType: actualMime, extension, durationSec: total, diagnostics: { requestedWidth: Number(project.output?.width) || 720, requestedHeight: Number(project.output?.height) || 1280, canvasWidth: canvas.width, canvasHeight: canvas.height, captureWidth: Number(captureTrackSettings?.width) || null, captureHeight: Number(captureTrackSettings?.height) || null, captureFrameRate: Number(captureTrackSettings?.frameRate) || null, selectedMimeType: mimeType, actualMimeType: actualMime, hasAudio: Boolean(audio?.tracks?.length) } });
+      resolve({ blob, mimeType: actualMime, extension, durationSec: total, diagnostics: { requestedWidth: exportProfile.requestedWidth, requestedHeight: exportProfile.requestedHeight, canvasWidth: canvas.width, canvasHeight: canvas.height, captureWidth: Number(captureTrackSettings?.width) || null, captureHeight: Number(captureTrackSettings?.height) || null, captureFrameRate: Number(captureTrackSettings?.frameRate) || null, selectedMimeType: mimeType, actualMimeType: actualMime, hasAudio: Boolean(audio?.tracks?.length), iosSafeMode: exportProfile.iosSafeMode } });
     };
     try { if (navigator.wakeLock?.request) wakeLock = await navigator.wakeLock.request('screen'); } catch {}
     onStatus(`動画を生成しています（実時間：約${Math.ceil(total)}秒）…`);
