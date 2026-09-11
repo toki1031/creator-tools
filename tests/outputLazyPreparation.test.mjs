@@ -1,10 +1,10 @@
-
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const source = fs.readFileSync(new URL('../main.js', import.meta.url), 'utf8');
 
+// v1.4 output policy: keep only lightweight preflight, first-frame confirmation, and full generation.
 test('output route does not eagerly prepare heavy video media', () => {
   assert.match(source, /let preparedPromise=null/);
   assert.match(source, /const ensurePreparedAssets=\(\)=>/);
