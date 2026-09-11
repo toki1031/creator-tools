@@ -8,6 +8,14 @@ const PATCH_KEY = '__creatorOsSmartReframeDrawImagePatched';
 const state = { routeId: '', bySourceKey: new Map() };
 const imageSourceKeyCache = new WeakMap();
 
+// v1.0 compatibility / Safari stabilization policy:
+// iPhone/iPad/iPodでは動画出力時のSmart Reframe renderer bridgeを起動しない。
+// v1.0で実機PASSした基本Canvas + MediaRecorder経路に近づけ、
+// 30MB級projectの重複getProject()とdrawImage monkeypatchを生成経路から外す。
+export function shouldUseSmartReframeRendererBridge(userAgent = globalThis.navigator?.userAgent || '') {
+  return !/iPhone|iPad|iPod/i.test(String(userAgent));
+}
+
 function reframeSignature(value) {
   if (!value) return 'none';
   const normalized = normalizeSceneReframe(value);
@@ -89,9 +97,11 @@ function patchCanvasDrawImage() {
   };
 }
 
-patchCanvasDrawImage();
-void refreshSourceMap();
-window.addEventListener('hashchange', () => { void refreshSourceMap({ force: true }); });
-// Safariで別アプリ/別タブから戻るたびに30MB級projectを再読込しない。
-// 同一outputルートでは既存の小さいreframe mapを再利用する。
-window.addEventListener('focus', () => { void refreshSourceMap(); });
+if (shouldUseSmartReframeRendererBridge()) {
+  patchCanvasDrawImage();
+  void refreshSourceMap();
+  window.addEventListener('hashchange', () => { void refreshSourceMap({ force: true }); });
+  // Safariで別アプリ/別タブから戻るたびに30MB級projectを再読込しない。
+  // 同一outputルートでは既存の小さいreframe mapを再利用する。
+  window.addEventListener('focus', () => { void refreshSourceMap(); });
+}
