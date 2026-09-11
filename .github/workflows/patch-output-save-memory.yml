@@ -14,60 +14,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: v1.4/fix-narration-performance-shorts-limit
-      - name: Patch output settings save path
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          p=Path('main.js')
-          s=p.read_text()
-          old="""  const persistSettings=async()=>{const [w,h]=root.querySelector('#resolution').value.split('x').map(Number);Object.assign(o,{width:w,height:h,fps:Number(root.querySelector('#fps').value),quality:root.querySelector('#quality').value,subtitles:root.querySelector('#subtitles').checked,subtitlePosition:root.querySelector('#subtitlePosition').value,bgmEnabled:root.querySelector('#bgmEnabled').checked});st.enabled=o.subtitles;st.position=o.subtitlePosition;project.updatedAt=new Date().toISOString();await saveProject(project);canvas.width=w;canvas.height=h;};
-"""
-          new="""  const applySettings=()=>{const [w,h]=root.querySelector('#resolution').value.split('x').map(Number);Object.assign(o,{width:w,height:h,fps:Number(root.querySelector('#fps').value),quality:root.querySelector('#quality').value,subtitles:root.querySelector('#subtitles').checked,subtitlePosition:root.querySelector('#subtitlePosition').value,bgmEnabled:root.querySelector('#bgmEnabled').checked});st.enabled=o.subtitles;st.position=o.subtitlePosition;canvas.width=w;canvas.height=h;};
-  const persistSettings=async()=>{applySettings();project.updatedAt=new Date().toISOString();await saveProject(project);};
-"""
-          assert old in s, 'persistSettings block not found'
-          s=s.replace(old,new,1)
-          old2="""  root.querySelector('#showFirstFrame').onclick=async()=>{try{await persistSettings();const assets=await ensurePreparedAssets();drawProjectFrame(project,assets,canvas,0);canvas.scrollIntoView({behavior:'smooth',block:'center'});renderStatus.textContent='先頭フレームを表示しました。';}catch(error){alert(`画像確認に失敗しました：${error.message}`);}};
-
-  root.querySelector('#generateVideo').onclick=async()=>{
-    if(renderController)return;
-    try{await persistSettings();}catch(error){console.error(error);alert(`出力設定を保存できませんでした：${error.message}`);return;}
-"""
-          new2="""  root.querySelector('#showFirstFrame').onclick=async()=>{try{applySettings();const assets=await ensurePreparedAssets();drawProjectFrame(project,assets,canvas,0);canvas.scrollIntoView({behavior:'smooth',block:'center'});renderStatus.textContent='先頭フレームを表示しました。';}catch(error){alert(`画像確認に失敗しました：${error.message}`);}};
-
-  root.querySelector('#generateVideo').onclick=async()=>{
-    if(renderController)return;
-    applySettings();
-"""
-          assert old2 in s, 'generation pre-save block not found'
-          s=s.replace(old2,new2,1)
-          p.write_text(s)
-          PY
-      - name: Add regression test
-        run: |
-          cat > tests/outputGenerationSavePolicy.test.mjs <<'EOF'
-          import test from 'node:test';
-          import assert from 'node:assert/strict';
-          import fs from 'node:fs';
-
-          const source = fs.readFileSync(new URL('../main.js', import.meta.url), 'utf8');
-
-          test('video generation applies output settings without forcing a full project save first', () => {
-            assert.match(source, /const applySettings=\(\)=>/);
-            assert.match(source, /#generateVideo'[\s\S]*?applySettings\(\);/);
-            assert.doesNotMatch(source, /#generateVideo'[\s\S]{0,240}?await persistSettings\(\)/);
-          });
-
-          test('output settings still persist through the normal save controller', () => {
-            assert.match(source, /const persistSettings=async\(\)=>\{applySettings\(\);project\.updatedAt=/);
-            assert.match(source, /createSaveController\(\{delay:350,persist:async\(\)=>\{await persistSettings\(\)/);
-          });
-          EOF
-      - name: Commit patch and remove workflow
-        run: |
+      - run: node scripts/patch-output-save-memory.mjs
+      - run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git rm .github/workflows/patch-output-save-memory.yml
+          git rm .github/workflows/patch-output-save-memory.yml scripts/patch-output-save-memory.mjs
           git add -A
           git commit -m "Avoid full project save before video generation"
           git push origin HEAD:v1.4/fix-narration-performance-shorts-limit
