@@ -54,6 +54,6 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add projectBackup.js tests/projectBackup.test.mjs .github/workflows/patch-project-backup-memory.yml
+          git add -A
           git commit -m 'Reduce backup restore memory duplication'
           git push origin HEAD:v1.4/fix-narration-performance-shorts-limit
