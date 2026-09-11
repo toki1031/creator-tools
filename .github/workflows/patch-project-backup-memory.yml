@@ -1,0 +1,59 @@
+name: Targeted backup restore memory patch
+
+on:
+  push:
+    branches:
+      - v1.4/fix-narration-performance-shorts-limit
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v1.4/fix-narration-performance-shorts-limit
+      - name: Reduce duplicate backup clones
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('projectBackup.js')
+          s = path.read_text()
+          replacements = {
+            'const scene = safeClone(item);': 'const scene = { ...item };',
+            'const bgmSource = isRecord(source.bgm) ? safeClone(source.bgm) : {};': 'const bgmSource = isRecord(source.bgm) ? { ...source.bgm } : {};',
+            'const subtitleSource = isRecord(source.subtitleStyle) ? safeClone(source.subtitleStyle) : {};': 'const subtitleSource = isRecord(source.subtitleStyle) ? { ...source.subtitleStyle } : {};',
+            'const outputSource = isRecord(source.output) ? safeClone(source.output) : {};': 'const outputSource = isRecord(source.output) ? { ...source.output } : {};',
+            'const publishSource = isRecord(source.publish) ? safeClone(source.publish) : {};': 'const publishSource = isRecord(source.publish) ? { ...source.publish } : {};',
+            'const project = safeClone(normalizedProject);': 'const project = { ...normalizedProject };'
+          }
+          for old, new in replacements.items():
+              if old not in s:
+                  raise SystemExit(f'missing target: {old}')
+              s = s.replace(old, new, 1)
+          path.write_text(s)
+
+          test_path = Path('tests/projectBackup.test.mjs')
+          t = test_path.read_text()
+          marker = "test('旧projectの不足フィールドと未設定schemaVersionを補完する', () => {"
+          insert = """test('復元確定では正規化済みprojectを再deep cloneせず元projectのトップレベルも変更しない', () => {\n  const normalized=normalizeImportedProject(sample()).project;\n  const originalId=normalized.id, originalTitle=normalized.title, scenes=normalized.scenes, mediaLibrary=normalized.mediaLibrary;\n  const restored=createRestoredProject(normalized,{title:'軽量復元',createId:()=> 'restored-lightweight',now:()=> '2026-09-11T00:00:00.000Z'});\n  assert.equal(normalized.id,originalId);\n  assert.equal(normalized.title,originalTitle);\n  assert.equal(restored.scenes,scenes,'正規化済みscene配列を再deep cloneしない');\n  assert.equal(restored.mediaLibrary,mediaLibrary,'正規化済みmediaLibraryを再deep cloneしない');\n  assert.equal(restored.id,'restored-lightweight');\n  assert.equal(restored.title,'軽量復元');\n});\n\n"""
+          if marker not in t:
+              raise SystemExit('test insertion marker missing')
+          if '正規化済みprojectを再deep cloneせず' not in t:
+              t = t.replace(marker, insert + marker, 1)
+          test_path.write_text(t)
+          PY
+      - name: Remove temporary workflow
+        run: git rm .github/workflows/patch-project-backup-memory.yml
+      - name: Run focused tests
+        run: node --test tests/projectBackup.test.mjs
+      - name: Commit patch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add projectBackup.js tests/projectBackup.test.mjs .github/workflows/patch-project-backup-memory.yml
+          git commit -m 'Reduce backup restore memory duplication'
+          git push origin HEAD:v1.4/fix-narration-performance-shorts-limit
