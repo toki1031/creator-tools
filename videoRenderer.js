@@ -92,26 +92,57 @@ async function loadImageSafely(source, timeoutMs = 12000) {
   });
 }
 
+async function loadPreparedImageAt(prepared, index) {
+  const source = prepared?.imageSources?.[index];
+  if (!source || prepared.images?.[index]) return prepared.images?.[index] || null;
+  if (prepared.imageFailures?.some(item => item.index === index)) return null;
+  prepared.imageLoadPromises ||= [];
+  if (prepared.imageLoadPromises[index]) return await prepared.imageLoadPromises[index];
+  prepared.imageLoadPromises[index] = loadImageSafely(source).then(image => {
+    prepared.images[index] = image;
+    return image;
+  }).catch(error => {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!prepared.imageFailures.some(item => item.index === index)) prepared.imageFailures.push({ index, message });
+    console.warn(`Scene ${index + 1} image load failed`, error);
+    return null;
+  }).finally(() => { prepared.imageLoadPromises[index] = null; });
+  return await prepared.imageLoadPromises[index];
+}
+
+export async function ensurePreparedImageWindow(project, prepared, index, { onStatus = () => {} } = {}) {
+  if (!Array.isArray(prepared?.imageSources) || !Array.isArray(prepared?.images)) return;
+  const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+  const current = Math.max(0, Math.min(scenes.length - 1, Number(index) || 0));
+  if (!scenes.length) return;
+  if (prepared.imageWindowIndex === current && prepared.images[current] !== undefined) return;
+  prepared.imageWindowIndex = current;
+  const keep = new Set([current, current + 1].filter(i => i >= 0 && i < scenes.length));
+  for (let i = 0; i < prepared.images.length; i++) {
+    if (!keep.has(i)) prepared.images[i] = null;
+  }
+  for (const target of keep) {
+    if (!prepared.imageSources[target]) continue;
+    onStatus(`シーン画像を準備しています… ${target + 1}/${scenes.length}`);
+    await loadPreparedImageAt(prepared, target);
+  }
+}
+
+export function releasePreparedImages(prepared) {
+  if (!Array.isArray(prepared?.images)) return;
+  prepared.images.fill(null);
+  prepared.imageWindowIndex = -1;
+}
+
 export async function prepareVideoProject(project, { onStatus = () => {} } = {}) {
   const scenes = Array.isArray(project.scenes) ? project.scenes : [];
   const imageFailures = [];
-  const images = [];
-  onStatus('シーン画像を順番に準備しています…');
-  for (let index = 0; index < scenes.length; index++) {
-    const imageSource = resolveSceneImageSource(project, scenes[index]).data;
-    if (!imageSource) {
-      images.push(null);
-      continue;
-    }
-    try {
-      images.push(await loadImageSafely(imageSource));
-    } catch (error) {
-      imageFailures.push({ index, message: error instanceof Error ? error.message : String(error) });
-      console.warn(`Scene ${index + 1} image load failed`, error);
-      images.push(null);
-    }
-    onStatus(`シーン画像を準備しています… ${index + 1}/${scenes.length}`);
-  }
+  const imageSources = scenes.map(scene => resolveSceneImageSource(project, scene).data || '');
+  const images = Array(scenes.length).fill(null);
+  const imageLoadPromises = Array(scenes.length).fill(null);
+  const imagePreparation = { imageSources, images, imageFailures, imageLoadPromises, imageWindowIndex: -1 };
+  onStatus('先頭シーンの画像を準備しています…');
+  if (scenes.length) await ensurePreparedImageWindow(project, imagePreparation, 0, { onStatus });
 
   let audioArrayBuffer = null;
   let audioMimeType = bgmDataMime(project);
@@ -180,12 +211,12 @@ export async function prepareVideoProject(project, { onStatus = () => {} } = {})
     }
   }
 
-  const loadedImageCount = images.filter(Boolean).length;
+  const loadedImageCount = imageSources.filter(Boolean).length;
   const notes = [];
   if (audioInvalid) notes.push('BGM形式エラー'); else if (audioFetchError) notes.push('BGM読込失敗');
   if (narrationInvalid) notes.push('ナレーション形式エラー'); else if (narrationFetchError) notes.push('ナレーション読込失敗');
   onStatus(`素材準備完了：画像 ${loadedImageCount}/${scenes.length}${notes.length ? `／${notes.join('／')}` : ''}`);
-  return { images, imageFailures, loadedImageCount, audioArrayBuffer, audioMimeType, audioFetchError, audioInvalid, narrationArrayBuffer, narrationMimeType, narrationFetchError, narrationInvalid, sceneNarrations };
+  return { images, imageSources, imageFailures, imageLoadPromises, imageWindowIndex: imagePreparation.imageWindowIndex, loadedImageCount, audioArrayBuffer, audioMimeType, audioFetchError, audioInvalid, narrationArrayBuffer, narrationMimeType, narrationFetchError, narrationInvalid, sceneNarrations };
 }
 
 function clamp(value, min, max) { return Math.min(max, Math.max(min, value)); }
@@ -338,6 +369,7 @@ export function drawProjectFrame(project, prepared, canvas, timeSec) {
   ctx.fillStyle = '#080b12';
   ctx.fillRect(0, 0, width, height);
   if (!item) return;
+  if (Array.isArray(prepared?.imageSources) && prepared.imageWindowIndex !== item.index) void ensurePreparedImageWindow(project, prepared, item.index);
   const local = clamp(timeSec - item.start, 0, item.duration);
   const progress = clamp(local / item.duration, 0, 1);
   drawCover(ctx, prepared.images[item.index], width, height, item.scene.motion || 'none', progress, 1);
@@ -461,6 +493,7 @@ export async function exportProjectVideo(project, prepared, canvas, { durationLi
   if (!total) throw new Error('動画にできるシーンがありません。');
   const fps = clamp(Number(project.output?.fps) || 30, 1, 60);
   canvas.width = Number(project.output?.width) || 720; canvas.height = Number(project.output?.height) || 1280;
+  await ensurePreparedImageWindow(project, prepared, 0, { onStatus });
   drawProjectFrame(project, prepared, canvas, 0);
   onStatus('音声と録画機能を準備しています…');
   const audioResult = await createAudio(project, prepared, audioContext); const audio = audioResult.audio; if (audioResult.warning) onStatus(audioResult.warning);
@@ -474,7 +507,7 @@ export async function exportProjectVideo(project, prepared, canvas, { durationLi
   const actualMime = recorder.mimeType || mimeType || 'video/webm';
   const chunks = [];
   let frameId = 0, stopped = false, wakeLock = null;
-  const cleanup = async () => { cancelAnimationFrame(frameId); stream.getTracks().forEach(track => track.stop()); await audio?.stop(); try { await wakeLock?.release(); } catch {} };
+  const cleanup = async () => { cancelAnimationFrame(frameId); stream.getTracks().forEach(track => track.stop()); await audio?.stop(); releasePreparedImages(prepared); try { await wakeLock?.release(); } catch {} };
   return await new Promise(async (resolve, reject) => {
     const abort = () => { if (stopped) return; stopped = true; try { recorder.stop(); } catch {} cleanup().finally(() => reject(new DOMException('動画生成を中止しました。', 'AbortError'))); };
     signal?.addEventListener('abort', abort, { once: true });
