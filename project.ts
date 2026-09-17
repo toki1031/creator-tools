@@ -1,6 +1,34 @@
 export type Genre = "great-person" | "education" | "fortune" | "bgm" | "other";
 export type Platform = "youtube-shorts" | "instagram-reels" | "tiktok";
 
+export type ProductionAssetType =
+  | "historical-source"
+  | "ai-reconstruction"
+  | "modern-visual"
+  | "document"
+  | "other";
+
+export interface ProductionSceneDirective {
+  sceneId: string;
+  visualDirection: string;
+  purpose: string;
+  assetType: ProductionAssetType;
+  motionGuidance: string;
+  rules: string[];
+}
+
+export interface ProductionBrief {
+  objective: string;
+  tone: string;
+  globalRules: string[];
+  subtitleGuidance: string[];
+  narrationGuidance: string[];
+  bgmGuidance: string[];
+  seGuidance: string[];
+  sceneDirectives: ProductionSceneDirective[];
+  qaCriteria: string[];
+}
+
 export interface CreatorProject {
   id: string;
   title: string;
@@ -13,6 +41,7 @@ export interface CreatorProject {
   scenes: Scene[];
   narration: NarrationSettings;
   subtitleStyle: SubtitleStyle;
+  productionBrief?: ProductionBrief;
   createdAt: string;
   updatedAt: string;
   schemaVersion: 1;
