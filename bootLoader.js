@@ -19,6 +19,62 @@ function showBootError(error) {
   app.querySelector('[data-boot-reload]')?.addEventListener('click', () => location.reload());
 }
 
+function waitForInitialRender(callback) {
+  const app = document.getElementById('app');
+  if (!app || !app.querySelector('.boot')) {
+    callback();
+    return;
+  }
+  const observer = new MutationObserver(() => {
+    if (app.querySelector('.boot')) return;
+    observer.disconnect();
+    callback();
+  });
+  observer.observe(app, { childList: true, subtree: true });
+}
+
+function scheduleIdle(callback) {
+  if (typeof globalThis.requestIdleCallback === 'function') {
+    globalThis.requestIdleCallback(callback, { timeout: 750 });
+    return;
+  }
+  setTimeout(callback, 80);
+}
+
+const optionalModules = [
+  './dedicatedRenderHandoff.js',
+  './subtitlePreviewNavigation.js',
+  './subtitleAlignUi.js',
+  './subtitleCardEditorUi.js',
+  './editorUndo.js',
+  './datasetExportUi.js',
+  './datasetBrollSuggestionsUi.js',
+  './sceneVisualTypeSuggestionsUi.js',
+  './optionalAiModuleLoader.js',
+  './autoProductionUi.js',
+  './bgmLibraryUi.js',
+  './bgmRightsSummaryUi.js',
+  './bgmBeatSyncUi.js',
+  './smartReframeUi.js',
+  './smartReframeRendererBridge.js',
+  './shortsHighlightUi.js',
+  './shortsWorkspaceUi.js',
+  './shortsOutputUi.js',
+  './publishRightsUi.js'
+];
+
+function loadOptionalModulesDeferred() {
+  let index = 0;
+  const loadNext = () => {
+    const modulePath = optionalModules[index++];
+    if (!modulePath) return;
+    import(modulePath)
+      .catch(error => console.warn(`Optional module failed to load: ${modulePath}`, error))
+      .finally(() => scheduleIdle(loadNext));
+  };
+  scheduleIdle(loadNext);
+}
+
 window.addEventListener('error', event => {
   showBootError(event.error || event.message || 'Script error');
 });
@@ -35,36 +91,18 @@ const bootWatchdog = setTimeout(() => {
 
 import('./main.js')
   .then(() => {
-    clearTimeout(bootWatchdog);
-    // 起動直後に大容量projectを再読込する補助UIは自動起動しない。
-    // iPhone Safariでは別タブ/別アプリから戻った際にタブが再生成されることがあり、
-    // main.jsの画面復元直後に複数のgetProject/saveProjectが重なると復帰不能になりやすいため。
-    // productionAssistantUi / productionPipelineUi / productionTimingTracker はファイルを残し、
-    // 将来必要になった場合のみ明示操作で読み込む。
-    const optionalModules = [
-      './dedicatedRenderHandoff.js',
-      './subtitlePreviewNavigation.js',
-      './subtitleAlignUi.js',
-      './subtitleCardEditorUi.js',
-      './editorUndo.js',
-      './datasetExportUi.js',
-      './datasetBrollSuggestionsUi.js',
-      './sceneVisualTypeSuggestionsUi.js',
-      './optionalAiModuleLoader.js',
-      './autoProductionUi.js',
-      './bgmLibraryUi.js',
-      './bgmRightsSummaryUi.js',
-      './bgmBeatSyncUi.js',
-      './smartReframeUi.js',
-      './smartReframeRendererBridge.js',
-      './shortsHighlightUi.js',
-      './shortsWorkspaceUi.js',
-      './shortsOutputUi.js',
-      './publishRightsUi.js'
-    ];
-    for (const modulePath of optionalModules) {
-      import(modulePath).catch(error => console.warn(`Optional module failed to load: ${modulePath}`, error));
-    }
+    // main.js の import 完了は「初回画面の描画完了」ではない。
+    // iPhone Safariの冷起動では、IndexedDB読み込みと多数の追加module読み込みを
+    // 同時に走らせると初回描画と競合しやすいため、boot画面が消えるまで待つ。
+    waitForInitialRender(() => {
+      clearTimeout(bootWatchdog);
+      if (document.querySelector('#app .error, #app .boot-error')) return;
+      // 起動直後に大容量projectを再読込する補助UIは自動起動しない。
+      // productionAssistantUi / productionPipelineUi / productionTimingTracker はファイルを残し、
+      // 将来必要になった場合のみ明示操作で読み込む。
+      // その他の追加UIも初回画面を優先し、idle時に1つずつ読み込む。
+      loadOptionalModulesDeferred();
+    });
   })
   .catch(error => {
     clearTimeout(bootWatchdog);
