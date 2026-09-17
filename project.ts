@@ -15,6 +15,11 @@ export interface ProductionSceneDirective {
   assetType: ProductionAssetType;
   motionGuidance: string;
   rules: string[];
+  narrationText?: string;
+  subtitleText?: string;
+  startSec?: number;
+  endSec?: number;
+  durationSec?: number;
 }
 
 export interface ProductionBrief {
@@ -52,8 +57,10 @@ export interface Scene {
   order: number;
   text: string;
   speechText: string;
-  startSec: number;
-  endSec: number;
+  subtitleText?: string;
+  durationSec: number;
+  startSec?: number;
+  endSec?: number;
   motion: "none" | "zoom-in" | "zoom-out" | "pan-left" | "pan-right";
   transition: "cut" | "fade";
 }

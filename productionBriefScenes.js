@@ -12,6 +12,7 @@ function resolveMotion(guidance = '') {
   return 'zoom-in';
 }
 function round2(value) { return Math.round(value * 100) / 100; }
+function positiveNumber(value) { const number = Number(value); return Number.isFinite(number) && number > 0 ? number : 0; }
 
 /**
  * Converts an already-reviewed ProductionBrief into Creator OS runtime scenes.
@@ -22,24 +23,30 @@ export function buildScenesFromProductionBrief(brief, options = {}) {
   if (!directives.length) return [];
   const targetDurationSec = Math.max(5, Number(options.targetDurationSec) || 60);
   const durations = Array.isArray(options.sceneDurationsSec) ? options.sceneDurationsSec : [];
-  const suppliedTotal = durations.slice(0, directives.length).reduce((sum, value) => sum + Math.max(0, Number(value) || 0), 0);
+  const suppliedTotal = durations.slice(0, directives.length).reduce((sum, value) => sum + positiveNumber(value), 0);
   const equalDuration = round2(targetDurationSec / directives.length);
 
   return directives.map((directive, index) => {
-    const explicitDuration = Math.max(0, Number(durations[index]) || 0);
-    let durationSec = explicitDuration || equalDuration;
-    if (suppliedTotal > 0 && explicitDuration > 0 && Math.abs(suppliedTotal - targetDurationSec) > 0.01) {
-      durationSec = round2(explicitDuration * targetDurationSec / suppliedTotal);
+    const directiveDuration = positiveNumber(directive.durationSec);
+    const optionDuration = positiveNumber(durations[index]);
+    let durationSec = directiveDuration || optionDuration || equalDuration;
+    if (!directiveDuration && suppliedTotal > 0 && optionDuration > 0 && Math.abs(suppliedTotal - targetDurationSec) > 0.01) {
+      durationSec = round2(optionDuration * targetDurationSec / suppliedTotal);
     }
+
     const order = sceneNumber(directive.sceneId, index + 1) || index + 1;
-    const text = clean(directive.purpose) || clean(directive.visualDirection);
+    const narrationText = clean(directive.narrationText);
+    const subtitleText = clean(directive.subtitleText);
+    const text = subtitleText || narrationText;
     const motion = resolveMotion(directive.motionGuidance);
-    return {
+    const startSec = Number(directive.startSec), endSec = Number(directive.endSec);
+    const scene = {
       id: clean(directive.sceneId) || `scene-${index + 1}`,
       order,
       text,
-      speechText: text,
-      durationSec,
+      speechText: narrationText,
+      subtitleText,
+      durationSec: round2(durationSec),
       imageData: '',
       motion: DEFAULT_MOTIONS.has(motion) ? motion : 'zoom-in',
       transition: 'fade',
@@ -51,6 +58,9 @@ export function buildScenesFromProductionBrief(brief, options = {}) {
         rules: Array.isArray(directive.rules) ? directive.rules.map(clean).filter(Boolean) : []
       }
     };
+    if (Number.isFinite(startSec) && startSec >= 0) scene.startSec = round2(startSec);
+    if (Number.isFinite(endSec) && endSec > 0) scene.endSec = round2(endSec);
+    return scene;
   });
 }
 
