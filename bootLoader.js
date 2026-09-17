@@ -51,6 +51,7 @@ import('./main.js')
       './datasetBrollSuggestionsUi.js',
       './sceneVisualTypeSuggestionsUi.js',
       './optionalAiModuleLoader.js',
+      './autoProductionUi.js',
       './bgmLibraryUi.js',
       './bgmRightsSummaryUi.js',
       './bgmBeatSyncUi.js',
