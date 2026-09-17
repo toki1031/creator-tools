@@ -4,8 +4,12 @@ import { enrichAssetCandidates } from '../assetCandidateEnrichment.js';
 import { runSceneAssetPipeline } from '../sceneAssetPipeline.js';
 
 const scene = {
-  id: 'scene-1', order: 1, text: 'historical document',
-  productionDirection: { assetType: 'historical-source', visual: 'historical document' }
+  id: 'scene-1', order: 1,
+  productionDirection: {
+    assetType: 'historical-source',
+    visualDirection: 'historical document',
+    rules: ['生成素材で実物史料を代用しない']
+  }
 };
 const project = { id: 'p1', scenes: [scene], mediaLibrary: [] };
 
