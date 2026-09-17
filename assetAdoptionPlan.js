@@ -2,12 +2,20 @@ function clean(value = '') {
   return String(value ?? '').trim();
 }
 
+function list(value) {
+  return Array.isArray(value) ? value.map(clean).filter(Boolean) : [];
+}
+
 function evidence(candidate = {}) {
+  const sourceUrl = clean(candidate.sourceUrl || candidate.sourcePage || candidate.pageUrl);
   return {
-    sourcePage: clean(candidate.sourcePage || candidate.pageUrl),
+    sourceUrl,
+    sourcePage: sourceUrl,
     previewUrl: clean(candidate.previewUrl || candidate.imageUrl || candidate.thumbnailUrl),
     provider: clean(candidate.provider),
     title: clean(candidate.title),
+    rightsStatements: list(candidate.rightsStatements),
+    rightsStatus: clean(candidate.rightsStatus),
     rights: clean(candidate.rights),
     rightsAdvisory: clean(candidate.rightsAdvisory),
     rightsUrl: clean(candidate.rightsUrl),
@@ -54,8 +62,6 @@ export function buildAssetAdoptionPlan(scene, evaluatedCandidates) {
     order,
     status: 'ready',
     reason: '',
-    // This is preparation only. Phase 2-E never mutates mediaLibrary/Scene and
-    // never turns the Phase 2-D safety flag into automatic permission.
     autoApply: false,
     candidate: {
       ...evidence(selected.candidate),
