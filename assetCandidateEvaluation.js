@@ -17,6 +17,7 @@ function includesGeneratedMarker(candidate) {
 
 function hasRightsEvidence(candidate) {
   return Boolean(
+    list(candidate?.rightsStatements).length ||
     clean(candidate?.rights) ||
     clean(candidate?.rightsAdvisory) ||
     clean(candidate?.rightsUrl) ||
@@ -30,7 +31,7 @@ export function evaluateAssetCandidate(candidate, requirement, searchPlan) {
   const requestedType = clean(requirement?.requestedType || searchPlan?.requestedType || 'other');
   const upstreamBlocked = searchPlan?.status === 'blocked' || requirement?.status === 'needs-review';
   const generated = includesGeneratedMarker(candidate);
-  const sourcePage = clean(candidate?.sourcePage || candidate?.pageUrl);
+  const sourcePage = clean(candidate?.sourceUrl || candidate?.sourcePage || candidate?.pageUrl);
   const previewUrl = clean(candidate?.previewUrl || candidate?.imageUrl || candidate?.thumbnailUrl);
   const prohibitedContent = [
     ...list(requirement?.prohibitedContent),
@@ -80,9 +81,7 @@ export function evaluateAssetCandidate(candidate, requirement, searchPlan) {
     };
   }
 
-  // Phase 2-D does not independently grant commercial-use permission.
-  // Even candidates with useful rights metadata remain non-auto-adoptable
-  // until a later rights-verification stage proves every required condition.
+  // Rights evidence means only that review material exists. It is not permission.
   const status = (!rightsKnown || rightsStatus === 'needs-review' || rightsStatus === 'unknown')
     ? 'needs-review'
     : 'eligible';
