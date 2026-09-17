@@ -41,9 +41,13 @@ export function classifyLocRightsStatements(statements) {
   const text = strings(statements).join(' ').toLowerCase();
   if (!text) return { status: 'needs-review', signal: 'missing', reason: '権利情報がありません' };
 
+  // Check explicit restrictive language first. Avoid treating the bare word
+  // "copyright" as restrictive because official free-use statements often
+  // contain phrases such as "no known copyright restrictions".
   const restricted = [
     /permission (?:is )?required/,
-    /copyright(?:ed)?/,
+    /all rights reserved/,
+    /copyright(?:ed)? (?:by|held by|owned by)/,
     /restrictions? (?:apply|may apply|on use|on copying)/,
     /rights? (?:reserved|holder)/,
     /not (?:in )?the public domain/,
@@ -53,7 +57,7 @@ export function classifyLocRightsStatements(statements) {
   if (restricted) return { status: 'needs-review', signal: 'restriction-or-ambiguity', reason: '制限・第三者権利・著作権に関する記述があります' };
 
   const freeSignal = [
-    /public domain/,
+    /(?:^|[^a-z])public domain(?:[^a-z]|$)/,
     /cc0(?: 1\.0)?/,
     /no known (?:copyright )?restrictions/,
     /free to use and reuse/,
