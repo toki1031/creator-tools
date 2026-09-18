@@ -41,6 +41,7 @@ export async function runSceneAssetPipeline(project, scene, {
   const evaluatedCandidates = evaluateAssetCandidates(enrichedCandidates, requirement, searchPlan);
   const adoptionPlan = buildAssetAdoptionPlan(scene, evaluatedCandidates);
   if (adoptionPlan.status !== 'ready') return stop('adoption', adoptionPlan.status, adoptionPlan.reason, { requirement, searchPlan, enrichedCandidates, evaluatedCandidates, adoptionPlan });
+  if (adoptionPlan.autoApply !== true) return stop('adoption', 'needs-review', '素材の自動採用条件を満たしていません', { requirement, searchPlan, enrichedCandidates, evaluatedCandidates, adoptionPlan });
 
   const fetchResult = await fetchImage(adoptionPlan, fetchOptions);
   if (fetchResult?.status !== 'resolved' || !fetchResult.asset) return stop('fetch', fetchResult?.status || 'error', fetchResult?.reason || '画像を取得できません', { requirement, searchPlan, enrichedCandidates, evaluatedCandidates, adoptionPlan, fetchResult });
