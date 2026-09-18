@@ -4,6 +4,17 @@ function clean(value = '') {
   return String(value ?? '').trim();
 }
 
+function safeCopy(value) {
+  if (value == null) return value;
+  return typeof structuredClone === 'function'
+    ? structuredClone(value)
+    : JSON.parse(JSON.stringify(value));
+}
+
+function cleanStrings(value) {
+  return Array.isArray(value) ? value.map(clean).filter(Boolean) : [];
+}
+
 function safeHttpsUrl(value) {
   try {
     const url = new URL(clean(value));
@@ -49,6 +60,7 @@ export async function fetchAssetImage(plan, {
     const data = await blobToDataUrl(blob);
     if (!clean(data).startsWith('data:image/')) return { status: 'error', reason: '画像データへの変換に失敗しました' };
 
+    const sourceUrl = clean(candidate.sourceUrl || candidate.sourcePage || candidate.pageUrl);
     return {
       status: 'resolved',
       asset: {
@@ -59,12 +71,18 @@ export async function fetchAssetImage(plan, {
         sizeBytes: blob.size,
         provenance: {
           provider: clean(candidate.provider),
-          sourcePage: clean(candidate.sourcePage),
+          sourceUrl,
+          sourcePage: clean(candidate.sourcePage || candidate.sourceUrl || candidate.pageUrl),
           rights: clean(candidate.rights),
           rightsAdvisory: clean(candidate.rightsAdvisory),
           rightsUrl: clean(candidate.rightsUrl),
           license: clean(candidate.license),
-          licenseUrl: clean(candidate.licenseUrl)
+          licenseUrl: clean(candidate.licenseUrl),
+          rightsStatements: cleanStrings(candidate.rightsStatements),
+          rightsStatus: clean(candidate.rightsStatus),
+          rightsCheck: candidate.rightsCheck && typeof candidate.rightsCheck === 'object'
+            ? safeCopy(candidate.rightsCheck)
+            : undefined
         }
       }
     };
