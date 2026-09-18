@@ -32,6 +32,7 @@ export function buildAssetAdoptionPlan(scene, evaluatedCandidates) {
   const order = Number(scene?.order) || 0;
   const entries = Array.isArray(evaluatedCandidates) ? evaluatedCandidates : [];
   const eligible = entries.filter((entry) => entry?.evaluation?.status === 'eligible');
+  const autoEligible = eligible.filter((entry) => entry?.evaluation?.autoAdoptable === true);
 
   if (!sceneId) {
     return { sceneId: '', order, status: 'blocked', reason: 'Scene IDがありません', candidate: null };
@@ -65,7 +66,7 @@ export function buildAssetAdoptionPlan(scene, evaluatedCandidates) {
     order,
     status: 'ready',
     reason: '',
-    autoApply: false,
+    autoApply: selected.evaluation?.autoAdoptable === true,
     candidate: {
       ...evidence(selected.candidate),
       evaluation: { ...selected.evaluation }
