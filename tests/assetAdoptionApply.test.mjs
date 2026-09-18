@@ -17,9 +17,13 @@ const readyPlan = {
   candidate: {
     provider: 'library-of-congress',
     title: 'Nightingale statistical diagram',
+    sourceUrl: 'https://www.loc.gov/item/example/',
     sourcePage: 'https://www.loc.gov/item/example/',
     previewUrl: 'https://tile.loc.gov/example.jpg',
-    rightsAdvisory: 'Check Rights & Access'
+    rightsAdvisory: 'Check Rights & Access',
+    rightsStatements: ['No known copyright restrictions'],
+    rightsStatus: 'rights-cleared-signal',
+    rightsCheck: { status: 'rights-cleared-signal', signal: 'explicit-free-use' }
   }
 };
 
@@ -31,15 +35,43 @@ test('does nothing without explicit apply permission', () => {
   assert.equal(JSON.stringify(project), before);
 });
 
-test('applies a ready asset to mediaLibrary and matching Scene without mutation', () => {
+test('applies a ready asset and preserves complete provenance without mutation', () => {
   const project = baseProject();
-  const before = JSON.stringify(project);
-  const result = applyAssetAdoptionPlan(project, readyPlan, { id: 'nightingale-chart', data: 'data:image/jpeg;base64,new' }, { allowApply: true });
+  const before = structuredClone(project);
+  const resolvedAsset = {
+    id: 'nightingale-chart',
+    data: 'data:image/jpeg;base64,new',
+    provenance: {
+      provider: readyPlan.candidate.provider,
+      sourceUrl: readyPlan.candidate.sourceUrl,
+      sourcePage: readyPlan.candidate.sourcePage,
+      rightsStatements: [...readyPlan.candidate.rightsStatements],
+      rightsStatus: readyPlan.candidate.rightsStatus,
+      rightsCheck: structuredClone(readyPlan.candidate.rightsCheck)
+    }
+  };
+  const resolvedBefore = structuredClone(resolvedAsset);
+  const result = applyAssetAdoptionPlan(project, readyPlan, resolvedAsset, { allowApply: true });
+  const source = result.project.mediaLibrary[1].source;
   assert.equal(result.applied, true);
   assert.equal(result.project.mediaLibrary.length, 2);
   assert.equal(result.project.scenes[0].imageAssetId, 'nightingale-chart');
-  assert.equal(result.project.mediaLibrary[1].source.pageUrl, readyPlan.candidate.sourcePage);
-  assert.equal(JSON.stringify(project), before);
+  assert.equal(source.sourceUrl, readyPlan.candidate.sourceUrl);
+  assert.equal(source.pageUrl, readyPlan.candidate.sourcePage);
+  assert.deepEqual(source.rightsStatements, readyPlan.candidate.rightsStatements);
+  assert.equal(source.rightsStatus, 'rights-cleared-signal');
+  assert.deepEqual(source.rightsCheck, readyPlan.candidate.rightsCheck);
+  assert.notEqual(source.rightsCheck, resolvedAsset.provenance.rightsCheck);
+  assert.deepEqual(project, before);
+  assert.deepEqual(resolvedAsset, resolvedBefore);
+});
+
+test('keeps legacy sourcePage compatibility when provenance is absent', () => {
+  const legacyPlan = { ...readyPlan, candidate: { ...readyPlan.candidate, sourceUrl: '', rightsStatements: undefined, rightsStatus: undefined, rightsCheck: undefined } };
+  const result = applyAssetAdoptionPlan(baseProject(), legacyPlan, { data: 'data:image/jpeg;base64,new' }, { allowApply: true });
+  assert.equal(result.applied, true);
+  assert.equal(result.project.mediaLibrary[1].source.sourceUrl, legacyPlan.candidate.sourcePage);
+  assert.equal(result.project.mediaLibrary[1].source.pageUrl, legacyPlan.candidate.sourcePage);
 });
 
 test('does not apply needs-review or blocked plans', () => {
