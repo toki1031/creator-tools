@@ -56,3 +56,17 @@ test('batch builder is pure and leaves project-shaped inputs unchanged', () => {
   assert.equal(plans.length, 1);
   assert.equal(JSON.stringify(input), before);
 });
+
+
+test('ready plan preserves structured rightsCheck without mutating candidate', () => {
+  const item = entry('eligible');
+  item.candidate.rightsStatus = 'rights-cleared-signal';
+  item.candidate.rightsStatements = ['No known copyright restrictions'];
+  item.candidate.rightsCheck = { status: 'rights-cleared-signal', signal: 'explicit-free-use' };
+  const before = structuredClone(item);
+  const plan = buildAssetAdoptionPlan(scene, [item]);
+  assert.deepEqual(plan.candidate.rightsCheck, item.candidate.rightsCheck);
+  assert.notEqual(plan.candidate.rightsCheck, item.candidate.rightsCheck);
+  assert.equal(plan.candidate.rightsStatus, 'rights-cleared-signal');
+  assert.deepEqual(item, before);
+});
