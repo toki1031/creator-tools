@@ -78,3 +78,15 @@ test('batch evaluation is pure and does not mutate inputs', () => {
   assert.equal(results.length, 1);
   assert.equal(JSON.stringify(candidates), before);
 });
+
+
+test('verified candidate is explicitly auto adoptable', () => {
+  const result = evaluateAssetCandidate({
+    provider: 'verified-archive', requestedType: 'historical-source',
+    sourceUrl: 'https://example.org/item/1', previewUrl: 'https://example.org/image.jpg',
+    rightsStatements: ['Public domain'], rightsStatus: 'verified'
+  }, historicalRequirement, readyPlan);
+  assert.equal(result.status, 'eligible');
+  assert.equal(result.autoAdoptable, true);
+  assert.equal(result.autoAdoptionPolicy, 'verified');
+});
