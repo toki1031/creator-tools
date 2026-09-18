@@ -8,9 +8,13 @@ const plan = {
   candidate: {
     title: 'Historical diagram',
     provider: 'library-of-congress',
+    sourceUrl: 'https://www.loc.gov/item/example/',
     sourcePage: 'https://www.loc.gov/item/example/',
     previewUrl: 'https://tile.loc.gov/example.jpg',
-    rightsAdvisory: 'Check Rights & Access'
+    rightsAdvisory: 'Check Rights & Access',
+    rightsStatements: ['No known copyright restrictions'],
+    rightsStatus: 'rights-cleared-signal',
+    rightsCheck: { status: 'rights-cleared-signal', signal: 'explicit-free-use', itemJsonUrl: 'https://www.loc.gov/item/example/?fo=json' }
   }
 };
 
@@ -39,12 +43,25 @@ test('requires an https image URL', async () => {
   assert.equal(calls, 0);
 });
 
-test('resolves a valid image and preserves provenance', async () => {
+test('resolves a valid image and preserves complete rights provenance without mutation', async () => {
+  const before = structuredClone(plan);
   const result = await fetchAssetImage(plan, { fetchImpl: async () => response(), blobToDataUrl: convert });
   assert.equal(result.status, 'resolved');
   assert.equal(result.asset.mimeType, 'image/jpeg');
+  assert.equal(result.asset.provenance.sourceUrl, plan.candidate.sourceUrl);
   assert.equal(result.asset.provenance.sourcePage, plan.candidate.sourcePage);
+  assert.deepEqual(result.asset.provenance.rightsStatements, plan.candidate.rightsStatements);
+  assert.equal(result.asset.provenance.rightsStatus, 'rights-cleared-signal');
+  assert.deepEqual(result.asset.provenance.rightsCheck, plan.candidate.rightsCheck);
+  assert.notEqual(result.asset.provenance.rightsCheck, plan.candidate.rightsCheck);
+  assert.deepEqual(plan, before);
   assert.match(result.asset.data, /^data:image\/jpeg/);
+});
+
+test('falls back to legacy sourcePage when canonical sourceUrl is absent', async () => {
+  const legacyPlan = { ...plan, candidate: { ...plan.candidate, sourceUrl: '' } };
+  const result = await fetchAssetImage(legacyPlan, { fetchImpl: async () => response(), blobToDataUrl: convert });
+  assert.equal(result.asset.provenance.sourceUrl, legacyPlan.candidate.sourcePage);
 });
 
 test('rejects http errors and non-image responses', async () => {
