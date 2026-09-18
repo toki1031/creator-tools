@@ -16,6 +16,9 @@ function evidence(candidate = {}) {
     title: clean(candidate.title),
     rightsStatements: list(candidate.rightsStatements),
     rightsStatus: clean(candidate.rightsStatus),
+    rightsCheck: candidate.rightsCheck && typeof candidate.rightsCheck === 'object'
+      ? structuredClone(candidate.rightsCheck)
+      : undefined,
     rights: clean(candidate.rights),
     rightsAdvisory: clean(candidate.rightsAdvisory),
     rightsUrl: clean(candidate.rightsUrl),
