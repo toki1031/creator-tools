@@ -47,7 +47,7 @@ test('ambiguous LoC rights stop before image fetch or apply', async () => {
   assert.equal(applied, 0);
 });
 
-test('explicit free-use signal can pass existing gates but is not itself a legal guarantee', async () => {
+test('explicit free-use signal without official rights-check evidence stops before fetch', async () => {
   let fetched = 0;
   const result = await runSceneAssetPipeline(project, scene, {
     searchCandidates: async () => ({ status: 'ok', candidates: [locCandidate()] }),
@@ -55,8 +55,9 @@ test('explicit free-use signal can pass existing gates but is not itself a legal
     fetchImage: async plan => { fetched += 1; return { status: 'resolved', asset: { name: 'a.jpg', data: 'data:image/jpeg;base64,AA==', previewUrl: plan.candidate.previewUrl } }; },
     applyAsset: (input, plan) => ({ applied: true, project: { ...input, appliedCandidate: plan.candidate }, assetId: 'asset-1' })
   });
-  assert.equal(result.status, 'applied');
-  assert.equal(fetched, 1);
+  assert.equal(result.status, 'needs-review');
+  assert.equal(result.stage, 'adoption');
+  assert.equal(fetched, 0);
   assert.equal(result.adoptionPlan.autoApply, false);
   assert.equal(result.adoptionPlan.candidate.rightsStatus, 'rights-cleared-signal');
 });
