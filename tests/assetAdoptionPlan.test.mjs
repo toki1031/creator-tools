@@ -70,3 +70,13 @@ test('ready plan preserves structured rightsCheck without mutating candidate', (
   assert.equal(plan.candidate.rightsStatus, 'rights-cleared-signal');
   assert.deepEqual(item, before);
 });
+
+
+test('verified eligible candidate makes autoApply explicit', () => {
+  const item = entry('eligible');
+  item.candidate.rightsStatus = 'verified';
+  item.evaluation.autoAdoptable = true;
+  const plan = buildAssetAdoptionPlan(scene, [item]);
+  assert.equal(plan.status, 'ready');
+  assert.equal(plan.autoApply, true);
+});

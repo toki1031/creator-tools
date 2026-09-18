@@ -65,7 +65,7 @@ export function buildAssetAdoptionPlan(scene, evaluatedCandidates) {
     order,
     status: 'ready',
     reason: '',
-    autoApply: false,
+    autoApply: selected.evaluation?.autoAdoptable === true,
     candidate: {
       ...evidence(selected.candidate),
       evaluation: { ...selected.evaluation }

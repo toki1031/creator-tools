@@ -1,3 +1,5 @@
+import { evaluateAutoAdoptionRights } from './assetAutoAdoptionPolicy.js';
+
 function clean(value = '') {
   return String(value ?? '').trim();
 }
@@ -86,9 +88,12 @@ export function evaluateAssetCandidate(candidate, requirement, searchPlan) {
     ? 'needs-review'
     : 'eligible';
 
+  const autoAdoption = status === 'eligible' ? evaluateAutoAdoptionRights(candidate) : { allowed: false, policy: 'review-required', reason: '権利確認が必要です' };
+
   return {
     status,
-    autoAdoptable: false,
+    autoAdoptable: autoAdoption.allowed,
+    autoAdoptionPolicy: autoAdoption.policy,
     requestedType,
     generated,
     prohibitedContent,

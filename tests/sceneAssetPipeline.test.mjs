@@ -96,12 +96,23 @@ test('protects an existing scene image at final apply stage', async () => {
 });
 
 
+test('stops a free-use signal without complete official evidence before fetch', async () => {
+  let fetchCalls = 0;
+  const candidate = { ...eligible, rightsStatus: 'rights-cleared-signal', rightsStatements: ['No known copyright restrictions'], rightsCheck: { status: 'rights-cleared-signal', signal: 'explicit-free-use' } };
+  const result = await runSceneAssetPipeline(project, scene, { searchCandidates: async () => ({ status: 'ok', candidates: [candidate] }), enrichCandidates: async candidates => candidates, fetchImage: async () => { fetchCalls += 1; return resolved; } });
+  assert.equal(result.status, 'needs-review');
+  assert.equal(result.stage, 'adoption');
+  assert.equal(fetchCalls, 0);
+});
+
 test('preserves rights evidence end-to-end from candidate through image fetch into mediaLibrary', async () => {
   const candidate = {
     ...eligible,
     rightsStatus: 'rights-cleared-signal',
     rightsStatements: ['No known copyright restrictions'],
-    rightsCheck: { status: 'rights-cleared-signal', signal: 'explicit-free-use' }
+    sourceUrl: 'https://www.loc.gov/item/example/',
+    provider: 'library-of-congress',
+    rightsCheck: { status: 'rights-cleared-signal', signal: 'explicit-free-use', itemJsonUrl: 'https://www.loc.gov/item/example/?fo=json&at=item%2Cresources' }
   };
   const result = await runSceneAssetPipeline(project, scene, {
     searchCandidates: async () => ({ status: 'ok', candidates: [candidate] }),
