@@ -82,3 +82,40 @@ test('rate limiting wraps real scene search calls sequentially', async () => {
   assert.equal(result.status, 'complete');
   assert.deepEqual(events, ['slot', 'search-a', 'slot', 'search-b']);
 });
+
+
+test('shares one external request slot sequence between search and rights enrichment', async () => {
+  const input = { scenes: [{ id: 'a', order: 1 }], mediaLibrary: [] };
+  const events = [];
+  const waitForExternalSlot = async () => events.push('slot');
+  const runScene = async (project, scene, options) => {
+    await options.searchCandidates({ sceneId: scene.id });
+    await options.enrichmentOptions.waitForExternalSlot();
+    events.push('rights-a');
+    return { status: 'applied', stage: 'complete', project: structuredClone(project) };
+  };
+  const result = await runMultiSceneAssetPipeline(input, {
+    runScene,
+    waitForSearchSlot: waitForExternalSlot,
+    searchCandidates: async () => { events.push('search-a'); return []; }
+  });
+  assert.equal(result.status, 'complete');
+  assert.deepEqual(events, ['slot', 'search-a', 'slot', 'rights-a']);
+});
+
+test('supports an explicit shared external limiter while preserving legacy search limiter option', async () => {
+  const input = { scenes: [{ id: 'a', order: 1 }], mediaLibrary: [] };
+  const events = [];
+  const runScene = async (project, scene, options) => {
+    await options.searchCandidates({ sceneId: scene.id });
+    await options.enrichmentOptions.waitForExternalSlot();
+    return { status: 'applied', stage: 'complete', project: structuredClone(project) };
+  };
+  await runMultiSceneAssetPipeline(input, {
+    runScene,
+    waitForSearchSlot: async () => events.push('search-slot'),
+    waitForExternalSlot: async () => events.push('external-slot'),
+    searchCandidates: async () => []
+  });
+  assert.deepEqual(events, ['search-slot', 'external-slot']);
+});
