@@ -9,6 +9,10 @@ function clone(value) {
     : JSON.parse(JSON.stringify(value));
 }
 
+function cleanStrings(value) {
+  return Array.isArray(value) ? value.map(clean).filter(Boolean) : [];
+}
+
 function uniqueAssetId(project, preferred) {
   const used = new Set((project.mediaLibrary || []).map(asset => clean(asset?.id)).filter(Boolean));
   const base = clean(preferred) || `asset-${Date.now()}`;
@@ -38,6 +42,19 @@ export function applyAssetAdoptionPlan(project, plan, resolvedAsset, { allowAppl
   if (!Array.isArray(next.mediaLibrary)) next.mediaLibrary = [];
   const assetId = uniqueAssetId(next, resolvedAsset?.id || `auto-${sceneId}`);
   const candidate = plan?.candidate || {};
+  const provenance = resolvedAsset?.provenance && typeof resolvedAsset.provenance === 'object'
+    ? resolvedAsset.provenance
+    : {};
+  const sourceUrl = clean(provenance.sourceUrl || candidate.sourceUrl || provenance.sourcePage || candidate.sourcePage || candidate.pageUrl);
+  const rightsStatements = cleanStrings(
+    Array.isArray(provenance.rightsStatements) ? provenance.rightsStatements : candidate.rightsStatements
+  );
+  const rightsCheck = provenance.rightsCheck && typeof provenance.rightsCheck === 'object'
+    ? clone(provenance.rightsCheck)
+    : candidate.rightsCheck && typeof candidate.rightsCheck === 'object'
+      ? clone(candidate.rightsCheck)
+      : undefined;
+
   const asset = {
     id: assetId,
     type: 'image',
@@ -45,13 +62,17 @@ export function applyAssetAdoptionPlan(project, plan, resolvedAsset, { allowAppl
     data,
     previewUrl,
     source: {
-      provider: clean(candidate.provider),
-      pageUrl: clean(candidate.sourcePage),
-      rights: clean(candidate.rights),
-      rightsAdvisory: clean(candidate.rightsAdvisory),
-      rightsUrl: clean(candidate.rightsUrl),
-      license: clean(candidate.license),
-      licenseUrl: clean(candidate.licenseUrl)
+      provider: clean(provenance.provider || candidate.provider),
+      sourceUrl,
+      pageUrl: clean(provenance.sourcePage || candidate.sourcePage || candidate.sourceUrl || candidate.pageUrl),
+      rights: clean(provenance.rights || candidate.rights),
+      rightsAdvisory: clean(provenance.rightsAdvisory || candidate.rightsAdvisory),
+      rightsUrl: clean(provenance.rightsUrl || candidate.rightsUrl),
+      license: clean(provenance.license || candidate.license),
+      licenseUrl: clean(provenance.licenseUrl || candidate.licenseUrl),
+      rightsStatements,
+      rightsStatus: clean(provenance.rightsStatus || candidate.rightsStatus),
+      rightsCheck
     },
     origin: 'auto-production'
   };
