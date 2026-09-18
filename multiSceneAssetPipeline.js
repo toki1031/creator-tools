@@ -13,6 +13,7 @@ export async function runMultiSceneAssetPipeline(project, {
   fetchOptions,
   runScene = runSceneAssetPipeline,
   waitForSearchSlot = createRequestRateLimiter(),
+  waitForExternalSlot = waitForSearchSlot,
   stopOnRisk = true
 } = {}) {
   let currentProject = clone(project);
@@ -33,7 +34,8 @@ export async function runMultiSceneAssetPipeline(project, {
       searchCandidates: limitedSearch,
       fetchImage,
       applyAsset,
-      fetchOptions
+      fetchOptions,
+      enrichmentOptions: { waitForExternalSlot }
     });
     results.push({ sceneId: scene?.id || '', order: Number(scene?.order) || 0, status: result.status, stage: result.stage, reason: result.reason || '' });
     if (result.status === 'applied' && result.project) currentProject = result.project;
