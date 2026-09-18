@@ -94,3 +94,33 @@ test('protects an existing scene image at final apply stage', async () => {
   assert.equal(result.status, 'blocked');
   assert.equal(withImage.scenes[0].imageAssetId, 'manual-image');
 });
+
+
+test('preserves rights evidence end-to-end from candidate through image fetch into mediaLibrary', async () => {
+  const candidate = {
+    ...eligible,
+    rightsStatus: 'rights-cleared-signal',
+    rightsStatements: ['No known copyright restrictions'],
+    rightsCheck: { status: 'rights-cleared-signal', signal: 'explicit-free-use' }
+  };
+  const result = await runSceneAssetPipeline(project, scene, {
+    searchCandidates: async () => ({ status: 'ok', candidates: [candidate] }),
+    enrichCandidates: async candidates => candidates,
+    fetchOptions: {
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        headers: { get: key => key === 'content-type' ? 'image/jpeg' : key === 'content-length' ? '4' : null },
+        blob: async () => ({ size: 4, type: 'image/jpeg' })
+      }),
+      blobToDataUrl: async () => 'data:image/jpeg;base64,AAAA'
+    }
+  });
+  assert.equal(result.status, 'applied');
+  const source = result.project.mediaLibrary[0].source;
+  assert.equal(source.sourceUrl, candidate.sourceUrl);
+  assert.deepEqual(source.rightsStatements, candidate.rightsStatements);
+  assert.equal(source.rightsStatus, 'rights-cleared-signal');
+  assert.deepEqual(source.rightsCheck, candidate.rightsCheck);
+  assert.notEqual(source.rightsStatus, 'verified');
+});
