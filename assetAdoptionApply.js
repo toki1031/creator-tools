@@ -36,8 +36,9 @@ export function applyAssetAdoptionPlan(project, plan, resolvedAsset, { allowAppl
   }
 
   const data = clean(resolvedAsset?.data);
+  const mediaRef = resolvedAsset?.mediaRef && typeof resolvedAsset.mediaRef === 'object' ? clone(resolvedAsset.mediaRef) : null;
   const previewUrl = clean(resolvedAsset?.previewUrl || plan?.candidate?.previewUrl);
-  if (!data && !previewUrl) return { project: next, applied: false, reason: '利用可能な画像データがありません' };
+  if (!data && !mediaRef && !previewUrl) return { project: next, applied: false, reason: '利用可能な画像データがありません' };
 
   if (!Array.isArray(next.mediaLibrary)) next.mediaLibrary = [];
   const assetId = uniqueAssetId(next, resolvedAsset?.id || `auto-${sceneId}`);
@@ -60,6 +61,7 @@ export function applyAssetAdoptionPlan(project, plan, resolvedAsset, { allowAppl
     type: 'image',
     name: clean(resolvedAsset?.name || candidate.title || `Scene ${sceneId} image`),
     data,
+    mediaRef,
     previewUrl,
     source: {
       provider: clean(provenance.provider || candidate.provider),
