@@ -28,7 +28,10 @@ test('connects safe path through mediaLibrary and scene assignment without mutat
   const before = structuredClone(project);
   const result = await runSceneAssetPipeline(project, scene, {
     searchCandidates: async () => ({ status: 'ok', candidates: [eligible] }),
-    fetchImage: async () => resolved
+    fetchImage: async () => resolved,
+    applyAsset: async (inputProject, plan, asset) => {
+      const copy=structuredClone(inputProject);copy.mediaLibrary.push({id:'stored-a',type:'image',data:asset.data});copy.scenes[0].imageAssetId='stored-a';return {status:'applied',project:copy,assetId:'stored-a'};
+    }
   });
   assert.equal(result.status, 'applied');
   assert.equal(result.stage, 'complete');
@@ -88,7 +91,8 @@ test('protects an existing scene image at final apply stage', async () => {
   const withImage = { ...project, scenes: [{ ...scene, imageAssetId: 'manual-image' }] };
   const result = await runSceneAssetPipeline(withImage, withImage.scenes[0], {
     searchCandidates: async () => ({ status: 'ok', candidates: [eligible] }),
-    fetchImage: async () => resolved
+    fetchImage: async () => resolved,
+    applyAsset: async () => ({status:'blocked',project:withImage,reason:'既存画像があります'})
   });
   assert.equal(result.stage, 'apply');
   assert.equal(result.status, 'blocked');
@@ -114,9 +118,11 @@ test('preserves rights evidence end-to-end from candidate through image fetch in
     provider: 'library-of-congress',
     rightsCheck: { status: 'rights-cleared-signal', signal: 'explicit-free-use', itemJsonUrl: 'https://www.loc.gov/item/example/?fo=json&at=item%2Cresources' }
   };
+  const stored=[];
   const result = await runSceneAssetPipeline(project, scene, {
     searchCandidates: async () => ({ status: 'ok', candidates: [candidate] }),
     enrichCandidates: async candidates => candidates,
+    applyAsset: async (inputProject, plan, asset) => { stored.push(asset); const copy=structuredClone(inputProject); copy.mediaLibrary.push({id:'stored-rights',type:'image',data:asset.data,source:asset.provenance}); copy.scenes[0].imageAssetId='stored-rights'; return {status:'applied',project:copy,assetId:'stored-rights'}; },
     fetchOptions: {
       fetchImpl: async () => ({
         ok: true,
