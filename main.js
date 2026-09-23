@@ -5,6 +5,7 @@ import { downloadJson, downloadText } from "./download.js";
 import { getVideoCapabilities, getProjectDuration, validateVideoProject, prepareVideoProject, runVisualPreview, exportProjectVideo, drawProjectFrame } from "./videoRenderer.js";
 import { createProjectBackupPayload, createRestoredProject, LARGE_BACKUP_WARNING_BYTES, mergePronunciationDictionaries, normalizeImportedProject, parseProjectBackup, summarizeProjectBackup } from "./projectBackup.js";
 import { addImageAsset, assetUsageCount, assetUsageScenes, ensureMediaLibrary, estimateAssetBytes, promoteLegacySceneImage, removeAllUnusedAssets, removeUnusedAsset, renameMediaAsset, resolveSceneImageSource, summarizeMediaLibrary } from "./mediaLibrary.js";
+import { resolveSceneImageForDisplay } from "./sceneImageDisplay.js";
 import { createAudioAssetIdFromFile, normalizeAudioAssetId } from "./audioAssetIdentity.js";
 import { normalizeSubtitleOffset, resolveEffectiveSubtitlePosition, resolveSubtitleYRatio } from "./subtitlePosition.js";
 import { assessMvpVideoResult, describeVideoExportFailure, isMvpShortsProject, validateMvpShortsOutput } from "./videoMvp.js";
@@ -445,6 +446,9 @@ async function renderScenes(id) {
     </main>`;
   attachProjectMenu(project, root.querySelector("#menu"), () => goStudio(studioForGenre(project.genre)));
   const saveState=root.querySelector("#saveState"); let pendingAsset=Promise.resolve();
+  let sceneDisplayCleanups=[];
+  const clearSceneDisplayUrls=()=>{sceneDisplayCleanups.forEach(cleanup=>cleanup());sceneDisplayCleanups=[];};
+  const hydrateSceneImages=async()=>{clearSceneDisplayUrls();const cards=[...root.querySelectorAll("[data-scene-image]")];await Promise.all(cards.map(async el=>{const index=Number(el.dataset.sceneImage),scene=project.scenes[index];if(!scene)return;const resolved=await resolveSceneImageForDisplay(project,scene);if(!el.isConnected)return resolved.cleanup?.();if(resolved.status==="resolved"){el.innerHTML=`<img src="${escapeHtml(resolved.url)}" alt="">`;sceneDisplayCleanups.push(resolved.cleanup);}else el.innerHTML="<span>画像未登録</span>";}));};
   const persist=async()=>{await pendingAsset;project.scenes.forEach((s,i)=>s.order=i+1);project.updatedAt=new Date().toISOString();await saveProject(project);};
   const {scheduleSave:save,flushSave}=createSaveController({delay:400,persist,setStatus:text=>saveState.textContent=text});
   bindSavedNavigation(root.querySelector("#back"),flushSave,()=>goStudio(studioForGenre(project.genre)));
@@ -524,10 +528,9 @@ async function renderScenes(id) {
     root.querySelector("#sceneCount").textContent=`${project.scenes.length}シーン`;
     root.querySelector("#totalDuration").textContent=`${total()}秒`;
     root.querySelector("#sceneList").innerHTML=project.scenes.length?project.scenes.map((s,i)=>{
-      const image=resolveSceneImageSource(project,s).data;
       return `
       <article class="scene-card" data-index="${i}">
-        <div class="scene-preview">${image?`<img src="${image}" alt="">`:`<span>画像未登録</span>`}</div>
+        <div class="scene-preview" data-scene-image="${i}"><span>画像読込中…</span></div>
         <div class="scene-body"><div class="scene-title"><b>シーン ${i+1}</b><div><button data-up="${i}" ${i===0?"disabled":""}>↑</button><button data-down="${i}" ${i===project.scenes.length-1?"disabled":""}>↓</button><button class="danger" data-remove="${i}">削除</button></div></div>
         <textarea data-text="${i}" placeholder="このシーンの字幕・内容">${escapeHtml(s.text||"")}</textarea>
         <p class="${s.narration?.audioData?'ok':'muted'}">${s.narration?.audioData?`✓ シーン音声 ${Number(s.narration.durationSec||0).toFixed(2)}秒／字幕フレーズ同期 ON`:'− シーン音声 未生成'}</p>
@@ -570,6 +573,7 @@ async function renderScenes(id) {
     root.querySelectorAll("[data-remove]").forEach(el=>el.onclick=()=>{if(!confirm("このシーンを削除しますか？ 削除後も「1つ前に戻す」で復元できます。"))return;const index=Number(el.dataset.remove);promoteLegacySceneImage(project,project.scenes[index],{fileName:`シーン ${index+1} の旧画像`});snapshotScenes();project.scenes.splice(index,1);save();renderList();});
     root.querySelectorAll("[data-up]").forEach(el=>el.onclick=()=>{const record=moveSceneWithDecision(project,Number(el.dataset.up),"up");if(!record)return;save();renderList();});
     root.querySelectorAll("[data-down]").forEach(el=>el.onclick=()=>{const record=moveSceneWithDecision(project,Number(el.dataset.down),"down");if(!record)return;save();renderList();});
+    void hydrateSceneImages();
   };
   root.querySelector("#autoSplit").onclick=()=>{
     const oldScenes=project.scenes||[];
