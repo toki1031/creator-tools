@@ -1,3 +1,4 @@
+import { isMediaRef } from './mediaRef.js';
 const isRecord = value => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const stringOr = (value, fallback = '') => typeof value === 'string' ? value : fallback;
 const promotedLegacyAssetIds = new WeakMap();
@@ -57,11 +58,15 @@ export function normalizeMediaLibrary(value, { createId, now = () => new Date().
   return { assets, warnings, fixes };
 }
 
+function isImageAsset(item) {
+  return item?.type === 'image' && (isImageDataUrl(item?.data) || (isMediaRef(item?.mediaRef) && item.mediaRef.kind === 'image'));
+}
+
 export function findMediaAsset(project, assetId) {
   const id = typeof assetId === 'string' ? assetId.trim() : '';
   if (!id) return null;
   const library = Array.isArray(project?.mediaLibrary) ? project.mediaLibrary : [];
-  const asset = library.find(item => item?.id === id && item?.type === 'image' && isImageDataUrl(item?.data));
+  const asset = library.find(item => item?.id === id && isImageAsset(item));
   return asset || null;
 }
 
@@ -120,6 +125,7 @@ export function assetUsageCount(project, assetId) {
 }
 
 export function estimateAssetBytes(asset) {
+  if (isMediaRef(asset?.mediaRef) && asset.mediaRef.kind === 'image') return Math.max(0, Number(asset.mediaRef.sizeBytes) || 0);
   const data = asset?.data;
   if (!isImageDataUrl(data)) return 0;
   const comma = data.indexOf(',');
@@ -135,7 +141,7 @@ export function estimateAssetBytes(asset) {
 }
 
 export function summarizeMediaLibrary(project) {
-  const library = ensureMediaLibrary(project).filter(asset => asset?.type === 'image' && isImageDataUrl(asset?.data));
+  const library = ensureMediaLibrary(project).filter(isImageAsset);
   let usedCount = 0;
   let estimatedBytes = 0;
   library.forEach(asset => {
