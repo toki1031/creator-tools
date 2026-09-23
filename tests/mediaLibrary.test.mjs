@@ -119,3 +119,24 @@ test('未使用素材の一括削除は使用中assetを残す', () => {
   assert.equal(removeAllUnusedAssets(project),1);
   assert.deepEqual(project.mediaLibrary.map(asset=>asset.id),['asset-a']);
 });
+
+
+test('MediaRef画像をlibrary集計・rename・削除対象として扱いData URLへ戻さない', () => {
+  const ref={id:'auto-a',kind:'image',mimeType:'image/jpeg',sizeBytes:12345};
+  const project={
+    mediaLibrary:[
+      {id:'auto-a',type:'image',data:'',mediaRef:ref,fileName:'auto.jpg'},
+      {id:'auto-b',type:'image',data:'',mediaRef:{id:'auto-b',kind:'image',mimeType:'image/jpeg',sizeBytes:10}}
+    ],
+    scenes:[{id:'s1',imageAssetId:'auto-a'}]
+  };
+  const summary=summarizeMediaLibrary(project);
+  assert.deepEqual({totalCount:summary.totalCount,usedCount:summary.usedCount,unusedCount:summary.unusedCount},{totalCount:2,usedCount:1,unusedCount:1});
+  assert.equal(summary.estimatedBytes,12355);
+  const renamed=renameMediaAsset(project,'auto-a','自動取得画像',{now:()=> '2026-09-23T00:00:00.000Z'});
+  assert.equal(renamed.mediaRef,ref);
+  assert.equal(renamed.data,'');
+  assert.equal(removeUnusedAsset(project,'auto-a'),false);
+  assert.equal(removeUnusedAsset(project,'auto-b'),true);
+  assert.equal(project.mediaLibrary[0].data,'');
+});

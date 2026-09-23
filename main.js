@@ -4,7 +4,8 @@ import { deleteProject, getProject, listProjects, saveProject } from "./db.js";
 import { downloadJson, downloadText } from "./download.js";
 import { getVideoCapabilities, getProjectDuration, validateVideoProject, prepareVideoProject, runVisualPreview, exportProjectVideo, drawProjectFrame } from "./videoRenderer.js";
 import { createProjectBackupPayload, createRestoredProject, LARGE_BACKUP_WARNING_BYTES, mergePronunciationDictionaries, normalizeImportedProject, parseProjectBackup, summarizeProjectBackup } from "./projectBackup.js";
-import { addImageAsset, assetUsageCount, assetUsageScenes, ensureMediaLibrary, estimateAssetBytes, promoteLegacySceneImage, removeAllUnusedAssets, removeUnusedAsset, renameMediaAsset, resolveSceneImageSource, summarizeMediaLibrary } from "./mediaLibrary.js";
+import { addImageAsset, assetUsageCount, assetUsageScenes, ensureMediaLibrary, estimateAssetBytes, isImageDataUrl, promoteLegacySceneImage, removeAllUnusedAssets, removeUnusedAsset, renameMediaAsset, resolveSceneImageSource, summarizeMediaLibrary } from "./mediaLibrary.js";
+import { resolveSceneImageForDisplay } from "./sceneImageDisplay.js";
 import { createAudioAssetIdFromFile, normalizeAudioAssetId } from "./audioAssetIdentity.js";
 import { normalizeSubtitleOffset, resolveEffectiveSubtitlePosition, resolveSubtitleYRatio } from "./subtitlePosition.js";
 import { assessMvpVideoResult, describeVideoExportFailure, isMvpShortsProject, validateMvpShortsOutput } from "./videoMvp.js";
@@ -445,6 +446,9 @@ async function renderScenes(id) {
     </main>`;
   attachProjectMenu(project, root.querySelector("#menu"), () => goStudio(studioForGenre(project.genre)));
   const saveState=root.querySelector("#saveState"); let pendingAsset=Promise.resolve();
+  let sceneDisplayCleanups=[];
+  const clearSceneDisplayUrls=()=>{sceneDisplayCleanups.forEach(cleanup=>cleanup());sceneDisplayCleanups=[];};
+  const hydrateSceneImages=async()=>{clearSceneDisplayUrls();const cards=[...root.querySelectorAll("[data-scene-image]")];await Promise.all(cards.map(async el=>{const index=Number(el.dataset.sceneImage),scene=project.scenes[index];if(!scene)return;const resolved=await resolveSceneImageForDisplay(project,scene);if(!el.isConnected)return resolved.cleanup?.();if(resolved.status==="resolved"){el.innerHTML=`<img src="${escapeHtml(resolved.url)}" alt="">`;sceneDisplayCleanups.push(resolved.cleanup);}else el.innerHTML="<span>画像未登録</span>";}));};
   const persist=async()=>{await pendingAsset;project.scenes.forEach((s,i)=>s.order=i+1);project.updatedAt=new Date().toISOString();await saveProject(project);};
   const {scheduleSave:save,flushSave}=createSaveController({delay:400,persist,setStatus:text=>saveState.textContent=text});
   bindSavedNavigation(root.querySelector("#back"),flushSave,()=>goStudio(studioForGenre(project.genre)));
@@ -460,10 +464,14 @@ async function renderScenes(id) {
   const restoreScenes=()=>{if(!sceneUndoSnapshot)return;const current=cloneScenes(project.scenes||[]);project.scenes=cloneScenes(sceneUndoSnapshot);sceneUndoSnapshot=current;save();renderList();};
   const total=()=>project.scenes.reduce((sum,s)=>sum+(Number(s.durationSec)||0),0);
   let libraryTargetIndex=null;
+  let libraryDisplayCleanups=[];
+  const clearLibraryDisplayUrls=()=>{libraryDisplayCleanups.forEach(cleanup=>cleanup());libraryDisplayCleanups=[];};
+  const hydrateLibraryImages=async()=>{clearLibraryDisplayUrls();const nodes=[...root.querySelectorAll("[data-library-image]")];await Promise.all(nodes.map(async el=>{const assetId=el.dataset.libraryImage;const resolved=await resolveSceneImageForDisplay(project,{imageAssetId:assetId});if(!el.isConnected)return resolved.cleanup?.();if(resolved.status==="resolved"){el.src=resolved.url;el.hidden=false;libraryDisplayCleanups.push(resolved.cleanup);}else el.hidden=true;}));};
   let libraryMode="manage";
   let libraryFilter="all";
   const mediaLibraryDialog=root.querySelector("#mediaLibraryDialog");
   const renderMediaLibrary=()=>{
+    clearLibraryDisplayUrls();
     const library=ensureMediaLibrary(project);
     const grid=root.querySelector("#mediaLibraryGrid");
     const target=libraryMode==="select"&&libraryTargetIndex!=null?project.scenes[libraryTargetIndex]:null;
@@ -479,7 +487,7 @@ async function renderScenes(id) {
       const name=asset.fileName||"画像素材";
       const nameMarkup=libraryMode==="manage"?`<label class="media-asset-name">素材名<input data-rename-asset="${escapeHtml(asset.id)}" value="${escapeHtml(name)}" maxlength="120"></label>`:`<b>${escapeHtml(name)}</b>`;
       const useButton=target?`<button type="button" data-use-asset="${escapeHtml(asset.id)}">このシーンで使う</button>`:"";
-      return `<article class="media-asset-card"><img src="${asset.data}" alt=""><div class="media-asset-info">${nameMarkup}<small>${usageText}</small><small>${formatApproxBytes(estimateAssetBytes(asset))}</small></div><div class="media-asset-actions">${useButton}<button type="button" class="danger" data-delete-asset="${escapeHtml(asset.id)}" ${usage?"disabled":""}>未使用なら削除</button></div></article>`;
+      return `<article class="media-asset-card"><img data-library-image="${escapeHtml(asset.id)}" ${isImageDataUrl(asset.data)?`src="${asset.data}"`:'hidden'} alt=""><div class="media-asset-info">${nameMarkup}<small>${usageText}</small><small>${formatApproxBytes(estimateAssetBytes(asset))}</small></div><div class="media-asset-actions">${useButton}<button type="button" class="danger" data-delete-asset="${escapeHtml(asset.id)}" ${usage?"disabled":""}>未使用なら削除</button></div></article>`;
     }).join(""):`<div class="dictionary-empty">${library.length?"この条件に合う画像素材はありません。":"まだ画像素材がありません。シーンで画像をアップロードすると、ここに保存されます。"}</div>`;
     grid.querySelectorAll("[data-use-asset]").forEach(button=>button.onclick=()=>{
       const scene=project.scenes[libraryTargetIndex];
@@ -508,6 +516,7 @@ async function renderScenes(id) {
     bulk.hidden=libraryMode!=="manage";
     bulk.disabled=summary.unusedCount===0;
     bulk.textContent=summary.unusedCount?`未使用素材をまとめて削除（${summary.unusedCount}件）`:"未使用素材はありません";
+    void hydrateLibraryImages();
     bulk.onclick=()=>{
       const current=summarizeMediaLibrary(project);
       if(!current.unusedCount)return;
@@ -519,15 +528,14 @@ async function renderScenes(id) {
   const openMediaLibrary=index=>{libraryTargetIndex=Number.isInteger(index)?index:null;libraryMode=libraryTargetIndex==null?"manage":"select";libraryFilter="all";renderMediaLibrary();mediaLibraryDialog.showModal();};
   root.querySelectorAll("[data-library-filter]").forEach(button=>button.onclick=()=>{libraryFilter=button.dataset.libraryFilter||"all";renderMediaLibrary();});
   root.querySelector("#manageMediaLibrary").onclick=()=>openMediaLibrary(null);
-  root.querySelector("#closeMediaLibrary").onclick=()=>mediaLibraryDialog.close();
+  root.querySelector("#closeMediaLibrary").onclick=()=>{clearLibraryDisplayUrls();mediaLibraryDialog.close();};
   const renderList=()=>{
     root.querySelector("#sceneCount").textContent=`${project.scenes.length}シーン`;
     root.querySelector("#totalDuration").textContent=`${total()}秒`;
     root.querySelector("#sceneList").innerHTML=project.scenes.length?project.scenes.map((s,i)=>{
-      const image=resolveSceneImageSource(project,s).data;
       return `
       <article class="scene-card" data-index="${i}">
-        <div class="scene-preview">${image?`<img src="${image}" alt="">`:`<span>画像未登録</span>`}</div>
+        <div class="scene-preview" data-scene-image="${i}"><span>画像読込中…</span></div>
         <div class="scene-body"><div class="scene-title"><b>シーン ${i+1}</b><div><button data-up="${i}" ${i===0?"disabled":""}>↑</button><button data-down="${i}" ${i===project.scenes.length-1?"disabled":""}>↓</button><button class="danger" data-remove="${i}">削除</button></div></div>
         <textarea data-text="${i}" placeholder="このシーンの字幕・内容">${escapeHtml(s.text||"")}</textarea>
         <p class="${s.narration?.audioData?'ok':'muted'}">${s.narration?.audioData?`✓ シーン音声 ${Number(s.narration.durationSec||0).toFixed(2)}秒／字幕フレーズ同期 ON`:'− シーン音声 未生成'}</p>
@@ -570,6 +578,7 @@ async function renderScenes(id) {
     root.querySelectorAll("[data-remove]").forEach(el=>el.onclick=()=>{if(!confirm("このシーンを削除しますか？ 削除後も「1つ前に戻す」で復元できます。"))return;const index=Number(el.dataset.remove);promoteLegacySceneImage(project,project.scenes[index],{fileName:`シーン ${index+1} の旧画像`});snapshotScenes();project.scenes.splice(index,1);save();renderList();});
     root.querySelectorAll("[data-up]").forEach(el=>el.onclick=()=>{const record=moveSceneWithDecision(project,Number(el.dataset.up),"up");if(!record)return;save();renderList();});
     root.querySelectorAll("[data-down]").forEach(el=>el.onclick=()=>{const record=moveSceneWithDecision(project,Number(el.dataset.down),"down");if(!record)return;save();renderList();});
+    void hydrateSceneImages();
   };
   root.querySelector("#autoSplit").onclick=()=>{
     const oldScenes=project.scenes||[];
