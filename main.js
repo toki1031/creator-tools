@@ -4,7 +4,7 @@ import { deleteProject, getProject, listProjects, saveProject } from "./db.js";
 import { downloadJson, downloadText } from "./download.js";
 import { getVideoCapabilities, getProjectDuration, validateVideoProject, prepareVideoProject, runVisualPreview, exportProjectVideo, drawProjectFrame } from "./videoRenderer.js";
 import { createProjectBackupPayload, createRestoredProject, LARGE_BACKUP_WARNING_BYTES, mergePronunciationDictionaries, normalizeImportedProject, parseProjectBackup, summarizeProjectBackup } from "./projectBackup.js";
-import { addImageAsset, assetUsageCount, assetUsageScenes, ensureMediaLibrary, estimateAssetBytes, promoteLegacySceneImage, removeAllUnusedAssets, removeUnusedAsset, renameMediaAsset, resolveSceneImageSource, summarizeMediaLibrary } from "./mediaLibrary.js";
+import { addImageAsset, assetUsageCount, assetUsageScenes, ensureMediaLibrary, estimateAssetBytes, isImageDataUrl, promoteLegacySceneImage, removeAllUnusedAssets, removeUnusedAsset, renameMediaAsset, resolveSceneImageSource, summarizeMediaLibrary } from "./mediaLibrary.js";
 import { resolveSceneImageForDisplay } from "./sceneImageDisplay.js";
 import { createAudioAssetIdFromFile, normalizeAudioAssetId } from "./audioAssetIdentity.js";
 import { normalizeSubtitleOffset, resolveEffectiveSubtitlePosition, resolveSubtitleYRatio } from "./subtitlePosition.js";
