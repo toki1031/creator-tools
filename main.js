@@ -464,10 +464,14 @@ async function renderScenes(id) {
   const restoreScenes=()=>{if(!sceneUndoSnapshot)return;const current=cloneScenes(project.scenes||[]);project.scenes=cloneScenes(sceneUndoSnapshot);sceneUndoSnapshot=current;save();renderList();};
   const total=()=>project.scenes.reduce((sum,s)=>sum+(Number(s.durationSec)||0),0);
   let libraryTargetIndex=null;
+  let libraryDisplayCleanups=[];
+  const clearLibraryDisplayUrls=()=>{libraryDisplayCleanups.forEach(cleanup=>cleanup());libraryDisplayCleanups=[];};
+  const hydrateLibraryImages=async()=>{clearLibraryDisplayUrls();const nodes=[...root.querySelectorAll("[data-library-image]")];await Promise.all(nodes.map(async el=>{const assetId=el.dataset.libraryImage;const resolved=await resolveSceneImageForDisplay(project,{imageAssetId:assetId});if(!el.isConnected)return resolved.cleanup?.();if(resolved.status==="resolved"){el.src=resolved.url;el.hidden=false;libraryDisplayCleanups.push(resolved.cleanup);}else el.hidden=true;}));};
   let libraryMode="manage";
   let libraryFilter="all";
   const mediaLibraryDialog=root.querySelector("#mediaLibraryDialog");
   const renderMediaLibrary=()=>{
+    clearLibraryDisplayUrls();
     const library=ensureMediaLibrary(project);
     const grid=root.querySelector("#mediaLibraryGrid");
     const target=libraryMode==="select"&&libraryTargetIndex!=null?project.scenes[libraryTargetIndex]:null;
@@ -483,7 +487,7 @@ async function renderScenes(id) {
       const name=asset.fileName||"画像素材";
       const nameMarkup=libraryMode==="manage"?`<label class="media-asset-name">素材名<input data-rename-asset="${escapeHtml(asset.id)}" value="${escapeHtml(name)}" maxlength="120"></label>`:`<b>${escapeHtml(name)}</b>`;
       const useButton=target?`<button type="button" data-use-asset="${escapeHtml(asset.id)}">このシーンで使う</button>`:"";
-      return `<article class="media-asset-card"><img src="${asset.data}" alt=""><div class="media-asset-info">${nameMarkup}<small>${usageText}</small><small>${formatApproxBytes(estimateAssetBytes(asset))}</small></div><div class="media-asset-actions">${useButton}<button type="button" class="danger" data-delete-asset="${escapeHtml(asset.id)}" ${usage?"disabled":""}>未使用なら削除</button></div></article>`;
+      return `<article class="media-asset-card"><img data-library-image="${escapeHtml(asset.id)}" ${isImageDataUrl(asset.data)?`src="${asset.data}"`:'hidden'} alt=""><div class="media-asset-info">${nameMarkup}<small>${usageText}</small><small>${formatApproxBytes(estimateAssetBytes(asset))}</small></div><div class="media-asset-actions">${useButton}<button type="button" class="danger" data-delete-asset="${escapeHtml(asset.id)}" ${usage?"disabled":""}>未使用なら削除</button></div></article>`;
     }).join(""):`<div class="dictionary-empty">${library.length?"この条件に合う画像素材はありません。":"まだ画像素材がありません。シーンで画像をアップロードすると、ここに保存されます。"}</div>`;
     grid.querySelectorAll("[data-use-asset]").forEach(button=>button.onclick=()=>{
       const scene=project.scenes[libraryTargetIndex];
@@ -512,6 +516,7 @@ async function renderScenes(id) {
     bulk.hidden=libraryMode!=="manage";
     bulk.disabled=summary.unusedCount===0;
     bulk.textContent=summary.unusedCount?`未使用素材をまとめて削除（${summary.unusedCount}件）`:"未使用素材はありません";
+    void hydrateLibraryImages();
     bulk.onclick=()=>{
       const current=summarizeMediaLibrary(project);
       if(!current.unusedCount)return;
@@ -523,7 +528,7 @@ async function renderScenes(id) {
   const openMediaLibrary=index=>{libraryTargetIndex=Number.isInteger(index)?index:null;libraryMode=libraryTargetIndex==null?"manage":"select";libraryFilter="all";renderMediaLibrary();mediaLibraryDialog.showModal();};
   root.querySelectorAll("[data-library-filter]").forEach(button=>button.onclick=()=>{libraryFilter=button.dataset.libraryFilter||"all";renderMediaLibrary();});
   root.querySelector("#manageMediaLibrary").onclick=()=>openMediaLibrary(null);
-  root.querySelector("#closeMediaLibrary").onclick=()=>mediaLibraryDialog.close();
+  root.querySelector("#closeMediaLibrary").onclick=()=>{clearLibraryDisplayUrls();mediaLibraryDialog.close();};
   const renderList=()=>{
     root.querySelector("#sceneCount").textContent=`${project.scenes.length}シーン`;
     root.querySelector("#totalDuration").textContent=`${total()}秒`;
