@@ -1,6 +1,7 @@
 import { runSceneAssetPipeline } from './sceneAssetPipeline.js';
 import { createRequestRateLimiter, withRateLimit } from './requestRateLimiter.js';
 import { searchLocCandidates } from './locAssetSearch.js';
+import { buildAssetRequirement } from './assetRequirements.js';
 
 function clone(value) {
   if (value == null) return value;
@@ -25,12 +26,22 @@ export async function runMultiSceneAssetPipeline(project, {
     ? [...currentProject.scenes].sort((a, b) => (Number(a?.order) || 0) - (Number(b?.order) || 0))
     : [];
   const results = [];
+  const LOC_SUPPORTED_TYPES = new Set(['historical-source', 'document']);
+  let skippedCount = 0;
+  let eligibleCount = 0;
   const limitedSearch = typeof searchCandidates === 'function'
     ? withRateLimit(searchCandidates, waitForSearchSlot)
     : searchCandidates;
 
   for (const originalScene of scenes) {
     const scene = currentProject.scenes.find(item => item?.id === originalScene?.id) || originalScene;
+    const requirement = buildAssetRequirement(scene);
+    if (!LOC_SUPPORTED_TYPES.has(requirement?.requestedType)) {
+      skippedCount += 1;
+      results.push({ sceneId: scene?.id || '', order: Number(scene?.order) || 0, status: 'skipped', stage: 'provider-scope', reason: 'Library of Congress試作の対象外素材です' });
+      continue;
+    }
+    eligibleCount += 1;
     const result = await runScene(currentProject, scene, {
       searchCandidates: limitedSearch,
       fetchImage,
@@ -46,6 +57,8 @@ export async function runMultiSceneAssetPipeline(project, {
         project: currentProject,
         results,
         processedCount: results.length,
+        eligibleCount,
+        skippedCount,
         stoppedSceneId: scene?.id || '',
         reason: result.reason || ''
       };
@@ -53,10 +66,12 @@ export async function runMultiSceneAssetPipeline(project, {
   }
 
   return {
-    status: results.every(result => result.status === 'applied') ? 'complete' : 'partial',
+    status: eligibleCount === 0 ? 'no-eligible-scenes' : results.filter(result => result.status !== 'skipped').every(result => result.status === 'applied') ? 'complete' : 'partial',
     project: currentProject,
     results,
     processedCount: results.length,
+    eligibleCount,
+    skippedCount,
     stoppedSceneId: '',
     reason: ''
   };
