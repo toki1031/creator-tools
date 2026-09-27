@@ -1,5 +1,6 @@
 import { runSceneAssetPipeline } from './sceneAssetPipeline.js';
 import { createRequestRateLimiter, withRateLimit } from './requestRateLimiter.js';
+import { searchLocCandidates } from './locAssetSearch.js';
 
 function clone(value) {
   if (value == null) return value;
@@ -7,7 +8,7 @@ function clone(value) {
 }
 
 export async function runMultiSceneAssetPipeline(project, {
-  searchCandidates,
+  searchCandidates = searchLocCandidates,
   fetchImage,
   applyAsset,
   fetchOptions,
