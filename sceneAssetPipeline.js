@@ -4,7 +4,7 @@ import { enrichAssetCandidates } from './assetCandidateEnrichment.js';
 import { evaluateAssetCandidates } from './assetCandidateEvaluation.js';
 import { buildAssetAdoptionPlan } from './assetAdoptionPlan.js';
 import { fetchAssetImage } from './assetImageFetch.js';
-import { applyAssetAdoptionPlan } from './assetAdoptionApply.js';
+import { storeAndApplyAutoImage } from './autoImageMediaStorage.js';
 
 function stop(stage, status, reason, details = {}) {
   return { status, stage, reason: reason || '', project: null, ...details };
@@ -15,7 +15,7 @@ export async function runSceneAssetPipeline(project, scene, {
   enrichCandidates = enrichAssetCandidates,
   enrichmentOptions = {},
   fetchImage = fetchAssetImage,
-  applyAsset = applyAssetAdoptionPlan,
+  applyAsset = storeAndApplyAutoImage,
   fetchOptions = {}
 } = {}) {
   const requirement = buildAssetRequirement(scene);
@@ -46,8 +46,11 @@ export async function runSceneAssetPipeline(project, scene, {
   const fetchResult = await fetchImage(adoptionPlan, fetchOptions);
   if (fetchResult?.status !== 'resolved' || !fetchResult.asset) return stop('fetch', fetchResult?.status || 'error', fetchResult?.reason || '画像を取得できません', { requirement, searchPlan, enrichedCandidates, evaluatedCandidates, adoptionPlan, fetchResult });
 
-  const applied = applyAsset(project, adoptionPlan, fetchResult.asset, { allowApply: true });
-  if (!applied?.applied) return stop('apply', 'blocked', applied?.reason || '素材を適用できません', { requirement, searchPlan, enrichedCandidates, evaluatedCandidates, adoptionPlan, fetchResult, applyResult: applied });
+  let applied;
+  try { applied = await applyAsset(project, adoptionPlan, fetchResult.asset, { allowApply: true }); }
+  catch (error) { return stop('apply', 'error', String(error?.message || '素材を適用できません'), { requirement, searchPlan, enrichedCandidates, evaluatedCandidates, adoptionPlan, fetchResult }); }
+  const didApply = applied?.status === 'applied' || applied?.applied === true;
+  if (!didApply || !applied?.project) return stop('apply', applied?.status || 'blocked', applied?.reason || '素材を適用できません', { requirement, searchPlan, enrichedCandidates, evaluatedCandidates, adoptionPlan, fetchResult, applyResult: applied });
 
   return { status: 'applied', stage: 'complete', reason: '', project: applied.project, assetId: applied.assetId, requirement, searchPlan, enrichedCandidates, evaluatedCandidates, adoptionPlan, fetchResult, applyResult: applied };
 }
