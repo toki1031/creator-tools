@@ -119,3 +119,32 @@ test('supports an explicit shared external limiter while preserving legacy searc
   });
   assert.deepEqual(events, ['search-slot', 'external-slot']);
 });
+
+test('skips non-LoC scene types and continues to a later historical source scene', async () => {
+  const input={scenes:[
+    {id:'modern',order:1,productionDirection:{assetType:'modern-visual',visualDirection:'modern meeting'}},
+    {id:'history',order:2,productionDirection:{assetType:'historical-source',visualDirection:'historical hospital'}}
+  ],mediaLibrary:[]};
+  const calls=[];
+  const runScene=async(project,scene)=>{calls.push(scene.id);return {status:'applied',stage:'complete',project:structuredClone(project)};};
+  const result=await runMultiSceneAssetPipeline(input,{runScene,searchCandidates:async()=>[],waitForSearchSlot:async()=>{}});
+  assert.equal(result.status,'complete');
+  assert.deepEqual(calls,['history']);
+  assert.equal(result.skippedCount,1);
+  assert.equal(result.eligibleCount,1);
+  assert.equal(result.results[0].status,'skipped');
+  assert.equal(result.results[1].status,'applied');
+});
+
+test('returns no-eligible-scenes when every scene is outside the LoC prototype scope', async () => {
+  const input={scenes:[
+    {id:'modern',order:1,productionDirection:{assetType:'modern-visual',visualDirection:'modern meeting'}},
+    {id:'generated',order:2,productionDirection:{assetType:'ai-reconstruction',visualDirection:'historical reconstruction'}}
+  ],mediaLibrary:[]};
+  let calls=0;
+  const result=await runMultiSceneAssetPipeline(input,{runScene:async()=>{calls++;},searchCandidates:async()=>[],waitForSearchSlot:async()=>{}});
+  assert.equal(result.status,'no-eligible-scenes');
+  assert.equal(result.skippedCount,2);
+  assert.equal(result.eligibleCount,0);
+  assert.equal(calls,0);
+});
