@@ -19,8 +19,15 @@ const SCENE_FIELD_ALIASES = [
 ];
 
 function detectSection(line) { const text = clean(line).replace(/^#{1,6}\s*/, ""); for (const [name, pattern] of SECTION_ALIASES) { const match = text.match(pattern); if (match) return { name, inline: clean(match[1]) }; } return null; }
+function detectExtendedGlobalSection(line) {
+  const text=clean(line).replace(/^#{1,6}\s*/,"").replace(/^■\s*/,"");
+  const mappings=[["globalRules",/^(?:禁止事項|半自動素材制作ルール|半自動進行)\s*[:：]?\s*(.*)$/i],["subtitleGuidance",/^字幕\s*[:：]?\s*(.*)$/i],["narrationGuidance",/^ナレーション(?:方針|ガイダンス)?\s*[:：]?\s*(.*)$/i],["bgmGuidance",/^(?:音声・BGM|BGM(?:方針|ガイダンス)?)\s*[:：]?\s*(.*)$/i],["qaCriteria",/^(?:完成条件|最終チェック)\s*[:：]?\s*(.*)$/i]];
+  for(const [name,pattern] of mappings){const match=text.match(pattern);if(match)return{name,inline:clean(match[1])};}
+  if(/^映像モーション\s*[:：]?/i.test(text))return{name:"globalRules",inline:text};
+  return null;
+}
 function detectSceneField(line) { for (const [name, pattern] of SCENE_FIELD_ALIASES) { const match = clean(line).match(pattern); if (match) return { name, inline: clean(match[1]) }; } return null; }
-function inferAssetType(text) { const value = text.toLowerCase(); const explicit = value.match(/asset\s*type\s*[:：]\s*([a-z-]+)/i)?.[1]; if (explicit && ASSET_TYPES.has(explicit)) return explicit; if (/実物|実際の.*史料|一次史料|historical[- ]source/.test(value)) return "historical-source"; if (/ai再現|ai[- ]reconstruction|再現場面|再現映像/.test(value)) return "ai-reconstruction"; if (/現代|modern[- ]visual/.test(value)) return "modern-visual"; if (/文書|書類|document/.test(value)) return "document"; return "other"; }
+function inferAssetType(text) { const value = text.toLowerCase(); const explicit = value.match(/asset\s*type\s*[:：]\s*([a-z-]+)/i)?.[1]; if (explicit && ASSET_TYPES.has(explicit)) return explicit; if (/実物|実際の.*史料|一次史料|確認可能な実物史料|historical[- ]source/.test(value)) return "historical-source"; if (/ai再現|ai[- ]reconstruction|再現場面|再現映像|再現イメージ/.test(value)) return "ai-reconstruction"; if (/現代|今日できる|会議|説明場面|modern[- ]visual/.test(value)) return "modern-visual"; if (/文書|書類|document/.test(value)) return "document"; if (/クリミア戦争期|軍病院|戦争後.*ナイチンゲール|死亡記録.*分析|軍衛生改革/.test(value)) return "ai-reconstruction"; return "other"; }
 function isRule(line) { return /禁止|しない|使わない|描かない|作らない|扱わない|代用しない|避ける|不可|NG/i.test(line); }
 function stripWrappingQuotes(value = "") {
   const text = clean(value);
@@ -106,7 +113,9 @@ export function parseProductionRequest(input) {
     const line = clean(rawLine); if (!line) continue;
     const sceneMatch = line.match(/^(?:#{1,6}\s*)?(?:Scene|シーン)\s*[-#]?\s*(\d+)\s*[:：-]?\s*(.*)$/i);
     if (sceneMatch) { flushScene(); section = null; currentScene = `scene-${Number(sceneMatch[1])}`; if (clean(sceneMatch[2])) sceneLines.push(sceneMatch[2]); continue; }
-    // Plain labels inside Scene blocks are scene-local. A heading marker starts a global section.
+    const extendedGlobal = detectExtendedGlobalSection(line);
+    if (currentScene && extendedGlobal) { flushScene(); section=extendedGlobal.name; if(extendedGlobal.inline) brief[section].push(extendedGlobal.inline); continue; }
+    // Plain labels inside Scene blocks are scene-local unless they are explicit global production headings.
     if (currentScene && !/^#{1,6}\s*/.test(line)) { sceneLines.push(line); continue; }
     const detected = detectSection(line);
     if (detected) { flushScene(); section = detected.name; if (detected.inline) { if (section === "objective" || section === "tone") brief[section] = detected.inline; else brief[section].push(detected.inline); } continue; }
