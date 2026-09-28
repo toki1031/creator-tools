@@ -62,11 +62,21 @@ test('search returns normalized candidates with mocked fetch', async () => {
   assert.equal(result.candidates[0].autoAdoptable,false);
 });
 
-test('API and JSON failures are non-destructive error results', async () => {
+test('network, HTTP, JSON and response-shape failures are diagnosed separately', async () => {
+  const networkError = await searchLocCandidates(readyPlan, { fetchImpl: async () => { throw new TypeError('Failed to fetch'); } });
+  assert.equal(networkError.errorType,'network');
+  assert.match(networkError.reason,/通信/);
+
   const apiError = await searchLocCandidates(readyPlan, { fetchImpl: async () => ({ ok:false, status:429 }) });
-  assert.equal(apiError.status,'error');
+  assert.equal(apiError.errorType,'http');
+  assert.match(apiError.reason,/429/);
   assert.deepEqual(apiError.candidates,[]);
+
   const jsonError = await searchLocCandidates(readyPlan, { fetchImpl: async () => ({ ok:true, json: async () => { throw new Error('bad json'); } }) });
-  assert.equal(jsonError.status,'error');
+  assert.equal(jsonError.errorType,'json');
   assert.deepEqual(jsonError.candidates,[]);
+
+  const invalid = await searchLocCandidates(readyPlan, { fetchImpl: async () => ({ ok:true, json: async () => ({ hello:'world' }) }) });
+  assert.equal(invalid.errorType,'invalid-response');
+  assert.deepEqual(invalid.candidates,[]);
 });
