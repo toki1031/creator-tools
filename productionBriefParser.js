@@ -114,7 +114,7 @@ export function parseProductionRequest(input) {
     const sceneMatch = line.match(/^(?:#{1,6}\s*)?(?:Scene|シーン)\s*[-#]?\s*(\d+)\s*[:：-]?\s*(.*)$/i);
     if (sceneMatch) { flushScene(); section = null; currentScene = `scene-${Number(sceneMatch[1])}`; if (clean(sceneMatch[2])) sceneLines.push(sceneMatch[2]); continue; }
     const extendedGlobal = /^■/.test(line) ? detectExtendedGlobalSection(line) : null;
-    if (currentScene && extendedGlobal) { flushScene(); section=extendedGlobal.name; if(extendedGlobal.inline) brief[section].push(extendedGlobal.inline); continue; }
+    if (extendedGlobal) { if (currentScene) flushScene(); section=extendedGlobal.name; if(extendedGlobal.inline) brief[section].push(extendedGlobal.inline); continue; }
     // Plain labels inside Scene blocks are scene-local unless they are explicit global production headings.
     if (currentScene && !/^#{1,6}\s*/.test(line)) { sceneLines.push(line); continue; }
     const detected = detectSection(line);
