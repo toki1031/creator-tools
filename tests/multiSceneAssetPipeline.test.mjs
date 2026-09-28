@@ -19,7 +19,7 @@ test('rate limiter waits before exceeding the sliding-window limit', async () =>
 });
 
 test('processes scenes sequentially in order and carries successful project updates forward', async () => {
-  const input = { id: 'p1', scenes: [{ id: 'b', order: 2 }, { id: 'a', order: 1 }], mediaLibrary: [] };
+  const input = { id: 'p1', scenes: [{ id: 'b', order: 2, productionDirection: { assetType: 'historical-source', visualDirection: 'source b' } }, { id: 'a', order: 1, productionDirection: { assetType: 'historical-source', visualDirection: 'source a' } }], mediaLibrary: [] };
   const before = structuredClone(input);
   const seen = [];
   const runScene = async (project, scene) => {
@@ -38,7 +38,7 @@ test('processes scenes sequentially in order and carries successful project upda
 });
 
 test('stops on risk by default and keeps earlier successful changes', async () => {
-  const input = { scenes: [{ id: 'a', order: 1 }, { id: 'b', order: 2 }, { id: 'c', order: 3 }], mediaLibrary: [] };
+  const input = { scenes: [{ id: 'a', order: 1, productionDirection: { assetType: 'historical-source', visualDirection: 'source a' } }, { id: 'b', order: 2, productionDirection: { assetType: 'historical-source', visualDirection: 'source b' } }, { id: 'c', order: 3, productionDirection: { assetType: 'historical-source', visualDirection: 'source c' } }], mediaLibrary: [] };
   const calls = [];
   const runScene = async (project, scene) => {
     calls.push(scene.id);
@@ -55,7 +55,7 @@ test('stops on risk by default and keeps earlier successful changes', async () =
 });
 
 test('can explicitly continue after a risky scene without treating it as success', async () => {
-  const input = { scenes: [{ id: 'a', order: 1 }, { id: 'b', order: 2 }], mediaLibrary: [] };
+  const input = { scenes: [{ id: 'a', order: 1, productionDirection: { assetType: 'historical-source', visualDirection: 'source a' } }, { id: 'b', order: 2, productionDirection: { assetType: 'historical-source', visualDirection: 'source b' } }], mediaLibrary: [] };
   const runScene = async (project, scene) => {
     if (scene.id === 'a') return { status: 'blocked', stage: 'search', reason: 'none' };
     const next = structuredClone(project); next.mediaLibrary.push({ id: 'asset-b' });
@@ -68,7 +68,7 @@ test('can explicitly continue after a risky scene without treating it as success
 });
 
 test('rate limiting wraps real scene search calls sequentially', async () => {
-  const input = { scenes: [{ id: 'a', order: 1 }, { id: 'b', order: 2 }], mediaLibrary: [] };
+  const input = { scenes: [{ id: 'a', order: 1, productionDirection: { assetType: 'historical-source', visualDirection: 'source a' } }, { id: 'b', order: 2, productionDirection: { assetType: 'historical-source', visualDirection: 'source b' } }], mediaLibrary: [] };
   const events = [];
   const runScene = async (project, scene, options) => {
     await options.searchCandidates({ sceneId: scene.id });
@@ -85,7 +85,7 @@ test('rate limiting wraps real scene search calls sequentially', async () => {
 
 
 test('shares one external request slot sequence between search and rights enrichment', async () => {
-  const input = { scenes: [{ id: 'a', order: 1 }], mediaLibrary: [] };
+  const input = { scenes: [{ id: 'a', order: 1, productionDirection: { assetType: 'historical-source', visualDirection: 'source a' } }], mediaLibrary: [] };
   const events = [];
   const waitForExternalSlot = async () => events.push('slot');
   const runScene = async (project, scene, options) => {
@@ -104,7 +104,7 @@ test('shares one external request slot sequence between search and rights enrich
 });
 
 test('supports an explicit shared external limiter while preserving legacy search limiter option', async () => {
-  const input = { scenes: [{ id: 'a', order: 1 }], mediaLibrary: [] };
+  const input = { scenes: [{ id: 'a', order: 1, productionDirection: { assetType: 'historical-source', visualDirection: 'source a' } }], mediaLibrary: [] };
   const events = [];
   const runScene = async (project, scene, options) => {
     await options.searchCandidates({ sceneId: scene.id });
