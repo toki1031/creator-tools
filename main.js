@@ -602,8 +602,9 @@ async function renderScenes(id) {
           renderList();
         }
         if(autoAssetStatus){
-          if(result.status==="complete") autoAssetStatus.textContent=`✓ ${result.processedCount}シーンの素材取得が完了しました。`;
-          else autoAssetStatus.textContent=`安全のためシーン ${result.stoppedSceneId||"不明"} で停止しました：${result.reason||result.status}`;
+          if(result.status==="complete") autoAssetStatus.textContent=`✓ 対象${result.eligibleCount??result.processedCount}シーンの素材取得が完了しました。対象外${result.skippedCount||0}シーンはスキップしました。`;
+          else if(result.status==="no-eligible-scenes") autoAssetStatus.textContent=`今回のLoC試作対象（歴史資料・文書）のシーンはありませんでした。対象外${result.skippedCount||0}シーンは変更していません。`;
+          else autoAssetStatus.textContent=`対象外${result.skippedCount||0}シーンをスキップ後、安全のためシーン ${result.stoppedSceneId||"不明"} で停止しました：${result.reason||result.status}`;
         }
       }catch(error){
         console.error(error);
