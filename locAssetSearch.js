@@ -59,12 +59,21 @@ export async function searchLocCandidates(plan, { fetchImpl = globalThis.fetch, 
   const url = buildLocSearchUrl(plan, { count });
   if (!url) return { status: 'blocked', candidates: [], reason: 'LoC検索対象ではないか、検索計画が未確定です' };
   if (typeof fetchImpl !== 'function') return { status: 'error', candidates: [], reason: '検索機能を利用できません' };
+  let response;
   try {
-    const response = await fetchImpl(url, { headers: { Accept: 'application/json' } });
-    if (!response?.ok) return { status: 'error', candidates: [], reason: `LoC API error: ${response?.status ?? 'unknown'}` };
-    const payload = await response.json();
-    return { status: 'ok', candidates: normalizeLocResults(payload, plan), reason: '' };
-  } catch {
-    return { status: 'error', candidates: [], reason: 'LoC APIの取得またはJSON解析に失敗しました' };
+    response = await fetchImpl(url, { headers: { Accept: 'application/json' } });
+  } catch (error) {
+    return { status: 'error', errorType: 'network', candidates: [], reason: 'LoC APIへの通信に失敗しました（Safari/CORS/ネットワーク）', detail: clean(error?.message) };
   }
+  if (!response?.ok) return { status: 'error', errorType: 'http', candidates: [], reason: `LoC API HTTPエラー: ${response?.status ?? 'unknown'}` };
+  let payload;
+  try {
+    payload = await response.json();
+  } catch (error) {
+    return { status: 'error', errorType: 'json', candidates: [], reason: 'LoC APIのJSON解析に失敗しました', detail: clean(error?.message) };
+  }
+  if (!payload || typeof payload !== 'object' || !Array.isArray(payload.results)) {
+    return { status: 'error', errorType: 'invalid-response', candidates: [], reason: 'LoC APIの応答形式を確認できませんでした' };
+  }
+  return { status: 'ok', candidates: normalizeLocResults(payload, plan), reason: '' };
 }
