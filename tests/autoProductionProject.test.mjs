@@ -102,3 +102,5 @@ Scene 3
   assert.equal(result.project.scenes[0].text, '');
   assert.equal(result.project.scenes[2].productionDirection.assetType, 'ai-reconstruction');
 });
+
+test('carries trailing Scene-specific archive guidance into runtime productionDirection',()=>{const request=`Scene 5\n映像: 統計を「見える形」にしたことを示す。\nここは可能な限り確認可能な実物史料を使用する。\nScene 9\n映像: 今日できる一歩。\n■Scene 5の重要指定\nナイチンゲールの統計図は、\n1858年前後の確認可能な実物史料を優先して使用する。\n■完成条件\n55〜60秒`;const result=createAutoProductionProject({requestText:request,title:'Nightingale targeted guidance'});assert.equal(result.ok,true);const s5=result.project.scenes.find(s=>s.id==='scene-5');assert.match(s5.productionDirection.searchHint,/ナイチンゲール/);assert.match(s5.productionDirection.searchHint,/1858/);assert.doesNotMatch(s5.productionDirection.visualDirection,/Scene 5の重要指定/)});
