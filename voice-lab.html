@@ -57,6 +57,7 @@ import { recordNarrationVoiceDecision } from "./decisionLog.js";
 import { canReuseSceneNarration, createNarrationFingerprint, sceneNarrationStatus } from "./narrationResume.js";
 import { putMedia } from "./mediaStore.js";
 import { createAudioAssetIdFromArrayBuffer } from "./audioAssetIdentity.js";
+import { normalizeLegacyAutoProductionProject } from "./autoProductionCompatibility.js";
 const $=s=>document.querySelector(s);
 document.documentElement.dataset.voiceLabBoot='js-started';
 let tts=null,currentProject=null;
@@ -90,8 +91,10 @@ async function updateResumeSummary(projectOverride=null){
 async function loadProject(){
   if(projectId==='default')return null;
   if(currentProject)return currentProject;
-  const project=await getProject(projectId);
+  let project=await getProject(projectId);
   if(!project)return null;
+  const compatibility=normalizeLegacyAutoProductionProject(project);
+  if(compatibility.changed){project=compatibility.project;project.updatedAt=new Date().toISOString();await saveProject(project);}
   currentProject=project;
   const n=project.narration||{};
   if(n.voiceId&&[...$('#voice').options].some(o=>o.value===n.voiceId))$('#voice').value=n.voiceId;
