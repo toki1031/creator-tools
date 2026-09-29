@@ -35,3 +35,27 @@ test('reviewed metadata and ambiguous states are never auto adoptable', () => {
     assert.equal(evaluateAutoAdoptionRights({ rightsStatus }).allowed, false);
   }
 });
+
+test('allows Commons Public Domain or CC0 only with official extmetadata evidence',()=>{
+  const result=evaluateAutoAdoptionRights({
+    provider:'wikimedia-commons',
+    sourceUrl:'https://commons.wikimedia.org/wiki/File:Nightingale-mortality.jpg',
+    rightsStatus:'rights-cleared-signal',
+    rightsCheck:{
+      status:'rights-cleared-signal',
+      signal:'public-domain-or-cc0',
+      source:'commons-extmetadata',
+      sourceUrl:'https://commons.wikimedia.org/wiki/File:Nightingale-mortality.jpg'
+    }
+  });
+  assert.equal(result.allowed,true);
+  assert.equal(result.policy,'commons-public-domain-or-cc0');
+});
+
+test('does not auto adopt Commons attribution licenses or incomplete evidence',()=>{
+  for(const candidate of [
+    {provider:'wikimedia-commons',sourceUrl:'https://commons.wikimedia.org/wiki/File:X.jpg',rightsStatus:'needs-review',rightsCheck:{status:'needs-review',signal:'license-review-required',source:'commons-extmetadata'}},
+    {provider:'wikimedia-commons',sourceUrl:'https://commons.wikimedia.org/wiki/File:X.jpg',rightsStatus:'rights-cleared-signal',rightsCheck:{status:'rights-cleared-signal',signal:'public-domain-or-cc0',source:'commons-extmetadata',sourceUrl:'https://example.org/File:X.jpg'}},
+    {provider:'wikimedia-commons',sourceUrl:'https://example.org/File:X.jpg',rightsStatus:'rights-cleared-signal',rightsCheck:{status:'rights-cleared-signal',signal:'public-domain-or-cc0',source:'commons-extmetadata',sourceUrl:'https://commons.wikimedia.org/wiki/File:X.jpg'}}
+  ]) assert.equal(evaluateAutoAdoptionRights(candidate).allowed,false);
+});
