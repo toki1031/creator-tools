@@ -4,6 +4,7 @@ import { searchLocCandidates } from './locAssetSearch.js';
 import { buildAssetRequirement } from './assetRequirements.js';
 import { requestFreeGeneratedImage } from './freeImageGenerationProvider.js';
 import { storeAndApplyAutoImage } from './autoImageMediaStorage.js';
+import { normalizeLegacyAutoProductionProject } from './autoProductionCompatibility.js';
 
 function clone(value) {
   if (value == null) return value;
@@ -26,6 +27,7 @@ export async function runMultiSceneAssetPipeline(project, {
   if (!currentProject || typeof currentProject !== 'object') {
     return { status: 'blocked', project: currentProject, results: [], processedCount: 0, reason: 'プロジェクトがありません' };
   }
+  currentProject = normalizeLegacyAutoProductionProject(currentProject).project;
   const scenes = Array.isArray(currentProject.scenes)
     ? [...currentProject.scenes].sort((a, b) => (Number(a?.order) || 0) - (Number(b?.order) || 0))
     : [];
