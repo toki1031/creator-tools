@@ -33,8 +33,7 @@ function showDiagnostics(extra=''){
     `端末: ${navigator.userAgent}`,
     extra
   ].filter(Boolean);
-  $('#diagnostics').textContent = lines.join('
-');
+  $('#diagnostics').textContent = lines.join('\\n');
 }
 window.addEventListener('error', ev => showDiagnostics(`window error: ${ev?.error?.message || ev?.message || '不明'}`));
 window.addEventListener('unhandledrejection', ev => showDiagnostics(`unhandledrejection: ${ev?.reason?.message || String(ev?.reason || '不明')}`));
