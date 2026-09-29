@@ -194,7 +194,7 @@ export async function prepareVideoProject(project, { onStatus = () => {} } = {})
     const n = scene?.narration;
     return (n?.audioData || n?.mediaRef?.id) ? { audioData: n.audioData || '', mediaRef: n.mediaRef || null, mimeType: n.mimeType || n.mediaRef?.mimeType || 'audio/wav', durationSec: Number(n.durationSec) || 0 } : null;
   });
-  const sceneNarrations = sceneNarrationSources.map(item => item ? { arrayBuffer: true, lazy: true } : null);
+  const sceneNarrations = sceneNarrationSources.map(item => item ? { available: true, lazy: true } : null);
   if (hasSceneNarrations) onStatus('シーン別ナレーションは再生直前に順番に読み込みます。');
 
   const loadedImageCount = imageSources.filter(Boolean).length;
@@ -427,7 +427,7 @@ export function validatePreparedAudioForExport(project, prepared) {
   if (expectedSceneNarration) {
     const preparedScenes = Array.isArray(prepared?.sceneNarrations) ? prepared.sceneNarrations : [];
     const failed = [];
-    scenes.forEach((scene, index) => { if ((scene?.narration?.audioData || scene?.narration?.mediaRef?.id) && !preparedScenes[index]?.arrayBuffer) failed.push(index + 1); });
+    scenes.forEach((scene, index) => { if ((scene?.narration?.audioData || scene?.narration?.mediaRef?.id) && !preparedScenes[index]?.available) failed.push(index + 1); });
     if (failed.length) errors.push(`シーン別ナレーションを読み込めませんでした（シーン${failed.join('・')}）`);
   } else if (project?.narration?.audioData && !prepared?.narrationArrayBuffer) {
     errors.push(`ナレーションを読み込めませんでした${prepared?.narrationFetchError ? `（${prepared.narrationFetchError}）` : ''}`);
