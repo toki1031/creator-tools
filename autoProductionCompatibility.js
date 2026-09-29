@@ -14,6 +14,38 @@ function trimLeakedGlobalHeadings(value = '') {
   const index = lines.findIndex(line => /^■/.test(line.trim()));
   return { value: lines.slice(0, index >= 0 ? index : lines.length).join('\n').trim(), leaked: index >= 0 };
 }
+function extractLeakedTargetedGuidance(value = '') {
+  const lines = String(value ?? '').replace(/\r\n?/g, '\n').split('\n');
+  const targeted = new Map();
+  let target = '';
+  for (const rawLine of lines) {
+    const line = clean(rawLine);
+    const match = line.match(/^■\s*(?:Scene|シーン)\s*[-#]?\s*(\d+)\s*(?:の[^:：]*)?\s*[:：]?\s*(.*)$/i);
+    if (match) {
+      target = `scene-${Number(match[1])}`;
+      if (!targeted.has(target)) targeted.set(target, []);
+      const inline = clean(match[2]);
+      if (inline) targeted.get(target).push(inline);
+      continue;
+    }
+    if (target && /^■/.test(line)) { target = ''; continue; }
+    if (target && line) targeted.get(target).push(line);
+  }
+  return targeted;
+}
+function applyRecoveredTargetedGuidance(direction = {}, values = []) {
+  if (!values.length) return { direction, changed: false };
+  const next = { ...direction };
+  const rules = values.filter(line => /禁止|しない|使わない|描かない|作らない|扱わない|代用しない|避ける|不可|NG|確認できない場合|代替せず|利用条件|出典/i.test(line));
+  const searchLines = values.filter(line => !rules.includes(line));
+  let changed = false;
+  if (!clean(next.searchHint) && searchLines.length) { next.searchHint = searchLines.join(' '); changed = true; }
+  if (rules.length) {
+    const merged = [...new Set([...(Array.isArray(next.rules) ? next.rules : []), ...rules])];
+    if (JSON.stringify(merged) !== JSON.stringify(next.rules || [])) { next.rules = merged; changed = true; }
+  }
+  return { direction: next, changed };
+}
 function normalizeDirection(direction = {}) {
   const next = { ...direction };
   const visual = trimLeakedGlobalHeadings(next.visualDirection);
@@ -34,6 +66,16 @@ export function normalizeLegacyAutoProductionProject(project) {
   const next = clone(project);
   const repairs = [];
   const scenes = Array.isArray(next.scenes) ? next.scenes : [];
+  const recovered = new Map();
+  const collectRecovered = direction => {
+    for (const [sceneId, values] of extractLeakedTargetedGuidance(direction?.visualDirection).entries()) {
+      const list = recovered.get(sceneId) || [];
+      recovered.set(sceneId, [...new Set([...list, ...values])]);
+    }
+  };
+  scenes.forEach(scene => collectRecovered(scene?.productionDirection));
+  const sourceDirectives = Array.isArray(next.productionBrief?.sceneDirectives) ? next.productionBrief.sceneDirectives : [];
+  sourceDirectives.forEach(collectRecovered);
   for (const scene of scenes) {
     const normalized = normalizeDirection(scene.productionDirection || {});
     if (normalized.changed) {
@@ -48,6 +90,13 @@ export function normalizeLegacyAutoProductionProject(project) {
     }
   }
 
+  for (const scene of scenes) {
+    const values = recovered.get(scene?.id) || [];
+    if (!values.length) continue;
+    const applied = applyRecoveredTargetedGuidance(scene.productionDirection || {}, values);
+    if (applied.changed) { scene.productionDirection = applied.direction; repairs.push(`${scene.id}:targetedGuidance`); }
+  }
+
   const brief = next.productionBrief;
   if (brief && typeof brief === 'object') {
     if (Array.isArray(brief.narrationGuidance)) {
@@ -60,8 +109,11 @@ export function normalizeLegacyAutoProductionProject(project) {
     if (Array.isArray(brief.sceneDirectives)) {
       brief.sceneDirectives = brief.sceneDirectives.map(directive => {
         const normalized = normalizeDirection(directive || {});
+        let direction = normalized.direction;
         if (normalized.changed) repairs.push(`${directive?.sceneId || 'directive'}:brief`);
-        return normalized.direction;
+        const applied = applyRecoveredTargetedGuidance(direction, recovered.get(directive?.sceneId) || []);
+        if (applied.changed) { direction = applied.direction; repairs.push(`${directive?.sceneId || 'directive'}:briefTargetedGuidance`); }
+        return direction;
       });
     }
   }
