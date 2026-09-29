@@ -28,6 +28,36 @@ function detectExtendedGlobalSection(line) {
   return null;
 }
 function detectSceneField(line) { for (const [name, pattern] of SCENE_FIELD_ALIASES) { const match = clean(line).match(pattern); if (match) return { name, inline: clean(match[1]) }; } return null; }
+function extractTargetedSceneGuidance(lines) {
+  const kept = [], targeted = new Map();
+  let target = '';
+  for (const rawLine of lines) {
+    const line = clean(rawLine);
+    const match = line.match(/^■\s*(?:Scene|シーン)\s*[-#]?\s*(\d+)\s*(?:の[^:：]*)?\s*[:：]?\s*(.*)$/i);
+    if (match) {
+      target = `scene-${Number(match[1])}`;
+      if (!targeted.has(target)) targeted.set(target, []);
+      const inline = clean(match[2]);
+      if (inline) targeted.get(target).push(inline);
+      continue;
+    }
+    if (target && /^■/.test(line)) { target = ''; kept.push(rawLine); continue; }
+    if (target) { if (line) targeted.get(target).push(line); continue; }
+    kept.push(rawLine);
+  }
+  return { lines: kept, targeted };
+}
+function applyTargetedSceneGuidance(brief, targeted) {
+  for (const [sceneId, rawLines] of targeted.entries()) {
+    const directive = brief.sceneDirectives.find(item => item?.sceneId === sceneId);
+    if (!directive) continue;
+    const values = rawLines.map(bulletValue).filter(Boolean);
+    const rules = values.filter(line => isRule(line) || /確認できない場合|代替せず|利用条件|出典/.test(line));
+    const searchLines = values.filter(line => !rules.includes(line));
+    if (searchLines.length) directive.searchHint = searchLines.join(' ');
+    if (rules.length) directive.rules = [...new Set([...(directive.rules || []), ...rules])];
+  }
+}
 export function inferAssetTypeFromText(text) { const value = text.toLowerCase().replace(/\s+/g, ' '); const explicit = value.match(/asset\s*type\s*[:：]\s*([a-z-]+)/i)?.[1]; if (explicit && ASSET_TYPES.has(explicit)) return explicit; if (/実物|実際の.*史料|一次史料|確認可能な実物史料|historical[- ]source/.test(value)) return "historical-source"; if (/ai再現|ai[- ]reconstruction|再現場面|再現映像|再現イメージ/.test(value)) return "ai-reconstruction"; if (/現代|今日できる|会議|説明場面|modern[- ]visual/.test(value)) return "modern-visual"; if (/文書|書類|document/.test(value)) return "document"; if (/クリミア戦争期|軍病院|戦争後.*ナイチンゲール|死亡記録.*分析|軍衛生改革/.test(value)) return "ai-reconstruction"; return "other"; }
 function isRule(line) { return /禁止|しない|使わない|描かない|作らない|扱わない|代用しない|避ける|不可|NG/i.test(line); }
 function stripWrappingQuotes(value = "") {
@@ -108,7 +138,8 @@ function parseSceneBlock(sceneId, blockLines) {
 }
 export function parseProductionRequest(input) {
   const brief = emptyBrief(); if (typeof input !== "string" || !input.trim()) return brief;
-  const lines = linesOf(input); let section = null, currentScene = null, sceneLines = [];
+  const extracted = extractTargetedSceneGuidance(linesOf(input));
+  const lines = extracted.lines; let section = null, currentScene = null, sceneLines = [];
   const flushScene = () => { if (!currentScene) return; brief.sceneDirectives.push(parseSceneBlock(currentScene, sceneLines)); currentScene = null; sceneLines = []; };
   for (const rawLine of lines) {
     const line = clean(rawLine); if (!line) continue;
@@ -124,5 +155,5 @@ export function parseProductionRequest(input) {
     if (!section) continue; const value = bulletValue(line); if (!value) continue;
     if (section === "objective" || section === "tone") brief[section] = brief[section] ? `${brief[section]}\n${value}` : value; else brief[section].push(value);
   }
-  flushScene(); return brief;
+  flushScene(); applyTargetedSceneGuidance(brief, extracted.targeted); return brief;
 }

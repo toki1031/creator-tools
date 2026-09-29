@@ -52,6 +52,7 @@ export function buildScenesFromProductionBrief(brief, options = {}) {
       transition: 'fade',
       productionDirection: {
         visualDirection: clean(directive.visualDirection),
+        searchHint: clean(directive.searchHint),
         purpose: clean(directive.purpose),
         assetType: clean(directive.assetType) || 'other',
         motionGuidance: clean(directive.motionGuidance),
