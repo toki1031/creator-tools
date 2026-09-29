@@ -72,6 +72,10 @@ export function applyAssetAdoptionPlan(project, plan, resolvedAsset, { allowAppl
       rightsUrl: clean(provenance.rightsUrl || candidate.rightsUrl),
       license: clean(provenance.license || candidate.license),
       licenseUrl: clean(provenance.licenseUrl || candidate.licenseUrl),
+      attribution: clean(provenance.attribution || candidate.attribution),
+      description: clean(provenance.description || candidate.description),
+      contributors: cleanStrings(Array.isArray(provenance.contributors) ? provenance.contributors : candidate.contributors),
+      date: clean(provenance.date || candidate.date),
       rightsStatements,
       rightsStatus: clean(provenance.rightsStatus || candidate.rightsStatus),
       rightsCheck
