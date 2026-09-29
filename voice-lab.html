@@ -55,6 +55,8 @@ pre{white-space:pre-wrap;word-break:break-word;background:#0e1320;padding:12px;b
 import { getProject, saveProject } from "./db.js";
 import { recordNarrationVoiceDecision } from "./decisionLog.js";
 import { canReuseSceneNarration, createNarrationFingerprint, sceneNarrationStatus } from "./narrationResume.js";
+import { putMedia } from "./mediaStore.js";
+import { createAudioAssetIdFromArrayBuffer } from "./audioAssetIdentity.js";
 const $=s=>document.querySelector(s);
 document.documentElement.dataset.voiceLabBoot='js-started';
 let tts=null,currentProject=null;
@@ -94,7 +96,7 @@ async function loadProject(){
   const n=project.narration||{};
   if(n.voiceId&&[...$('#voice').options].some(o=>o.value===n.voiceId))$('#voice').value=n.voiceId;
   const scenes=Array.isArray(project.scenes)?project.scenes:[];
-  const sceneCount=scenes.filter(scene=>Boolean(scene?.narration?.audioData)).length;
+  const sceneCount=scenes.filter(scene=>Boolean(scene?.narration?.audioData||scene?.narration?.mediaRef?.id)).length;
   setLog('#registered',sceneCount?`シーン別ナレーション ${sceneCount}/${scenes.length}件 保存済み ✓`:'シーン別ナレーション未登録',sceneCount?'ok':'');
   await updateResumeSummary(project);
   return project;
@@ -141,7 +143,7 @@ $('#generateScenes').onclick=async()=>{
 
     const narrationVoiceBefore=project.narration?.voiceId;
     const hadProjectNarrationBefore=Boolean(project.narration?.audioData);
-    const sceneNarrationCountBefore=scenes.filter(scene=>Boolean(scene?.narration?.audioData)).length;
+    const sceneNarrationCountBefore=scenes.filter(scene=>Boolean(scene?.narration?.audioData||scene?.narration?.mediaRef?.id)).length;
     const voice=$('#voice').value;
     let total=0,generated=0,reused=0;
     const results=[];
@@ -163,12 +165,19 @@ $('#generateScenes').onclick=async()=>{
       const blob=out.toBlob();
       const duration=await wavDuration(blob);
       if(!(duration>0))throw new Error(`シーン${i+1}の音声尺を取得できませんでした。`);
-      const audioData=await blobToDataUrl(blob);
       const sceneDuration=Math.max(0.5,Math.round((duration+0.15)*100)/100);
       scene.speechText=text;
       if(!String(scene.subtitleText||'').trim())scene.subtitleText=scene.text||text;
       scene.subtitleStartSec=0;scene.subtitleEndSec=sceneDuration;scene.durationSec=sceneDuration;
-      scene.narration={audioData,fileName:`Kokoro_${voice}_scene_${i+1}.wav`,mimeType:blob.type||'audio/wav',source:'kokoro-js-jp',voiceId:voice,durationSec:duration,fingerprint:createNarrationFingerprint({text,voiceId:voice})};
+      if(project.autoProduction?.mode==='production-request'){
+        const mediaId=await createAudioAssetIdFromArrayBuffer(await blob.arrayBuffer());
+        const stored=await putMedia({projectId:project.id,mediaId,kind:'audio',blob});
+        if(stored.status!=='stored'||!stored.mediaRef)throw new Error(stored.reason||`シーン${i+1}の音声を保存できませんでした。`);
+        scene.narration={mediaRef:stored.mediaRef,fileName:`Kokoro_${voice}_scene_${i+1}.wav`,mimeType:blob.type||'audio/wav',source:'kokoro-js-jp',voiceId:voice,durationSec:duration,fingerprint:createNarrationFingerprint({text,voiceId:voice})};
+      }else{
+        const audioData=await blobToDataUrl(blob);
+        scene.narration={audioData,fileName:`Kokoro_${voice}_scene_${i+1}.wav`,mimeType:blob.type||'audio/wav',source:'kokoro-js-jp',voiceId:voice,durationSec:duration,fingerprint:createNarrationFingerprint({text,voiceId:voice})};
+      }
       total+=sceneDuration;generated++;results.push(`シーン${i+1}: 音声 ${duration.toFixed(2)}秒 → シーン ${sceneDuration.toFixed(2)}秒`);
       $('#sceneProg').value=Math.round(((i+1)/scenes.length)*100);
       project.updatedAt=new Date().toISOString();
@@ -182,7 +191,7 @@ $('#generateScenes').onclick=async()=>{
     }
     project.updatedAt=new Date().toISOString();
     await saveProject(project);currentProject=project;
-    setLog('#registered',`シーン別ナレーション ${scenes.filter(s=>s.narration?.audioData).length}/${scenes.length}件 保存済み ✓`,'ok');
+    setLog('#registered',`シーン別ナレーション ${scenes.filter(s=>s.narration?.audioData||s.narration?.mediaRef?.id).length}/${scenes.length}件 保存済み ✓`,'ok');
     setLog('#sceneResult',`シーン同期完了 ✓\n${results.join('\n')}\n\n再利用 ${reused}件 / 新規生成 ${generated}件\n合計 ${total.toFixed(2)}秒`,'ok');
     if(!document.querySelector('#afterSceneSync')){
       const box=document.createElement('div');box.id='afterSceneSync';
