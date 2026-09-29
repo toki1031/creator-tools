@@ -70,6 +70,13 @@ export function validateVideoProject(project) {
   const narrationInvalid = Boolean(project.narration?.audioData && narrationLooksLikeVideo(project));
   if (narrationInvalid) errors.push('現在のナレーションは動画ファイルです。台本・音声画面でMP3・M4A・AAC・WAVなどの音声ファイルを再登録してください。');
   if (project.output?.subtitles && !scenes.some(scene => scene.subtitleEnabled !== false && String(scene.subtitleText || '').trim())) warnings.push('表示できる字幕がありません。');
+  if (project.autoProduction?.mode === 'production-request') {
+    const missingImages = scenes.flatMap((scene, index) => resolveSceneImageSource(project, scene).data ? [] : [index + 1]);
+    const missingNarrations = scenes.flatMap((scene, index) => (scene?.narration?.audioData || scene?.narration?.mediaRef?.id) ? [] : [index + 1]);
+    if (missingImages.length) errors.push(`自動制作を完成できません。画像未登録：シーン${missingImages.join('・')}`);
+    if (missingNarrations.length) errors.push(`自動制作を完成できません。ナレーション未生成：シーン${missingNarrations.join('・')}`);
+    if (project.output?.bgmEnabled && !project.bgm?.audioData) errors.push('自動制作を完成できません。BGMを使用する設定ですが音源が未登録です。');
+  }
   return { errors, warnings, imageCount, sceneCount: scenes.length, durationSec: getProjectDuration(project), bgmInvalid, narrationInvalid, sceneNarrationCount };
 }
 
