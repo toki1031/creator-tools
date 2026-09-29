@@ -44,3 +44,15 @@ test('fails safely when both archive providers fail',async()=>{
   assert.deepEqual(result.candidates,[]);
   assert.match(result.reason,/commons|loc|検索|API/i);
 });
+
+test('rejects an irrelevant Nightingale portrait when the Scene explicitly asks for a statistical diagram',async()=>{
+  const specific={...plan,queries:['ナイチンゲールの統計図 1858']};
+  const result=await searchArchiveCandidates(specific,{
+    searchLoc:async()=>({status:'ok',candidates:[{provider:'library-of-congress',title:'Florence Nightingale',date:'1862',description:'Portrait photograph'}]}),
+    searchCommons:async()=>({status:'ok',candidates:[{provider:'wikimedia-commons',title:'Nightingale-mortality.jpg',date:'1858',description:'Diagram of the causes of mortality in the army in the East'}]})
+  });
+  assert.equal(result.provider,'wikimedia-commons');
+  assert.equal(result.candidates.length,1);
+  assert.match(result.candidates[0].title,/mortality/);
+  assert.equal(result.attempts[0].matchedCount,0);
+});
