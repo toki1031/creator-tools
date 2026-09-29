@@ -1,3 +1,4 @@
+import { getMedia } from './mediaStore.js';
 import { resolveSceneImageSource } from './mediaLibrary.js';
 import { resolveEffectiveSubtitlePosition, resolveSubtitleYRatio } from './subtitlePosition.js';
 import { calculateBgmLoopCount, splitSubtitlePhrases } from './qualityLogic.js';
@@ -166,7 +167,7 @@ export async function prepareVideoProject(project, { onStatus = () => {} } = {})
     }
   }
 
-  const hasSceneNarrations = scenes.some(scene => scene?.narration?.audioData);
+  const hasSceneNarrations = scenes.some(scene => scene?.narration?.audioData || scene?.narration?.mediaRef?.id);
   let narrationArrayBuffer = null;
   let narrationMimeType = narrationDataMime(project);
   let narrationFetchError = '';
@@ -191,7 +192,7 @@ export async function prepareVideoProject(project, { onStatus = () => {} } = {})
 
   const sceneNarrationSources = scenes.map(scene => {
     const n = scene?.narration;
-    return n?.audioData ? { audioData: n.audioData, mimeType: n.mimeType || 'audio/wav', durationSec: Number(n.durationSec) || 0 } : null;
+    return (n?.audioData || n?.mediaRef?.id) ? { audioData: n.audioData || '', mediaRef: n.mediaRef || null, mimeType: n.mimeType || n.mediaRef?.mimeType || 'audio/wav', durationSec: Number(n.durationSec) || 0 } : null;
   });
   const sceneNarrations = sceneNarrationSources.map(item => item ? { arrayBuffer: true, lazy: true } : null);
   if (hasSceneNarrations) onStatus('シーン別ナレーションは再生直前に順番に読み込みます。');
@@ -422,11 +423,11 @@ export function validatePreparedAudioForExport(project, prepared) {
   const errors = [];
   if (project?.output?.bgmEnabled && project?.bgm?.audioData && !prepared?.audioArrayBuffer) errors.push(`BGMを読み込めませんでした${prepared?.audioFetchError ? `（${prepared.audioFetchError}）` : ''}`);
   const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
-  const expectedSceneNarration = scenes.reduce((count, scene) => count + (scene?.narration?.audioData ? 1 : 0), 0);
+  const expectedSceneNarration = scenes.reduce((count, scene) => count + ((scene?.narration?.audioData || scene?.narration?.mediaRef?.id) ? 1 : 0), 0);
   if (expectedSceneNarration) {
     const preparedScenes = Array.isArray(prepared?.sceneNarrations) ? prepared.sceneNarrations : [];
     const failed = [];
-    scenes.forEach((scene, index) => { if (scene?.narration?.audioData && !preparedScenes[index]?.arrayBuffer) failed.push(index + 1); });
+    scenes.forEach((scene, index) => { if ((scene?.narration?.audioData || scene?.narration?.mediaRef?.id) && !preparedScenes[index]?.arrayBuffer) failed.push(index + 1); });
     if (failed.length) errors.push(`シーン別ナレーションを読み込めませんでした（シーン${failed.join('・')}）`);
   } else if (project?.narration?.audioData && !prepared?.narrationArrayBuffer) {
     errors.push(`ナレーションを読み込めませんでした${prepared?.narrationFetchError ? `（${prepared.narrationFetchError}）` : ''}`);
@@ -441,7 +442,7 @@ async function createAudio(project, prepared, providedContext = null) {
   if (prepared.narrationInvalid || narrationLooksLikeVideo(project)) throw new Error('ナレーションに動画ファイルが登録されています。MP3・M4A・AAC・WAVなどの音声ファイルへ差し替えてください。');
   const hasBgm = Boolean(project.output?.bgmEnabled && prepared.audioArrayBuffer);
   const sceneSources = Array.isArray(prepared.sceneNarrationSources) ? prepared.sceneNarrationSources : [];
-  const hasSceneNarration = sceneSources.some(x => x?.audioData);
+  const hasSceneNarration = sceneSources.some(x => x?.audioData || x?.mediaRef?.id);
   const hasNarration = !hasSceneNarration && Boolean(prepared.narrationArrayBuffer);
   if (!hasBgm && !hasNarration && !hasSceneNarration) return { audio: null, warning: '' };
   const AudioContextClass = globalThis.AudioContext || globalThis.webkitAudioContext;
@@ -476,7 +477,7 @@ async function createAudio(project, prepared, providedContext = null) {
     let lastProjectTime = 0;
 
     const decodeScene = async index => {
-      if (!hasSceneNarration || index < 0 || index >= scenes.length || !sceneSources[index]?.audioData) return null;
+      if (!hasSceneNarration || index < 0 || index >= scenes.length || !(sceneSources[index]?.audioData || sceneSources[index]?.mediaRef?.id)) return null;
       if (dynamicScenes.has(index)) return dynamicScenes.get(index);
       if (loadingScenes.has(index)) return await loadingScenes.get(index);
       const task = (async () => {
