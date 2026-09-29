@@ -1,0 +1,4 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {planFreeImageGeneration} from '../freeImageGenerationProvider.js';
+test('only reconstruction and modern visuals may use free generation',()=>{assert.equal(planFreeImageGeneration({requestedType:'ai-reconstruction'}).status,'ready');assert.equal(planFreeImageGeneration({requestedType:'modern-visual'}).status,'ready');assert.equal(planFreeImageGeneration({requestedType:'historical-source'}).status,'blocked');});
+test('free quota exhaustion never falls back to paid generation',()=>{const r=planFreeImageGeneration({requestedType:'modern-visual'},{dailyQuotaAvailable:false});assert.equal(r.status,'free-quota-exhausted');assert.equal(r.paidFallback,false);});
+test('generation provider is server-side only',()=>{const r=planFreeImageGeneration({requestedType:'modern-visual'});assert.equal(r.serverSideOnly,true);assert.equal(r.paidFallback,false);});
