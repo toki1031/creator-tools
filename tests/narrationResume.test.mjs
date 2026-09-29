@@ -36,3 +36,11 @@ test('legacy audio without fingerprint is treated as stale instead of silently r
   const scene = { narration: { audioData: 'data:audio/wav;base64,abc', durationSec: 2.4 } };
   assert.equal(sceneNarrationStatus(scene, { text: '文章', voiceId: 'jf_alpha' }), 'stale');
 });
+
+test('matching lightweight MediaRef narration can be reused without embedded audio', () => {
+  const text = '数字で伝える。';
+  const voiceId = 'jf_alpha';
+  const scene = { narration: { mediaRef: { id: 'audio-sha256:abc' }, durationSec: 1.8, fingerprint: createNarrationFingerprint({ text, voiceId }) } };
+  assert.equal(canReuseSceneNarration(scene, { text, voiceId }), true);
+  assert.equal(sceneNarrationStatus(scene, { text, voiceId }), 'reusable');
+});

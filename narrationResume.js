@@ -8,13 +8,13 @@ export function createNarrationFingerprint({ text = '', voiceId = '', source = '
 
 export function canReuseSceneNarration(scene, { text = '', voiceId = '', source = 'kokoro-js-jp' } = {}) {
   const narration = scene?.narration;
-  if (!narration?.audioData || !(Number(narration.durationSec) > 0)) return false;
+  if (!(narration?.audioData || narration?.mediaRef?.id) || !(Number(narration.durationSec) > 0)) return false;
   const expected = createNarrationFingerprint({ text, voiceId, source });
   return narration.fingerprint === expected;
 }
 
 export function sceneNarrationStatus(scene, { text = '', voiceId = '', source = 'kokoro-js-jp' } = {}) {
   if (canReuseSceneNarration(scene, { text, voiceId, source })) return 'reusable';
-  if (scene?.narration?.audioData) return 'stale';
+  if (scene?.narration?.audioData || scene?.narration?.mediaRef?.id) return 'stale';
   return 'missing';
 }

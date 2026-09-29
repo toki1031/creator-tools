@@ -204,7 +204,7 @@ export function summarizeProjectBackup(project, pronunciationDictionary = [], so
     imageCount:scenes.filter(scene => resolveSceneImageSource(project, scene).data).length, videoCount:scenes.filter(scene => scene.videoData).length,
     mediaLibraryCount:(Array.isArray(project.mediaLibrary) ? project.mediaLibrary : []).filter(asset => asset?.type === 'image' && isImageDataUrl(asset?.data)).length,
     subtitleCount:scenes.filter(scene => stringOr(scene.subtitleText).trim()).length,
-    sceneNarrationCount:scenes.filter(scene => scene.narration?.audioData).length,
+    sceneNarrationCount:scenes.filter(scene => scene.narration?.audioData || scene.narration?.mediaRef?.id).length,
     hasNarration:Boolean(project.narration?.audioData), hasBgm:Boolean(project.bgm?.audioData),
     hasAiData:Boolean(Object.keys(project.aiWorkspace || {}).length || (project.promptLibrary || []).length),
     dictionaryCount:pronunciationDictionary.length

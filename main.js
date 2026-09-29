@@ -439,7 +439,7 @@ async function renderScenes(id) {
         <div class="dialog-actions"><button type="button" id="deleteUnusedAssets" class="danger">未使用素材をまとめて削除</button><button type="button" id="closeMediaLibrary">閉じる</button></div>
       </dialog>
       <section class="editor-card">
-        <div class="section-head"><div><h2>次にナレーション</h2><p>シーンの文章・画像・順番を確定してから、各シーンの音声を生成します。音声実尺に合わせてシーン尺と字幕タイミングを自動同期します。</p></div><span>${project.scenes.filter(s=>s.narration?.audioData).length}/${project.scenes.length} 音声済み</span></div>
+        <div class="section-head"><div><h2>次にナレーション</h2><p>シーンの文章・画像・順番を確定してから、各シーンの音声を生成します。音声実尺に合わせてシーン尺と字幕タイミングを自動同期します。</p></div><span>${project.scenes.filter(s=>s.narration?.audioData||s.narration?.mediaRef?.id).length}/${project.scenes.length} 音声済み</span></div>
         <div class="tool-row"><a class="button-link primary" href="./voice-lab.html?project=${encodeURIComponent(project.id)}&return=scenes">✦ シーン別ナレーションを作成</a></div>
       </section>
       <section class="editor-card compact"><div><b>合計時間</b><p id="totalDuration">0秒</p></div><p id="saveState">保存済み</p></section>
@@ -539,7 +539,7 @@ async function renderScenes(id) {
         <div class="scene-preview" data-scene-image="${i}"><span>画像読込中…</span></div>
         <div class="scene-body"><div class="scene-title"><b>シーン ${i+1}</b><div><button data-up="${i}" ${i===0?"disabled":""}>↑</button><button data-down="${i}" ${i===project.scenes.length-1?"disabled":""}>↓</button><button class="danger" data-remove="${i}">削除</button></div></div>
         <textarea data-text="${i}" placeholder="このシーンの字幕・内容">${escapeHtml(s.text||"")}</textarea>
-        <p class="${s.narration?.audioData?'ok':'muted'}">${s.narration?.audioData?`✓ シーン音声 ${Number(s.narration.durationSec||0).toFixed(2)}秒／字幕フレーズ同期 ON`:'− シーン音声 未生成'}</p>
+        <p class="${(s.narration?.audioData||s.narration?.mediaRef?.id)?'ok':'muted'}">${(s.narration?.audioData||s.narration?.mediaRef?.id)?`✓ シーン音声 ${Number(s.narration.durationSec||0).toFixed(2)}秒／字幕フレーズ同期 ON`:'− シーン音声 未生成'}</p>
         <div class="scene-settings"><div class="scene-image-control"><label>画像<input data-image="${i}" type="file" accept="image/*"></label><button type="button" data-library="${i}">素材から選ぶ</button></div><label>秒数<input data-duration="${i}" type="number" min="1" max="3600" value="${Number(s.durationSec)||5}"></label><label>動き<select data-motion="${i}"><option value="none" ${s.motion==="none"?"selected":""}>なし</option><option value="zoom-in" ${s.motion==="zoom-in"?"selected":""}>ズームイン</option><option value="zoom-out" ${s.motion==="zoom-out"?"selected":""}>ズームアウト</option><option value="pan-left" ${s.motion==="pan-left"?"selected":""}>左へパン</option><option value="pan-right" ${s.motion==="pan-right"?"selected":""}>右へパン</option></select></label><label>切り替え<select data-transition="${i}"><option value="fade" ${s.transition!=="cut"?"selected":""}>フェード</option><option value="cut" ${s.transition==="cut"?"selected":""}>カット</option></select></label></div></div>
       </article>`;
     }).join(""):`<div class="empty"><div>🖼️</div><h3>シーンがありません</h3><p>「台本から自動分割」または「空のシーン」を押してください。</p></div>`;
@@ -1100,7 +1100,7 @@ async function renderOutput(id) {
     const audioText=o.bgmEnabled&&project.bgm?.audioData?(value.audioInvalid?'BGMが動画ファイルです':value.audioFetchError?'BGMファイル読込失敗':'BGMファイル確認済み'):'BGMなし';
     const preparedSceneNarrations=Array.isArray(value.sceneNarrations)?value.sceneNarrations.filter(item=>item?.arrayBuffer).length:0;
     const failedSceneNarrations=Array.isArray(value.sceneNarrations)?value.sceneNarrations.filter(item=>item?.error).length:0;
-    const expectedSceneNarrations=scenes.filter(scene=>scene?.narration?.audioData).length;
+    const expectedSceneNarrations=scenes.filter(scene=>scene?.narration?.audioData||scene?.narration?.mediaRef?.id).length;
     let narrationText='ナレーションなし';
     if(expectedSceneNarrations) narrationText=`シーン別ナレーション ${preparedSceneNarrations}/${expectedSceneNarrations}${failedSceneNarrations?`（読込失敗 ${failedSceneNarrations}件）`:''}`;
     else if(project.narration?.audioData) narrationText=value.narrationInvalid?'ナレーションが動画ファイルです':value.narrationFetchError?'ナレーション読込失敗':'ナレーション確認済み';
@@ -1149,7 +1149,7 @@ async function renderOutput(id) {
     });
     if(!startDecision.confirmed)return;
 
-    const expectedSceneNarrations=scenes.filter(scene=>scene?.narration?.audioData).length;
+    const expectedSceneNarrations=scenes.filter(scene=>scene?.narration?.audioData||scene?.narration?.mediaRef?.id).length;
     let unlockedAudioContext=startDecision.audioContext||null;
     const closeUnlockedAudioContext=async()=>{try{if(unlockedAudioContext&&unlockedAudioContext.state!=='closed')await unlockedAudioContext.close();}catch{}};
     if(startDecision.audioStartError){
