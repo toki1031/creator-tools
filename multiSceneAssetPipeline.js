@@ -2,6 +2,8 @@ import { runSceneAssetPipeline } from './sceneAssetPipeline.js';
 import { createRequestRateLimiter, withRateLimit } from './requestRateLimiter.js';
 import { searchLocCandidates } from './locAssetSearch.js';
 import { buildAssetRequirement } from './assetRequirements.js';
+import { requestFreeGeneratedImage } from './freeImageGenerationProvider.js';
+import { storeAndApplyAutoImage } from './autoImageMediaStorage.js';
 
 function clone(value) {
   if (value == null) return value;
@@ -16,7 +18,9 @@ export async function runMultiSceneAssetPipeline(project, {
   runScene = runSceneAssetPipeline,
   waitForSearchSlot = createRequestRateLimiter(),
   waitForExternalSlot = waitForSearchSlot,
-  stopOnRisk = true
+  stopOnRisk = true,
+  generateImage = requestFreeGeneratedImage,
+  storeGeneratedImage = storeAndApplyAutoImage
 } = {}) {
   let currentProject = clone(project);
   if (!currentProject || typeof currentProject !== 'object') {
@@ -26,6 +30,7 @@ export async function runMultiSceneAssetPipeline(project, {
     ? [...currentProject.scenes].sort((a, b) => (Number(a?.order) || 0) - (Number(b?.order) || 0))
     : [];
   const results = [];
+  const autoProductionEnabled = currentProject.autoProduction?.mode === 'production-request';
   const LOC_SUPPORTED_TYPES = new Set(['historical-source', 'document']);
   let skippedCount = 0;
   let eligibleCount = 0;
@@ -37,8 +42,23 @@ export async function runMultiSceneAssetPipeline(project, {
     const scene = currentProject.scenes.find(item => item?.id === originalScene?.id) || originalScene;
     const requirement = buildAssetRequirement(scene);
     if (!LOC_SUPPORTED_TYPES.has(requirement?.requestedType)) {
+      if (autoProductionEnabled && (requirement?.requestedType === 'ai-reconstruction' || requirement?.requestedType === 'modern-visual')) {
+        eligibleCount += 1;
+        const generated = await generateImage(requirement);
+        if (generated?.status === 'resolved' && generated.asset) {
+          const plan = { status:'ready', sceneId:scene?.id || '', order:Number(scene?.order)||0, candidate:{ title:`Scene ${Number(scene?.order)||0} generated image`, provider:'cloudflare-workers-ai' } };
+          const applied = await storeGeneratedImage(currentProject, plan, generated.asset);
+          results.push({ sceneId:scene?.id || '', order:Number(scene?.order)||0, status:applied.status, stage:'generated-image', reason:applied.reason || '' });
+          if (applied.status === 'applied' && applied.project) { currentProject = applied.project; continue; }
+          if (stopOnRisk) return { status:applied.status, project:currentProject, results, processedCount:results.length, eligibleCount, skippedCount, stoppedSceneId:scene?.id || '', reason:applied.reason || '' };
+          continue;
+        }
+        results.push({ sceneId:scene?.id || '', order:Number(scene?.order)||0, status:generated?.status || 'error', stage:'generated-image', reason:generated?.reason || '無料画像生成に失敗しました' });
+        if (stopOnRisk) return { status:generated?.status || 'error', project:currentProject, results, processedCount:results.length, eligibleCount, skippedCount, stoppedSceneId:scene?.id || '', reason:generated?.reason || '無料画像生成に失敗しました' };
+        continue;
+      }
       skippedCount += 1;
-      results.push({ sceneId: scene?.id || '', order: Number(scene?.order) || 0, status: 'skipped', stage: 'provider-scope', reason: 'Library of Congress試作の対象外素材です' });
+      results.push({ sceneId: scene?.id || '', order: Number(scene?.order) || 0, status: 'skipped', stage: 'provider-scope', reason: '対応する自動素材プロバイダーがありません' });
       continue;
     }
     eligibleCount += 1;
