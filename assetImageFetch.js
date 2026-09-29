@@ -78,6 +78,10 @@ export async function fetchAssetImage(plan, {
           rightsUrl: clean(candidate.rightsUrl),
           license: clean(candidate.license),
           licenseUrl: clean(candidate.licenseUrl),
+          attribution: clean(candidate.attribution),
+          description: clean(candidate.description),
+          contributors: cleanStrings(candidate.contributors),
+          date: clean(candidate.date),
           rightsStatements: cleanStrings(candidate.rightsStatements),
           rightsStatus: clean(candidate.rightsStatus),
           rightsCheck: candidate.rightsCheck && typeof candidate.rightsCheck === 'object'
