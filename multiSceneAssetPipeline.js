@@ -30,6 +30,7 @@ export async function runMultiSceneAssetPipeline(project, {
     ? [...currentProject.scenes].sort((a, b) => (Number(a?.order) || 0) - (Number(b?.order) || 0))
     : [];
   const results = [];
+  const autoProductionEnabled = currentProject.autoProduction?.mode === 'production-request';
   const LOC_SUPPORTED_TYPES = new Set(['historical-source', 'document']);
   let skippedCount = 0;
   let eligibleCount = 0;
@@ -41,7 +42,7 @@ export async function runMultiSceneAssetPipeline(project, {
     const scene = currentProject.scenes.find(item => item?.id === originalScene?.id) || originalScene;
     const requirement = buildAssetRequirement(scene);
     if (!LOC_SUPPORTED_TYPES.has(requirement?.requestedType)) {
-      if (requirement?.requestedType === 'ai-reconstruction' || requirement?.requestedType === 'modern-visual') {
+      if (autoProductionEnabled && (requirement?.requestedType === 'ai-reconstruction' || requirement?.requestedType === 'modern-visual')) {
         eligibleCount += 1;
         const generated = await generateImage(requirement);
         if (generated?.status === 'resolved' && generated.asset) {
