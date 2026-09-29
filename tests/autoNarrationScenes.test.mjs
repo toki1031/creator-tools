@@ -1,3 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {distributeGlobalNarration} from '../autoNarrationScenes.js';
 test('distributes global narration in order without production headings',()=>{const scenes=[1,2,3].map(i=>({id:'scene-'+i,durationSec:10,speechText:'',subtitleText:'',text:''}));const brief={narrationGuidance:['一文目です。','二文目です。','三文目です。','■シーン構成方針','制作指示']};const r=distributeGlobalNarration(scenes,brief);assert.equal(r.map(x=>x.speechText).join(''),'一文目です。二文目です。三文目です。');assert.doesNotMatch(r.map(x=>x.speechText).join(''),/シーン構成方針/);assert.ok(r.every(x=>x.text));});
 test('preserves explicit scene narration',()=>{const scenes=[{id:'scene-1',durationSec:5,speechText:'既存。',subtitleText:'既存字幕',text:'既存字幕'}];const r=distributeGlobalNarration(scenes,{narrationGuidance:['別文。']});assert.equal(r[0].speechText,'既存。');});
+
+test('ignores workflow arrows instead of creating fake narration',()=>{const scenes=[{id:'scene-1',durationSec:6,speechText:'',subtitleText:'',text:''}];const r=distributeGlobalNarration(scenes,{narrationGuidance:['↓']});assert.equal(r[0].speechText,'');assert.equal(r[0].subtitleText,'');assert.equal(r[0].text,'')});
