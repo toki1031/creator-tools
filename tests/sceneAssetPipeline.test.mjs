@@ -141,3 +141,27 @@ test('preserves rights evidence end-to-end from candidate through image fetch in
   assert.deepEqual(source.rightsCheck, candidate.rightsCheck);
   assert.notEqual(source.rightsStatus, 'verified');
 });
+
+test('applies a Commons Public Domain candidate with official metadata evidence',async()=>{
+  const commons={
+    title:'Nightingale-mortality.jpg',
+    provider:'wikimedia-commons',
+    requestedType:'historical-source',
+    sourceUrl:'https://commons.wikimedia.org/wiki/File:Nightingale-mortality.jpg',
+    previewUrl:'https://upload.wikimedia.org/example/nightingale.jpg',
+    rightsStatements:['Public domain'],
+    rightsStatus:'rights-cleared-signal',
+    license:'Public domain',
+    attribution:'Florence Nightingale',
+    rightsCheck:{status:'rights-cleared-signal',signal:'public-domain-or-cc0',source:'commons-extmetadata',sourceUrl:'https://commons.wikimedia.org/wiki/File:Nightingale-mortality.jpg'}
+  };
+  const result=await runSceneAssetPipeline(project,scene,{
+    searchCandidates:async()=>({status:'ok',candidates:[commons]}),
+    enrichCandidates:async candidates=>candidates,
+    fetchImage:async()=>({status:'resolved',asset:{name:'Nightingale-mortality.jpg',data:'data:image/jpeg;base64,AAAA',provenance:{provider:commons.provider,sourceUrl:commons.sourceUrl,sourcePage:commons.sourceUrl,rightsStatements:commons.rightsStatements,rightsStatus:commons.rightsStatus,license:commons.license,attribution:commons.attribution,rightsCheck:commons.rightsCheck}}}),
+    applyAsset:async(inputProject,plan,asset)=>{const copy=structuredClone(inputProject);copy.mediaLibrary.push({id:'commons-pd',type:'image',data:asset.data,source:asset.provenance});copy.scenes[0].imageAssetId='commons-pd';return{status:'applied',project:copy,assetId:'commons-pd'}}
+  });
+  assert.equal(result.status,'applied');
+  assert.equal(result.project.scenes[0].imageAssetId,'commons-pd');
+  assert.equal(result.project.mediaLibrary[0].source.attribution,'Florence Nightingale');
+});
