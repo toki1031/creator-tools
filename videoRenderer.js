@@ -482,9 +482,16 @@ async function createAudio(project, prepared, providedContext = null) {
       if (loadingScenes.has(index)) return await loadingScenes.get(index);
       const task = (async () => {
         const meta = sceneSources[index];
-        const response = await fetch(meta.audioData);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const encoded = await response.arrayBuffer();
+        let encoded;
+        if (meta.mediaRef?.id) {
+          const resolved = await getMedia({ projectId: project.id, mediaId: meta.mediaRef.id });
+          if (resolved.status !== 'resolved' || !resolved.blob) throw new Error(resolved.reason || 'Scene音声MediaRefを読み出せません');
+          encoded = await resolved.blob.arrayBuffer();
+        } else {
+          const response = await fetch(meta.audioData);
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          encoded = await response.arrayBuffer();
+        }
         const buffer = await context.decodeAudioData(encoded);
         const source = context.createBufferSource(); source.buffer = buffer; source.loop = false;
         const gain = context.createGain(); gain.gain.value = clamp(Number(project.narration?.volume ?? 1), 0, 1.5); source.connect(gain); gain.connect(destination);
@@ -517,7 +524,7 @@ async function createAudio(project, prepared, providedContext = null) {
 
     const primeSceneWindow = async index => {
       if (!hasSceneNarration) return;
-      const targets = [index, index + 1].filter(i => i >= 0 && i < scenes.length && sceneSources[i]?.audioData);
+      const targets = [index, index + 1].filter(i => i >= 0 && i < scenes.length && (sceneSources[i]?.audioData || sceneSources[i]?.mediaRef?.id));
       for (const target of targets) {
         const entry = await decodeScene(target);
         scheduleEntry(entry);
