@@ -1,6 +1,6 @@
 import { runSceneAssetPipeline } from './sceneAssetPipeline.js';
 import { createRequestRateLimiter, withRateLimit } from './requestRateLimiter.js';
-import { searchLocCandidates } from './locAssetSearch.js';
+import { searchArchiveCandidates } from './archiveAssetSearch.js';
 import { buildAssetRequirement } from './assetRequirements.js';
 import { requestFreeGeneratedImage } from './freeImageGenerationProvider.js';
 import { storeAndApplyAutoImage } from './autoImageMediaStorage.js';
@@ -12,7 +12,7 @@ function clone(value) {
 }
 
 export async function runMultiSceneAssetPipeline(project, {
-  searchCandidates = searchLocCandidates,
+  searchCandidates = searchArchiveCandidates,
   fetchImage,
   applyAsset,
   fetchOptions,
@@ -33,7 +33,7 @@ export async function runMultiSceneAssetPipeline(project, {
     : [];
   const results = [];
   const autoProductionEnabled = currentProject.autoProduction?.mode === 'production-request';
-  const LOC_SUPPORTED_TYPES = new Set(['historical-source', 'document']);
+  const ARCHIVE_SUPPORTED_TYPES = new Set(['historical-source', 'document']);
   let skippedCount = 0;
   let eligibleCount = 0;
   const limitedSearch = typeof searchCandidates === 'function'
@@ -43,7 +43,7 @@ export async function runMultiSceneAssetPipeline(project, {
   for (const originalScene of scenes) {
     const scene = currentProject.scenes.find(item => item?.id === originalScene?.id) || originalScene;
     const requirement = buildAssetRequirement(scene);
-    if (!LOC_SUPPORTED_TYPES.has(requirement?.requestedType)) {
+    if (!ARCHIVE_SUPPORTED_TYPES.has(requirement?.requestedType)) {
       if (autoProductionEnabled && (requirement?.requestedType === 'ai-reconstruction' || requirement?.requestedType === 'modern-visual')) {
         eligibleCount += 1;
         const generated = await generateImage(requirement);
