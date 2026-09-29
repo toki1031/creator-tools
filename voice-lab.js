@@ -1,6 +1,6 @@
 import { getProject, saveProject } from './db.js';
 import { buildAutoNarrationQueue } from './autoNarrationQueue.js';
-import { applyGeneratedSceneNarration } from './autoSceneNarrationApply.js';
+import { applyGeneratedSceneNarration } from './autoSceneNarrationApply.js';\nimport { putMedia } from './mediaStore.js';\nimport { createAudioAssetIdFromArrayBuffer } from './audioAssetIdentity.js';
 
 const $ = s => document.querySelector(s);
 const params = new URLSearchParams(location.search);
