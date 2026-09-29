@@ -20,9 +20,10 @@ export function buildAssetRequirement(scene) {
   const rawType = clean(direction.assetType);
   const requestedType = KNOWN_TYPES.has(rawType) ? rawType : 'other';
   const visualDirection = clean(direction.visualDirection);
+  const searchHint = clean(direction.searchHint);
   const purpose = clean(direction.purpose);
   const prohibitedContent = cleanRules(direction.rules);
-  const queryHint = visualDirection || purpose;
+  const queryHint = searchHint || visualDirection || purpose;
 
   const ambiguousType = !rawType || requestedType === 'other';
   const missingIntent = !queryHint;
