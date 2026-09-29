@@ -24,6 +24,7 @@ function detectExtendedGlobalSection(line) {
   const mappings=[["globalRules",/^(?:禁止事項|半自動素材制作ルール|半自動進行)\s*[:：]?\s*(.*)$/i],["subtitleGuidance",/^字幕\s*[:：]?\s*(.*)$/i],["narrationGuidance",/^ナレーション(?:方針|ガイダンス)?\s*[:：]?\s*(.*)$/i],["bgmGuidance",/^(?:音声・BGM|BGM(?:方針|ガイダンス)?)\s*[:：]?\s*(.*)$/i],["qaCriteria",/^(?:完成条件|最終チェック)\s*[:：]?\s*(.*)$/i]];
   for(const [name,pattern] of mappings){const match=text.match(pattern);if(match)return{name,inline:clean(match[1])};}
   if(/^映像モーション\s*[:：]?/i.test(text))return{name:"globalRules",inline:text};
+  if(/^■/.test(clean(line))&&text)return{name:"globalRules",inline:text};
   return null;
 }
 function detectSceneField(line) { for (const [name, pattern] of SCENE_FIELD_ALIASES) { const match = clean(line).match(pattern); if (match) return { name, inline: clean(match[1]) }; } return null; }

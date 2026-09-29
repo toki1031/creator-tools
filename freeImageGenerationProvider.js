@@ -13,7 +13,7 @@ export async function requestFreeGeneratedImage(requirement, { fetchImpl = fetch
   const plan = planFreeImageGeneration(requirement);
   if (plan.status !== 'ready') return plan;
   let response;
-  try { response = await fetchImpl(endpoint,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({requestedType:plan.requestedType,prompt:String(requirement?.query||requirement?.prompt||'').trim()})}); }
+  try { response = await fetchImpl(endpoint,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({requestedType:plan.requestedType,prompt:String(requirement?.queryHint||requirement?.query||requirement?.prompt||'').trim()})}); }
   catch { return {...plan,status:'error',reason:'無料画像生成サーバーへ接続できませんでした'}; }
   let payload={}; try { payload=await response.json(); } catch {}
   if (response.status===429) return {...plan,status:'free-quota-exhausted',reason:'本日の無料生成枠を使い切ったため停止しました'};
