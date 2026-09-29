@@ -12,7 +12,7 @@ export async function onRequestPost({request,env}){
     const result=await env.AI.run(MODEL,{prompt});
     const base64=typeof result==='string'?result:result?.image;
     if(!base64) return json({reason:'生成画像を取得できませんでした'},502);
-    return json({id:'generated-'+Date.now(),data:'data:image/png;base64,'+base64,model:MODEL,generated:true});
+    return json({id:'generated-'+Date.now(),data:'data:image/jpeg;base64,'+base64,model:MODEL,generated:true});
   }catch(error){
     const message=String(error?.message||''); const quota=/quota|limit|neurons|429/i.test(message);
     return json({reason:quota?'本日の無料生成枠を使い切ったため停止しました':'Workers AIで画像生成に失敗しました'},quota?429:502);
