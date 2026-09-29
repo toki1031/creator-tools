@@ -75,3 +75,30 @@ test('project payload keeps the ProductionBrief through structured cloning', () 
   assert.equal(cloned.productionBrief.sceneDirectives[4].assetType, 'historical-source');
   assert.equal(cloned.scenes.length, 9);
 });
+
+test('Nightingale workflow markers do not become Scene text and multiline Scene 3 is reconstruction', () => {
+  const request = `
+■半自動進行
+素材検索
+↓
+ナレーション
+↓
+字幕
+↓
+Scene 1
+映像: 現代。
+正しいことを説明しているのに、相手に十分伝わっていない場面。
+Scene 2
+映像: クリミア戦争期の軍病院。
+多くの兵士が置かれていた現実を示す。
+Scene 3
+映像: 戦争後。
+ナイチンゲールが記録・報告書などを調べていることを示す。
+`;
+  const result = createAutoProductionProject({ requestText: request, title: 'Nightingale regression' });
+  assert.equal(result.ok, true);
+  assert.equal(result.project.scenes[0].speechText, '');
+  assert.equal(result.project.scenes[0].subtitleText, '');
+  assert.equal(result.project.scenes[0].text, '');
+  assert.equal(result.project.scenes[2].productionDirection.assetType, 'ai-reconstruction');
+});
