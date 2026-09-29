@@ -33,3 +33,5 @@ npm run build
 ## 実機QA
 
 MediaRecorder / Web Audio / iPhone Safariのメモリや実MP4品質は自動テストだけでは保証しません。細かなPRごとに止めず、v1.0完成候補では主要経路をまとめて実機確認します。
+
+<!-- redeploy: activate Cloudflare Workers AI binding AI -->
