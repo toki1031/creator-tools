@@ -66,7 +66,7 @@ export function validateVideoProject(project) {
   if (project.output?.bgmEnabled && project.bgm?.source !== 'none' && !project.bgm?.audioData) warnings.push('BGM設定はありますが、音源ファイルが登録されていません。');
   const bgmInvalid = Boolean(project.output?.bgmEnabled && project.bgm?.audioData && bgmLooksLikeVideo(project));
   if (bgmInvalid) errors.push('現在のBGMはMOV / MP4などの動画ファイルです。BGM・字幕画面でMP3・M4A・AAC・WAVなどの音声ファイルを再登録してください。');
-  const sceneNarrationCount = scenes.filter(scene => scene?.narration?.audioData).length;
+  const sceneNarrationCount = scenes.filter(scene => scene?.narration?.audioData || scene?.narration?.mediaRef?.id).length;
   const narrationInvalid = Boolean(project.narration?.audioData && narrationLooksLikeVideo(project));
   if (narrationInvalid) errors.push('現在のナレーションは動画ファイルです。台本・音声画面でMP3・M4A・AAC・WAVなどの音声ファイルを再登録してください。');
   if (project.output?.subtitles && !scenes.some(scene => scene.subtitleEnabled !== false && String(scene.subtitleText || '').trim())) warnings.push('表示できる字幕がありません。');
