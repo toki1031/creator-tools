@@ -50,3 +50,5 @@ test('batch planner is pure and does not mutate scenes', () => {
   assert.deepEqual(scenes, before);
   assert.ok(scenes.every(item => !('assetRequirement' in item)));
 });
+
+test('explicit Scene searchHint takes priority over generic visual direction',()=>{const item=scene(5,'historical-source','統計を見える形にする。');item.productionDirection.searchHint='ナイチンゲール 統計図 1858';const requirement=buildAssetRequirement(item);assert.equal(requirement.queryHint,'ナイチンゲール 統計図 1858')});
