@@ -1,4 +1,6 @@
 import { getProject, saveProject } from './db.js';
+import { buildAutoNarrationQueue } from './autoNarrationQueue.js';
+import { applyGeneratedSceneNarration } from './autoSceneNarrationApply.js';
 
 const $ = s => document.querySelector(s);
 const params = new URLSearchParams(location.search);
@@ -221,3 +223,27 @@ $('#register').onclick = async () => {
     status($('#generateStatus'),`登録完了：${result.duration.toFixed(2)}秒のWAVをこのプロジェクトの動画用ナレーションに設定しました。`,'ok');
   }catch(err){console.error(err);alert(`登録に失敗しました：${err?.message||err}`);btn.disabled=false;}
 };
+
+
+export async function generateAutoProductionScenes({ project:inputProject, synthesize, save = saveProject, voiceId='tsukuyomi-chan' } = {}) {
+  if(typeof synthesize!=='function') return {status:'engine-not-ready',project:inputProject};
+  let working=inputProject;
+  const queue=buildAutoNarrationQueue(working,{voiceId,source:'piper-plus'});
+  if(queue.status!=='ready') return {status:queue.status,project:working,results:[]};
+  const results=[];
+  for(const item of queue.items){
+    if(item.status!=='generate'){results.push(item);continue;}
+    try{
+      const generated=await synthesize(item.text);
+      const blob=generated?.toBlob?.();
+      if(!blob)throw new Error('WAVを取得できません');
+      const audioData=await blobToDataUrl(blob);
+      const durationSec=Number(generated?.duration)||0;
+      const applied=applyGeneratedSceneNarration(working,{sceneId:item.sceneId,text:item.text,audioData,durationSec,voiceId,source:'piper-plus',mimeType:blob.type||'audio/wav'});
+      if(applied.status!=='applied')throw new Error('Scene音声を保存形式へ変換できません');
+      working=applied.project; working.updatedAt=new Date().toISOString(); await save(working);
+      results.push({...item,status:'generated',durationSec});
+    }catch(error){return {status:'stopped',project:working,results,failedSceneId:item.sceneId,reason:error?.message||String(error)};}
+  }
+  return {status:'complete',project:working,results};
+}
