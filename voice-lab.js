@@ -33,7 +33,7 @@ function showDiagnostics(extra=''){
     `端末: ${navigator.userAgent}`,
     extra
   ].filter(Boolean);
-  $('#diagnostics').textContent = lines.join('\\n');
+  $('#diagnostics').textContent = lines.join('\n');
 }
 window.addEventListener('error', ev => showDiagnostics(`window error: ${ev?.error?.message || ev?.message || '不明'}`));
 window.addEventListener('unhandledrejection', ev => showDiagnostics(`unhandledrejection: ${ev?.reason?.message || String(ev?.reason || '不明')}`));
@@ -157,18 +157,14 @@ $('#prepare').onclick = async () => {
       }
     }
     if (!piperSourceUrl) {
-      throw new Error(`STEP 4A Piper Plus 0.7.x取得失敗。配布元3系統すべてNG。
-${failures.join('
-')}`);
+      throw new Error(`STEP 4A Piper Plus 0.7.x取得失敗。配布元3系統すべてNG。\n${failures.join('\n')}`);
     }
 
-    status(out,`[7/10] Piper Plus 0.7.x取得成功。ES Module読込を検証しています…
-${piperSourceUrl}`,'warn');
+    status(out,`[7/10] Piper Plus 0.7.x取得成功。ES Module読込を検証しています…\n${piperSourceUrl}`,'warn');
     prog.value=53;
     let piperModule;
     try { piperModule = await import(piperSourceUrl); }
-    catch(e){ throw new Error(`STEP 4B Piper Plus本体は取得成功しましたがES Module読込失敗: ${e?.message || e}
-取得元: ${piperSourceUrl}`); }
+    catch(e){ throw new Error(`STEP 4B Piper Plus本体は取得成功しましたがES Module読込失敗: ${e?.message || e}\n取得元: ${piperSourceUrl}`); }
     const PiperPlus = piperModule.PiperPlus;
     const piperExports = Object.keys(piperModule);
     if(!PiperPlus) throw new Error(`STEP 4C PiperPlus exportなし。公開export: ${piperExports.join(', ') || '(なし)'}`);
@@ -186,8 +182,7 @@ ${piperSourceUrl}`,'warn');
           const raw=Number(info?.progress ?? 0), pct=raw<=1?raw*100:raw;
           const mapped = 64 + (Math.max(0,Math.min(100,pct||0))*0.36);
           prog.value=Math.max(64,Math.min(100,mapped));
-          status(out,`${info?.message || info?.stage || 'モデル準備中'}
-${Math.round(prog.value)}%`,'warn');
+          status(out,`${info?.message || info?.stage || 'モデル準備中'}\n${Math.round(prog.value)}%`,'warn');
         }
       });
     } catch(e){ throw new Error(`STEP 5 Piper/音声モデル初期化失敗: ${e?.message || e}`); }
@@ -198,8 +193,7 @@ ${Math.round(prog.value)}%`,'warn');
     $('#generate').disabled=false; btn.textContent='準備済み';
     showDiagnostics(`成功: Piper Plus 0.6.0 / G2P 0.4.0 / Piper=${piperAsset.type} / G2P=${g2pAsset.type} / ORT=${jsAsset.type} / WASM=${wasmBin.type}`);
   }catch(err){
-    console.error(err); status(out,`準備に失敗しました。
-${err?.message || err}`,'warn'); btn.disabled=false;
+    console.error(err); status(out,`準備に失敗しました。\n${err?.message || err}`,'warn'); btn.disabled=false;
     showDiagnostics(`Voice Lab 3.2.3 初期化失敗 / ${err?.message || err}`);
   }
 };
@@ -213,8 +207,7 @@ $('#generate').onclick = async () => {
     if(resultUrl) URL.revokeObjectURL(resultUrl); resultUrl=URL.createObjectURL(blob);
     $('#preview').src=resultUrl; $('#register').disabled=false; $('#download').disabled=false;
     status($('#generateStatus'),`生成成功：${result.duration.toFixed(2)}秒 / ${result.sampleRate}Hz / WAV ${(blob.size/1024).toFixed(0)}KB`,'ok');
-  }catch(err){console.error(err);status($('#generateStatus'),`生成に失敗しました。
-${err?.message || err}`,'warn');}
+  }catch(err){console.error(err);status($('#generateStatus'),`生成に失敗しました。\n${err?.message || err}`,'warn');}
   finally{btn.disabled=false;}
 };
 
@@ -232,7 +225,6 @@ $('#register').onclick = async () => {
     status($('#generateStatus'),`登録完了：${result.duration.toFixed(2)}秒のWAVをこのプロジェクトの動画用ナレーションに設定しました。`,'ok');
   }catch(err){console.error(err);alert(`登録に失敗しました：${err?.message||err}`);btn.disabled=false;}
 };
-
 
 export async function generateAutoProductionScenes({ project:inputProject, synthesize, save = saveProject, voiceId='tsukuyomi-chan' } = {}) {
   if(typeof synthesize!=='function') return {status:'engine-not-ready',project:inputProject};
