@@ -1,7 +1,7 @@
 function clean(v=''){return String(v??'').trim();}
 function narrationUnits(items=[]){
   const lines=Array.isArray(items)?items:[]; const kept=[];
-  for(const raw of lines){const x=clean(raw); if(!x)continue; if(/^■/.test(x))break; kept.push(x);}
+  for(const raw of lines){const x=clean(raw); if(!x)continue; if(/^■/.test(x))break; if(/^[↓→⇒⇩⇢⇣]+$/.test(x))continue; kept.push(x);}
   const text=kept.join('\n');
   if(!text)return[];
   const sentences=text.replace(/\n+/g,'').match(/[^。！？!?]+[。！？!?]?/g)||[];
