@@ -1,0 +1,4 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {planFreeImageGeneration,requestFreeGeneratedImage,FREE_IMAGE_MODEL} from '../freeImageGenerationProvider.js';
+test('historical source never falls back to generation',()=>assert.equal(planFreeImageGeneration({requestedType:'historical-source'}).status,'blocked'));
+test('uses commercial-friendly schnell model and no paid fallback',()=>{const p=planFreeImageGeneration({requestedType:'modern-visual'});assert.equal(p.model,FREE_IMAGE_MODEL);assert.equal(p.paidFallback,false)});
+test('quota response stops without paid fallback',async()=>{const r=await requestFreeGeneratedImage({requestedType:'modern-visual',prompt:'meeting'},{fetchImpl:async()=>({status:429,ok:false,json:async()=>({})})});assert.equal(r.status,'free-quota-exhausted');assert.equal(r.paidFallback,false)});
