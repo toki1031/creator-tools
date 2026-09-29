@@ -1,6 +1,8 @@
 function clean(v=''){return String(v??'').trim();}
 function narrationUnits(items=[]){
-  const text=(Array.isArray(items)?items:[]).map(clean).filter(Boolean).filter(x=>!/^■/.test(x)).join('\n');
+  const lines=Array.isArray(items)?items:[]; const kept=[];
+  for(const raw of lines){const x=clean(raw); if(!x)continue; if(/^■/.test(x))break; kept.push(x);}
+  const text=kept.join('\n');
   if(!text)return[];
   const sentences=text.replace(/\n+/g,'').match(/[^。！？!?]+[。！？!?]?/g)||[];
   return sentences.map(clean).filter(Boolean);
