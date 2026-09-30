@@ -23,7 +23,11 @@ function evidence(candidate = {}) {
     rightsAdvisory: clean(candidate.rightsAdvisory),
     rightsUrl: clean(candidate.rightsUrl),
     license: clean(candidate.license),
-    licenseUrl: clean(candidate.licenseUrl)
+    licenseUrl: clean(candidate.licenseUrl),
+    attribution: clean(candidate.attribution),
+    description: clean(candidate.description),
+    contributors: list(candidate.contributors),
+    date: clean(candidate.date)
   };
 }
 

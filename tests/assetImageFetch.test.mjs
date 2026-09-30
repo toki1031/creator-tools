@@ -84,3 +84,28 @@ test('handles abort and network failures safely', async () => {
   const network = await fetchAssetImage(plan, { fetchImpl: async () => { throw new Error('offline'); }, blobToDataUrl: convert });
   assert.equal(network.status, 'error');
 });
+
+test('preserves Commons attribution and descriptive provenance',async()=>{
+  const commonsPlan={...plan,candidate:{
+    title:'Nightingale-mortality.jpg',
+    provider:'wikimedia-commons',
+    sourceUrl:'https://commons.wikimedia.org/wiki/File:Nightingale-mortality.jpg',
+    sourcePage:'https://commons.wikimedia.org/wiki/File:Nightingale-mortality.jpg',
+    previewUrl:'https://upload.wikimedia.org/example/nightingale.jpg',
+    rightsStatements:['Public domain'],
+    rightsStatus:'rights-cleared-signal',
+    rightsCheck:{status:'rights-cleared-signal',signal:'public-domain-or-cc0',source:'commons-extmetadata',sourceUrl:'https://commons.wikimedia.org/wiki/File:Nightingale-mortality.jpg'},
+    license:'Public domain',
+    licenseUrl:'https://creativecommons.org/publicdomain/mark/1.0/',
+    attribution:'Florence Nightingale',
+    description:'Diagram of the causes of mortality in the army in the East',
+    contributors:['Florence Nightingale'],
+    date:'1858'
+  }};
+  const result=await fetchAssetImage(commonsPlan,{fetchImpl:async()=>response(),blobToDataUrl:convert});
+  assert.equal(result.status,'resolved');
+  assert.equal(result.asset.provenance.attribution,'Florence Nightingale');
+  assert.equal(result.asset.provenance.date,'1858');
+  assert.deepEqual(result.asset.provenance.contributors,['Florence Nightingale']);
+  assert.match(result.asset.provenance.description,/mortality/);
+});
