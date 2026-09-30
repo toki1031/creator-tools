@@ -17,6 +17,10 @@ export function createAutoProductionProject({ requestText, title = '', genre = '
   project.targetDurationSec = Math.max(5, Number(targetDurationSec) || 60);
   const built = applyProductionBriefScenes(project, brief);
   built.scenes = distributeGlobalNarration(built.scenes, brief);
+  const narrationScript = built.scenes.map(scene => String(scene?.speechText || '').trim()).filter(Boolean).join('\n\n');
+  const displayScript = built.scenes.map(scene => String(scene?.subtitleText || scene?.text || scene?.speechText || '').trim()).filter(Boolean).join('\n\n');
+  built.speechScript = narrationScript;
+  built.displayScript = displayScript || narrationScript;
   const autoBgm = createProceduralBgmSettings(brief.bgmGuidance);
   if (autoBgm) built.bgm = autoBgm;
   built.autoProduction = {
