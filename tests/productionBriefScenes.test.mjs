@@ -51,3 +51,18 @@ test('empty brief is safe and leaves scene construction unused', () => {
 });
 
 function round(value){ return Math.round(value*100)/100; }
+
+test('uses narration as subtitle text only when no explicit subtitle exists',()=>{
+  const scenes=buildScenesFromProductionBrief({
+    sceneDirectives:[
+      {sceneId:'scene-1',narrationText:'ナレーション本文',subtitleText:'',visualDirection:'現代',assetType:'modern-visual'},
+      {sceneId:'scene-2',narrationText:'読み上げ本文',subtitleText:'表示専用字幕',visualDirection:'資料',assetType:'document'}
+    ]
+  },{targetDurationSec:10});
+  assert.equal(scenes[0].speechText,'ナレーション本文');
+  assert.equal(scenes[0].subtitleText,'ナレーション本文');
+  assert.equal(scenes[0].text,'ナレーション本文');
+  assert.equal(scenes[1].speechText,'読み上げ本文');
+  assert.equal(scenes[1].subtitleText,'表示専用字幕');
+  assert.equal(scenes[1].text,'表示専用字幕');
+});
