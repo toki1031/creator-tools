@@ -467,6 +467,7 @@ async function createAudio(project, prepared, providedContext = null) {
     let narrationDuration = 0;
     if (hasBgm) {
       bgmGain = context.createGain();
+      bgmGain.gain.value = 0;
       bgmGain.connect(destination);
       if (hasProceduralBgm) {
         const graph = createProceduralBgmGraph(context, bgmGain, {
