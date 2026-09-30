@@ -1,8 +1,10 @@
 function clean(value=''){ return String(value??'').trim(); }
 
 export function isProceduralBgm(bgm){
-  return clean(bgm?.source).toLowerCase()==='procedural'
-    && clean(bgm?.procedural?.preset || bgm?.preset);
+  return Boolean(
+    clean(bgm?.source).toLowerCase()==='procedural'
+    && clean(bgm?.procedural?.preset || bgm?.preset)
+  );
 }
 
 export function createProceduralBgmSettings(guidance=[]){
