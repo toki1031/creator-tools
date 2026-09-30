@@ -13,6 +13,7 @@ const staleProject = {
   ],
   productionBrief:{
     narrationGuidance:['↓'],
+    bgmGuidance:['静かなドキュメンタリーBGM'],
     sceneDirectives:[
       {sceneId:'scene-1',visualDirection:'現代。\n正しいことを説明しているのに、相手に十分伝わっていない場面。',assetType:'modern-visual',purpose:'',rules:[]},
       {sceneId:'scene-3',visualDirection:'戦争後。\nナイチンゲールが記録・報告書などを調べていることを示す。',assetType:'other',purpose:'',rules:[]},
@@ -42,6 +43,8 @@ test('repairs stale Nightingale production-request without mutating the source o
   assert.equal(result.project.productionBrief.sceneDirectives[2].assetType,'historical-source');
   assert.match(result.project.productionBrief.sceneDirectives[2].searchHint,/ナイチンゲール/);
   assert.equal(result.project.productionBrief.sceneDirectives[3].assetType,'modern-visual');
+  assert.equal(result.project.bgm.source,'procedural');
+  assert.equal(result.project.bgm.procedural.preset,'calm-documentary');
 });
 
 test('keeps clean explicit asset types and manual projects unchanged',()=>{
@@ -54,4 +57,17 @@ test('keeps clean explicit asset types and manual projects unchanged',()=>{
   const manualResult=normalizeLegacyAutoProductionProject(manual);
   assert.equal(manualResult.changed,false);
   assert.strictEqual(manualResult.project,manual);
+});
+
+test('does not replace an existing BGM while repairing a legacy production request',()=>{
+  const project={
+    id:'p-bgm',
+    autoProduction:{mode:'production-request'},
+    bgm:{source:'upload',audioData:'data:audio/wav;base64,AA==',title:'manual'},
+    scenes:[],
+    productionBrief:{bgmGuidance:['静かなドキュメンタリーBGM'],sceneDirectives:[]}
+  };
+  const result=normalizeLegacyAutoProductionProject(project);
+  assert.equal(result.project.bgm.source,'upload');
+  assert.equal(result.project.bgm.audioData,'data:audio/wav;base64,AA==');
 });
