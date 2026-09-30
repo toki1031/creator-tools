@@ -8,7 +8,7 @@ import { addImageAsset, assetUsageCount, assetUsageScenes, ensureMediaLibrary, e
 import { resolveSceneImageForDisplay } from "./sceneImageDisplay.js";
 import { runMultiSceneAssetPipeline } from "./multiSceneAssetPipeline.js";
 import { normalizeLegacyAutoProductionProject } from "./autoProductionCompatibility.js";
-import { isProceduralBgm } from "./proceduralBgm.js";
+import { createProceduralBgmGraph, isProceduralBgm } from "./proceduralBgm.js";
 import { createAudioAssetIdFromFile, normalizeAudioAssetId } from "./audioAssetIdentity.js";
 import { normalizeSubtitleOffset, resolveEffectiveSubtitlePosition, resolveSubtitleYRatio } from "./subtitlePosition.js";
 import { assessMvpVideoResult, describeVideoExportFailure, isMvpShortsProject, validateMvpShortsOutput } from "./videoMvp.js";
@@ -730,7 +730,7 @@ async function renderBgm(id) {
       <div class="form-grid"><label>音源の種類<select id="source"><option value="none">BGMなし</option><option value="upload">自分の音源をアップロード</option><option value="free">無料BGM（情報を登録）</option><option value="procedural">Creator OS 自動BGM（無料・外部素材なし）</option><option value="ai">AI生成BGM（後で追加）</option></select></label><label>雰囲気<select id="category"><option value="calm">教養・落ち着き</option><option value="history">歴史・重厚</option><option value="challenge">挑戦・前進</option><option value="emotion">感動・余韻</option><option value="rain">雨・環境音</option><option value="sleep">睡眠・リラックス</option></select></label></div>
       <label>BGM名<input id="bgmTitle" value="${escapeHtml(b.title||"")}" placeholder="例：静かなピアノと雨音"></label>
       <label>音源ファイル<input id="audioFile" type="file" accept="audio/*,.mp3,.m4a,.aac,.wav"><small id="fileName">${escapeHtml(b.fileName||"未登録")}</small><small>MP3 / M4A / AAC / WAV対応。MOV / MP4などの動画は、まず音声ファイルにして登録してください。</small></label>
-      <audio id="audioPreview" controls ${b.audioData?`src="${b.audioData}"`:""}></audio>
+      <audio id="audioPreview" controls ${b.audioData?`src="${b.audioData}"`:""}></audio><div class="tool-row"><button type="button" id="previewProceduralBgm" ${isProceduralBgm(b)?"":"hidden"}>▶ 自動BGMを6秒試聴</button><span id="proceduralBgmStatus" class="muted"></span></div>
     </section>
     <section class="editor-card"><h2>ミックス設定</h2><div class="form-grid"><label>音量<div class="range-line"><input id="volume" type="range" min="0" max="0.5" step="0.01" value="${b.volume}"><span id="volumeValue">${Math.round(b.volume*100)}%</span></div></label><label>フェードイン<input id="fadeIn" type="number" min="0" max="30" step="0.5" value="${b.fadeInSec}">秒</label><label>フェードアウト<input id="fadeOut" type="number" min="0" max="30" step="0.5" value="${b.fadeOutSec}">秒</label><label class="check"><input id="ducking" type="checkbox" ${b.ducking?"checked":""}>ナレーション中は自動で音量を下げる</label><label class="check"><input id="loop" type="checkbox" ${b.loop?"checked":""}>動画の長さに合わせてループ</label></div></section>
     <section class="editor-card"><h2>利用条件</h2><label>ライセンス・利用条件<input id="license" value="${escapeHtml(b.license||"")}" placeholder="例：商用利用可・クレジット不要"></label><label>クレジット表記<input id="credit" value="${escapeHtml(b.credit||"")}" placeholder="必要な場合のみ入力"></label><p class="notice">無料BGMを使う場合は、配布元の最新規約を必ず確認してください。</p></section>
@@ -787,7 +787,36 @@ async function renderBgm(id) {
   bindSavedNavigation(root.querySelector('#nextOutput'),flushSave,()=>goOutput(id));
 
   const updateLabels=()=>{root.querySelector('#volumeValue').textContent=`${Math.round(Number(root.querySelector('#volume').value)*100)}%`;root.querySelector('#fontSizeValue').textContent=root.querySelector('#fontSize').value;const offset=normalizeSubtitleOffset(root.querySelector('#positionOffset').value);root.querySelector('#positionOffsetValue').textContent=`${offset>0?'+':''}${offset}%`;root.querySelector('#outlineWidthValue').textContent=root.querySelector('#outlineWidth').value;root.querySelector('#backgroundOpacityValue').textContent=`${Math.round(Number(root.querySelector('#backgroundOpacity').value)*100)}%`;};
-  ['source','category','bgmTitle','license','credit'].forEach(k=>root.querySelector('#'+k).oninput=()=>{updateLabels();save();});
+  const proceduralPreviewButton=root.querySelector('#previewProceduralBgm');
+  const proceduralPreviewStatus=root.querySelector('#proceduralBgmStatus');
+  const updateProceduralPreviewVisibility=()=>{if(proceduralPreviewButton)proceduralPreviewButton.hidden=root.querySelector('#source').value!=='procedural';};
+  if(proceduralPreviewButton) proceduralPreviewButton.onclick=async()=>{
+    const AudioContextClass=globalThis.AudioContext||globalThis.webkitAudioContext;
+    if(!AudioContextClass)return alert('この端末では自動BGMの試聴に必要なWeb Audioを利用できません。');
+    proceduralPreviewButton.disabled=true;
+    let context=null;
+    try{
+      context=new AudioContextClass();
+      if(context.state!=='running')await context.resume();
+      const master=context.createGain();
+      master.gain.value=Math.max(0,Math.min(0.5,Number(root.querySelector('#volume').value)||0.08));
+      master.connect(context.destination);
+      const graph=createProceduralBgmGraph(context,master,{preset:b.procedural?.preset||'calm-documentary',durationSec:6});
+      graph.start(context.currentTime);
+      proceduralPreviewStatus.textContent='試聴中…';
+      await new Promise(resolve=>setTimeout(resolve,6200));
+      proceduralPreviewStatus.textContent='試聴完了 ✓';
+    }catch(error){
+      console.error(error);
+      proceduralPreviewStatus.textContent='試聴できませんでした';
+      alert(`自動BGMを試聴できませんでした：${error?.message||'不明なエラー'}`);
+    }finally{
+      try{if(context&&context.state!=='closed')await context.close();}catch{}
+      proceduralPreviewButton.disabled=false;
+    }
+  };
+
+  ['source','category','bgmTitle','license','credit'].forEach(k=>root.querySelector('#'+k).oninput=()=>{if(k==='source'){const selected=root.querySelector('#source').value;if(selected==='procedural'&&!b.procedural?.preset)b.procedural={preset:'calm-documentary',guidance:'Creator OS 自動BGM'};updateProceduralPreviewVisibility();}updateLabels();save();});
   const bgmFadeInBeforeByElement=new WeakMap();
 const fadeInEl=root.querySelector('#fadeIn');
 const rememberBgmFadeInBefore=el=>{if(bgmFadeInBeforeByElement.has(el))return;bgmFadeInBeforeByElement.set(el,snapshotBgmFadeIn(el.value));};
@@ -1044,7 +1073,7 @@ fontSizeEl.onblur=()=>commitSubtitleFontSizeDecision(fontSizeEl);
   root.querySelector('#clearSubtitles').onclick=()=>{if(!confirm('すべてのシーンの字幕文章を消去しますか？'))return;scenes.forEach(s=>s.subtitleText='');renderSubtitleEditor();renderSubtitlePreview();save();};
   root.querySelector('#exportSrt').onclick=()=>{const srt=buildSrt(project);if(!srt.trim())return alert('書き出せる字幕がありません。');downloadText(`${safeName(project.title)}.srt`,srt,'application/x-subrip;charset=utf-8');};
   root.querySelector('#exportJson').onclick=()=>downloadProjectBackup(project);
-  updateLabels(); renderSubtitleEditor(); renderSubtitlePreview();
+  updateProceduralPreviewVisibility(); updateLabels(); renderSubtitleEditor(); renderSubtitlePreview();
 }
 
 async function renderOutput(id) {
