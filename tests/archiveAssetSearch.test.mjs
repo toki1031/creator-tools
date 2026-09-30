@@ -4,15 +4,16 @@ import { searchArchiveCandidates } from '../archiveAssetSearch.js';
 
 const plan={sceneId:'scene-5',requestedType:'historical-source',queries:['Nightingale'],status:'ready'};
 
-test('uses LoC result without contacting Commons when LoC has candidates',async()=>{
+test('keeps matching LoC and Commons candidates for rights-aware evaluation',async()=>{
   let commonsCalls=0;
   const result=await searchArchiveCandidates(plan,{
-    searchLoc:async()=>({status:'ok',candidates:[{id:'loc'}]}),
-    searchCommons:async()=>{commonsCalls++;return{status:'ok',candidates:[{id:'commons'}]}}
+    searchLoc:async()=>({status:'ok',candidates:[{id:'loc',provider:'library-of-congress'}]}),
+    searchCommons:async()=>{commonsCalls++;return{status:'ok',candidates:[{id:'commons',provider:'wikimedia-commons'}]}}
   });
-  assert.equal(result.provider,'library-of-congress');
-  assert.equal(result.candidates[0].id,'loc');
-  assert.equal(commonsCalls,0);
+  assert.equal(result.status,'ok');
+  assert.equal(result.provider,'archive-combined');
+  assert.deepEqual(result.candidates.map(x=>x.id),['loc','commons']);
+  assert.equal(commonsCalls,1);
 });
 
 test('falls back to Commons when LoC returns no candidates',async()=>{
