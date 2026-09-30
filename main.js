@@ -430,7 +430,7 @@ async function renderScenes(id) {
     <main class="shell editor-shell">
       <header class="editor-head"><button id="back">←</button><div><span>${labelPlatform(project.platform)}</span><h1>${escapeHtml(project.title)}</h1></div><button id="menu">•••</button></header>
       <nav class="steps"><button id="stepAi">0 AIスタッフ</button><button id="stepScript">1 台本</button><button class="active">2 シーン・ナレーション</button><button id="stepBgm">3 字幕・BGM</button><button id="stepOutput">4 出力</button></nav>
-      <section class="editor-card"><div class="section-head"><div><h2>シーン編集</h2><p>台本を場面に分け、画像・表示秒数・演出を設定します。</p></div><span id="sceneCount">${project.scenes.length}シーン</span></div><div class="tool-row"><button class="primary" id="autoSplit">台本から自動分割</button><button id="addScene">＋ 空のシーン</button><button id="manageMediaLibrary">画像素材ライブラリ</button><button id="undoScenes" disabled>↶ 1つ前に戻す</button>${project.autoProduction?.mode==="production-request"?'<button type="button" id="autoAcquireAssets">🔎 素材を自動取得（試作）</button>':""}</div>${project.autoProduction?.mode==="production-request"?'<p class="muted">実物史料・文書はLibrary of Congressを優先し、候補がない場合はWikimedia Commonsも検索します。AI再現・現代ビジュアルは無料のWorkers AIで自動取得します。権利不明・候補が複数・生成失敗・既存画像あり等では安全のため停止します。</p><p id="autoAssetStatus" class="muted" aria-live="polite"></p>':""}<p class="muted">再分割時は既存の画像・動画をできるだけ保持します。文章が変わったシーンのナレーションは誤読防止のため再生成対象になります。</p></section>
+      <section class="editor-card"><div class="section-head"><div><h2>シーン編集</h2><p>台本を場面に分け、画像・表示秒数・演出を設定します。</p></div><span id="sceneCount">${project.scenes.length}シーン</span></div><div class="tool-row"><button class="primary" id="autoSplit">台本から自動分割</button><button id="addScene">＋ 空のシーン</button><button id="manageMediaLibrary">画像素材ライブラリ</button><button id="undoScenes" disabled>↶ 1つ前に戻す</button>${project.autoProduction?.mode==="production-request"?'<button type="button" id="autoAcquireAssets">🔎 素材を自動取得（試作）</button>':""}</div>${project.autoProduction?.mode==="production-request"?'<p class="muted">実物史料・文書はLibrary of Congressを優先評価し、安全に自動採用できない場合はWikimedia Commonsの候補も評価します。AI再現・現代ビジュアルは無料のWorkers AIで自動取得します。権利不明・候補が複数・生成失敗・既存画像あり等では安全のため停止します。</p><p id="autoAssetStatus" class="muted" aria-live="polite"></p>':""}<p class="muted">再分割時は既存の画像・動画をできるだけ保持します。文章が変わったシーンのナレーションは誤読防止のため再生成対象になります。</p></section>
       <section id="sceneList" class="scene-list"></section>
       <dialog id="mediaLibraryDialog" class="media-library-dialog">
         <div class="section-head"><div><h2>画像素材ライブラリ</h2><p id="mediaLibraryTarget">このシーンで使う画像を選びます。</p></div></div>
@@ -590,7 +590,7 @@ async function renderScenes(id) {
     let autoAcquireRunning=false;
     autoAcquireButton.onclick=async()=>{
       if(autoAcquireRunning)return;
-      if(!confirm("Sceneごとに素材を自動取得します。\n\n実物史料・文書はLibrary of Congressを優先し、必要に応じてWikimedia Commonsも検索します。AI再現・現代ビジュアルは無料Workers AIを使用します。安全に採用できないSceneでは停止します。続けますか？"))return;
+      if(!confirm("Sceneごとに素材を自動取得します。\n\n実物史料・文書はLibrary of Congressを優先評価し、安全に自動採用できない場合はWikimedia Commonsも評価します。AI再現・現代ビジュアルは無料Workers AIを使用します。安全に採用できないSceneでは停止します。続けますか？"))return;
       autoAcquireRunning=true;autoAcquireButton.disabled=true;
       if(autoAssetStatus)autoAssetStatus.textContent="素材を検索・確認しています…";
       try{

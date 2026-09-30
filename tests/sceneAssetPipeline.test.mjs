@@ -206,3 +206,88 @@ test('auto-selects the unique highest-resolution equivalent Commons source for a
   assert.equal(result.candidateSelection.selected,true);
   assert.equal(fetched,'Nightingale-mortality.jpg');
 });
+
+test('falls back from LoC review-required candidate to Commons Public Domain candidate',async()=>{
+  const loc={
+    title:'Florence Nightingale statistical diagram',
+    provider:'library-of-congress',
+    requestedType:'historical-source',
+    sourceUrl:'https://www.loc.gov/item/loc-review/',
+    previewUrl:'https://tile.loc.gov/loc-review.jpg',
+    rightsStatements:['Rights and access information'],
+    rightsStatus:'needs-review'
+  };
+  const commons={
+    title:'Nightingale-mortality.jpg',
+    provider:'wikimedia-commons',
+    requestedType:'historical-source',
+    sourceUrl:'https://commons.wikimedia.org/wiki/File:Nightingale-mortality.jpg',
+    previewUrl:'https://upload.wikimedia.org/nightingale.jpg',
+    description:'Diagram of the causes of mortality in the army in the East',
+    date:'1858',
+    contributors:['Florence Nightingale'],
+    rightsStatements:['Public domain'],
+    rightsStatus:'rights-cleared-signal',
+    license:'Public domain',
+    rightsCheck:{status:'rights-cleared-signal',signal:'public-domain-or-cc0',source:'commons-extmetadata',sourceUrl:'https://commons.wikimedia.org/wiki/File:Nightingale-mortality.jpg'}
+  };
+  let fetchedProvider='';
+  const result=await runSceneAssetPipeline(project,scene,{
+    searchCandidates:async()=>({status:'ok',candidates:[loc,commons]}),
+    enrichCandidates:async candidates=>candidates,
+    fetchImage:async plan=>{fetchedProvider=plan.candidate.provider;return resolved;},
+    applyAsset:async(inputProject)=>{const copy=structuredClone(inputProject);copy.scenes[0].imageAssetId='commons-selected';return{status:'applied',project:copy,assetId:'commons-selected'}}
+  });
+  assert.equal(result.status,'applied');
+  assert.equal(result.providerSelection.selectedProvider,'wikimedia-commons');
+  assert.equal(fetchedProvider,'wikimedia-commons');
+});
+
+test('keeps LoC priority when LoC and Commons are both safely auto-adoptable',async()=>{
+  const loc={
+    title:'Florence Nightingale statistical diagram',
+    provider:'library-of-congress',
+    requestedType:'historical-source',
+    sourceUrl:'https://www.loc.gov/item/loc-safe/',
+    previewUrl:'https://tile.loc.gov/loc-safe.jpg',
+    rightsStatements:['No known copyright restrictions'],
+    rightsStatus:'rights-cleared-signal',
+    rightsCheck:{status:'rights-cleared-signal',signal:'explicit-free-use',itemJsonUrl:'https://www.loc.gov/item/loc-safe/?fo=json&at=item%2Cresources'}
+  };
+  const commons={
+    title:'Nightingale-mortality.jpg',
+    provider:'wikimedia-commons',
+    requestedType:'historical-source',
+    sourceUrl:'https://commons.wikimedia.org/wiki/File:Nightingale-mortality.jpg',
+    previewUrl:'https://upload.wikimedia.org/nightingale.jpg',
+    rightsStatements:['Public domain'],
+    rightsStatus:'rights-cleared-signal',
+    license:'Public domain',
+    rightsCheck:{status:'rights-cleared-signal',signal:'public-domain-or-cc0',source:'commons-extmetadata',sourceUrl:'https://commons.wikimedia.org/wiki/File:Nightingale-mortality.jpg'}
+  };
+  let fetchedProvider='';
+  const result=await runSceneAssetPipeline(project,scene,{
+    searchCandidates:async()=>({status:'ok',candidates:[loc,commons]}),
+    enrichCandidates:async candidates=>candidates,
+    fetchImage:async plan=>{fetchedProvider=plan.candidate.provider;return resolved;},
+    applyAsset:async(inputProject)=>{const copy=structuredClone(inputProject);copy.scenes[0].imageAssetId='loc-selected';return{status:'applied',project:copy,assetId:'loc-selected'}}
+  });
+  assert.equal(result.status,'applied');
+  assert.equal(result.providerSelection.selectedProvider,'library-of-congress');
+  assert.equal(fetchedProvider,'library-of-congress');
+});
+
+test('still stops safely when both archive providers require review',async()=>{
+  let fetchCalls=0;
+  const result=await runSceneAssetPipeline(project,scene,{
+    searchCandidates:async()=>({status:'ok',candidates:[
+      {...eligible,provider:'library-of-congress',sourceUrl:'https://www.loc.gov/item/review/',rightsStatus:'needs-review'},
+      {...eligible,provider:'wikimedia-commons',sourceUrl:'https://commons.wikimedia.org/wiki/File:Review.jpg',rightsStatus:'needs-review'}
+    ]}),
+    enrichCandidates:async candidates=>candidates,
+    fetchImage:async()=>{fetchCalls++;return resolved;}
+  });
+  assert.equal(result.status,'needs-review');
+  assert.equal(result.providerSelection.selectedProvider,'');
+  assert.equal(fetchCalls,0);
+});

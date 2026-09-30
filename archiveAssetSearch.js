@@ -26,20 +26,24 @@ export async function searchArchiveCandidates(plan,{
   const attempts=[];
   let loc;
   try{loc=await searchLoc(plan);}catch(error){loc={status:'error',candidates:[],reason:String(error?.message||'LoC検索に失敗しました')};}
-  const locCandidates=filterArchiveCandidatesForIntent(resultCandidates(loc),plan);
+  const locCandidates=filterArchiveCandidatesForIntent(resultCandidates(loc),plan).map(candidate=>({...candidate,provider:candidate?.provider||'library-of-congress'}));
   attempts.push({provider:'library-of-congress',status:loc?.status||'error',count:resultCandidates(loc).length,matchedCount:locCandidates.length,reason:loc?.reason||''});
-  if(loc?.status==='ok'&&locCandidates.length){
-    return {...loc,candidates:locCandidates,provider:'library-of-congress',attempts};
-  }
-
   let commons;
   try{commons=await searchCommons(plan);}catch(error){commons={status:'error',candidates:[],reason:String(error?.message||'Commons検索に失敗しました')};}
-  const commonsCandidates=filterArchiveCandidatesForIntent(resultCandidates(commons),plan);
+  const commonsCandidates=filterArchiveCandidatesForIntent(resultCandidates(commons),plan).map(candidate=>({...candidate,provider:candidate?.provider||'wikimedia-commons'}));
   attempts.push({provider:'wikimedia-commons',status:commons?.status||'error',count:resultCandidates(commons).length,matchedCount:commonsCandidates.length,reason:commons?.reason||''});
-  if(commons?.status==='ok'){
-    return {...commons,candidates:commonsCandidates,provider:'wikimedia-commons',attempts};
+  const combined=[...locCandidates,...commonsCandidates];
+  if(combined.length){
+    const providers=[...new Set(combined.map(candidate=>candidate?.provider).filter(Boolean))];
+    return {
+      status:'ok',
+      candidates:combined,
+      provider:providers.length===1?providers[0]:'archive-combined',
+      attempts,
+      reason:''
+    };
   }
-  if(loc?.status==='ok'){
+  if(loc?.status==='ok'||commons?.status==='ok'){
     return {status:'ok',candidates:[],reason:'アーカイブ素材候補が見つかりません',provider:'archive-fallback',attempts};
   }
   return {status:'error',candidates:[],reason:commons?.reason||loc?.reason||'アーカイブ検索を継続できません',provider:'archive-fallback',attempts};
