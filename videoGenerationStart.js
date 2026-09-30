@@ -1,7 +1,9 @@
+import { isProceduralBgm } from './proceduralBgm.js';
+
 export function projectExpectsVideoAudio(project) {
   const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
-  const hasSceneNarration = scenes.some(scene => Boolean(scene?.narration?.audioData));
-  const hasBgm = Boolean(project?.output?.bgmEnabled && project?.bgm?.audioData);
+  const hasSceneNarration = scenes.some(scene => Boolean(scene?.narration?.audioData || scene?.narration?.mediaRef?.id));
+  const hasBgm = Boolean(project?.output?.bgmEnabled && (project?.bgm?.audioData || isProceduralBgm(project?.bgm)));
   const hasNarration = Boolean(project?.narration?.audioData);
   return hasBgm || hasNarration || hasSceneNarration;
 }
