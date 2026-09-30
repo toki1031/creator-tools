@@ -71,3 +71,48 @@ test('does not replace an existing BGM while repairing a legacy production reque
   assert.equal(result.project.bgm.source,'upload');
   assert.equal(result.project.bgm.audioData,'data:audio/wav;base64,AA==');
 });
+
+test('repairs an existing production project with Scene narration but empty project script and subtitle',()=>{
+  const project={
+    id:'preview-qa',
+    autoProduction:{mode:'production-request'},
+    displayScript:'',
+    speechScript:'',
+    scenes:[{
+      id:'scene-1',
+      order:1,
+      text:'これは自動BGMの動作確認です。',
+      speechText:'これは自動BGMの動作確認です。',
+      subtitleText:'',
+      productionDirection:{visualDirection:'現代の机の上で、ノートに数字を書く場面。',assetType:'modern-visual'}
+    }],
+    productionBrief:{bgmGuidance:['静かなドキュメンタリーBGM'],sceneDirectives:[]}
+  };
+  const result=normalizeLegacyAutoProductionProject(project);
+  assert.equal(result.changed,true);
+  assert.equal(result.project.displayScript,'これは自動BGMの動作確認です。');
+  assert.equal(result.project.speechScript,'これは自動BGMの動作確認です。');
+  assert.equal(result.project.scenes[0].subtitleText,'これは自動BGMの動作確認です。');
+  assert.equal(result.project.bgm.source,'procedural');
+});
+
+test('does not overwrite existing project scripts or explicit subtitles during compatibility repair',()=>{
+  const project={
+    id:'edited',
+    autoProduction:{mode:'production-request'},
+    displayScript:'編集済み表示台本',
+    speechScript:'編集済み読み上げ台本',
+    scenes:[{
+      id:'scene-1',
+      text:'表示する字幕',
+      speechText:'読み上げる文章',
+      subtitleText:'表示する字幕',
+      productionDirection:{visualDirection:'現代',assetType:'modern-visual'}
+    }],
+    productionBrief:{sceneDirectives:[]}
+  };
+  const result=normalizeLegacyAutoProductionProject(project);
+  assert.equal(result.project.displayScript,'編集済み表示台本');
+  assert.equal(result.project.speechScript,'編集済み読み上げ台本');
+  assert.equal(result.project.scenes[0].subtitleText,'表示する字幕');
+});
