@@ -35,6 +35,7 @@ Scene 8
 Scene 9
 目的：今日の行動で終える
 現代の手元。資料に数字・具体例・比較のどれか一つを加える。
+■音声・BGM: 静かなドキュメンタリーBGM
 ## 最終QA
 約60秒
 9シーン
@@ -50,6 +51,9 @@ test('creates a new nine-scene auto-production project locally', () => {
   assert.equal(result.project.scenes.length, 9);
   assert.equal(result.project.productionBrief.sceneDirectives.length, 9);
   assert.equal(result.project.autoProduction.source, 'local-parser');
+  assert.equal(result.project.bgm.source, 'procedural');
+  assert.equal(result.project.bgm.procedural.preset, 'calm-documentary');
+  assert.equal(result.project.bgm.ducking, true);
   const total = result.project.scenes.reduce((sum, scene) => sum + scene.durationSec, 0);
   assert.ok(Math.abs(total - 60) < 0.1);
 });
