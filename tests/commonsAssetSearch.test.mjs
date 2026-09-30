@@ -11,6 +11,9 @@ function page(license='Public domain'){
       url:'https://upload.wikimedia.org/example/original.jpg',
       thumburl:'https://upload.wikimedia.org/example/thumb.jpg',
       mime:'image/jpeg',
+      width:6996,
+      height:3826,
+      size:5320000,
       extmetadata:{
         LicenseShortName:{value:license},
         LicenseUrl:{value:license==='CC BY 4.0'?'https://creativecommons.org/licenses/by/4.0/':'https://creativecommons.org/publicdomain/mark/1.0/'},
@@ -50,6 +53,10 @@ test('normalizes Public Domain metadata as a rights-cleared signal with provenan
   assert.match(candidate.sourceUrl,/commons\.wikimedia\.org\/wiki\//);
   assert.match(candidate.previewUrl,/upload\.wikimedia\.org/);
   assert.equal(candidate.rightsStatus,'rights-cleared-signal');
+  assert.equal(candidate.mimeType,'image/jpeg');
+  assert.equal(candidate.width,6996);
+  assert.equal(candidate.height,3826);
+  assert.equal(candidate.sizeBytes,5320000);
   assert.equal(candidate.rightsCheck.signal,'public-domain-or-cc0');
   assert.equal(candidate.rightsCheck.source,'commons-extmetadata');
   assert.equal(candidate.license,'Public domain');

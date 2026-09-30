@@ -165,3 +165,44 @@ test('applies a Commons Public Domain candidate with official metadata evidence'
   assert.equal(result.project.scenes[0].imageAssetId,'commons-pd');
   assert.equal(result.project.mediaLibrary[0].source.attribution,'Florence Nightingale');
 });
+
+test('auto-selects the unique highest-resolution equivalent Commons source for an explicit historical Scene',async()=>{
+  const archiveScene={
+    id:'scene-5',order:5,
+    productionDirection:{
+      assetType:'historical-source',
+      visualDirection:'統計を見える形にしたことを示す。',
+      searchHint:'Florence Nightingale mortality diagram 1858',
+      rules:[]
+    }
+  };
+  const archiveProject={id:'p5',scenes:[archiveScene],mediaLibrary:[]};
+  const candidate=(name,width,height)=>({
+    title:name,
+    provider:'wikimedia-commons',
+    requestedType:'historical-source',
+    sourceUrl:`https://commons.wikimedia.org/wiki/File:${name}`,
+    previewUrl:`https://upload.wikimedia.org/${name}`,
+    description:'Diagram of the causes of mortality in the army in the East',
+    date:'1858',
+    contributors:['Florence Nightingale'],
+    mimeType:'image/jpeg',
+    width,height,
+    rightsStatements:['Public domain'],
+    rightsStatus:'rights-cleared-signal',
+    license:'Public domain',
+    rightsCheck:{status:'rights-cleared-signal',signal:'public-domain-or-cc0',source:'commons-extmetadata',sourceUrl:`https://commons.wikimedia.org/wiki/File:${name}`}
+  });
+  const small=candidate('Coxcomb.jpg',806,638);
+  const large=candidate('Nightingale-mortality.jpg',6996,3826);
+  let fetched='';
+  const result=await runSceneAssetPipeline(archiveProject,archiveScene,{
+    searchCandidates:async()=>({status:'ok',candidates:[small,large]}),
+    enrichCandidates:async candidates=>candidates,
+    fetchImage:async plan=>{fetched=plan.candidate.title;return{status:'resolved',asset:{name:fetched,data:'data:image/jpeg;base64,AAAA'}}},
+    applyAsset:async(inputProject,plan)=>{const copy=structuredClone(inputProject);copy.scenes[0].imageAssetId='selected';return{status:'applied',project:copy,assetId:'selected'}}
+  });
+  assert.equal(result.status,'applied');
+  assert.equal(result.candidateSelection.selected,true);
+  assert.equal(fetched,'Nightingale-mortality.jpg');
+});
