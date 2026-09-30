@@ -2,6 +2,7 @@ import { buildAssetRequirement } from './assetRequirements.js';
 import { buildAssetSearchPlan } from './assetSearchPlan.js';
 import { enrichAssetCandidates } from './assetCandidateEnrichment.js';
 import { evaluateAssetCandidates } from './assetCandidateEvaluation.js';
+import { selectEquivalentArchiveCandidate } from './archiveCandidateSelection.js';
 import { buildAssetAdoptionPlan } from './assetAdoptionPlan.js';
 import { fetchAssetImage } from './assetImageFetch.js';
 import { storeAndApplyAutoImage } from './autoImageMediaStorage.js';
@@ -39,9 +40,10 @@ export async function runSceneAssetPipeline(project, scene, {
   catch (error) { return stop('enrichment', 'error', String(error?.message || '素材の権利情報を確認できません'), { requirement, searchPlan, candidates }); }
 
   const evaluatedCandidates = evaluateAssetCandidates(enrichedCandidates, requirement, searchPlan);
-  const adoptionPlan = buildAssetAdoptionPlan(scene, evaluatedCandidates);
-  if (adoptionPlan.status !== 'ready') return stop('adoption', adoptionPlan.status, adoptionPlan.reason, { requirement, searchPlan, enrichedCandidates, evaluatedCandidates, adoptionPlan });
-  if (adoptionPlan.autoApply !== true) return stop('adoption', 'needs-review', '素材の自動採用条件を満たしていません', { requirement, searchPlan, enrichedCandidates, evaluatedCandidates, adoptionPlan });
+  const candidateSelection = selectEquivalentArchiveCandidate(evaluatedCandidates, requirement);
+  const adoptionPlan = buildAssetAdoptionPlan(scene, candidateSelection.entries);
+  if (adoptionPlan.status !== 'ready') return stop('adoption', adoptionPlan.status, adoptionPlan.reason, { requirement, searchPlan, enrichedCandidates, evaluatedCandidates, candidateSelection, adoptionPlan });
+  if (adoptionPlan.autoApply !== true) return stop('adoption', 'needs-review', '素材の自動採用条件を満たしていません', { requirement, searchPlan, enrichedCandidates, evaluatedCandidates, candidateSelection, adoptionPlan });
 
   const fetchResult = await fetchImage(adoptionPlan, fetchOptions);
   if (fetchResult?.status !== 'resolved' || !fetchResult.asset) return stop('fetch', fetchResult?.status || 'error', fetchResult?.reason || '画像を取得できません', { requirement, searchPlan, enrichedCandidates, evaluatedCandidates, adoptionPlan, fetchResult });
@@ -52,5 +54,5 @@ export async function runSceneAssetPipeline(project, scene, {
   const didApply = applied?.status === 'applied' || applied?.applied === true;
   if (!didApply || !applied?.project) return stop('apply', applied?.status || 'blocked', applied?.reason || '素材を適用できません', { requirement, searchPlan, enrichedCandidates, evaluatedCandidates, adoptionPlan, fetchResult, applyResult: applied });
 
-  return { status: 'applied', stage: 'complete', reason: '', project: applied.project, assetId: applied.assetId, requirement, searchPlan, enrichedCandidates, evaluatedCandidates, adoptionPlan, fetchResult, applyResult: applied };
+  return { status: 'applied', stage: 'complete', reason: '', project: applied.project, assetId: applied.assetId, requirement, searchPlan, enrichedCandidates, evaluatedCandidates, candidateSelection, adoptionPlan, fetchResult, applyResult: applied };
 }
