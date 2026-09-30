@@ -48,7 +48,7 @@ test('separates timing, narration, subtitle and visual instructions', () => {
   const second = result.project.scenes[1];
   assert.equal(second.durationSec, 8.39);
   assert.equal(second.speechText, 'ナイチンゲールも、そんな大きな壁に向き合いました。');
-  assert.equal(second.subtitleText, '');
+  assert.equal(second.subtitleText, 'ナイチンゲールも、そんな大きな壁に向き合いました。');
   assert.ok(second.productionDirection.rules.includes('赤十字を描かない'));
 });
 
