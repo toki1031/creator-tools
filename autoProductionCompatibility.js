@@ -1,4 +1,5 @@
 import { inferAssetTypeFromText } from './productionBriefParser.js';
+import { createProceduralBgmSettings } from './proceduralBgm.js';
 
 function clone(value) {
   if (value == null) return value;
@@ -99,6 +100,16 @@ export function normalizeLegacyAutoProductionProject(project) {
 
   const brief = next.productionBrief;
   if (brief && typeof brief === 'object') {
+    const existingBgmSource = clean(next.bgm?.source).toLowerCase();
+    const hasExistingBgmAudio = Boolean(clean(next.bgm?.audioData));
+    const canAdoptAutoBgm = !next.bgm || ((!existingBgmSource || existingBgmSource === 'none') && !hasExistingBgmAudio);
+    if (canAdoptAutoBgm) {
+      const autoBgm = createProceduralBgmSettings(brief.bgmGuidance);
+      if (autoBgm) {
+        next.bgm = autoBgm;
+        repairs.push('productionBrief:bgmGuidance');
+      }
+    }
     if (Array.isArray(brief.narrationGuidance)) {
       const filtered = brief.narrationGuidance.filter(item => !isWorkflowMarkerOnly(item));
       if (filtered.length !== brief.narrationGuidance.length) {
