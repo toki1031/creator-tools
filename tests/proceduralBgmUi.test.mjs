@@ -7,6 +7,9 @@ test('BGM UI exposes Creator OS procedural source and output readiness recognize
   assert.match(source,/value="procedural">Creator OS 自動BGM/);
   assert.match(source,/isProceduralBgm\(project\.bgm\)/);
   assert.match(source,/Creator OS内生成/);
+  assert.match(source,/自動BGMを6秒試聴/);
+  assert.match(source,/createProceduralBgmGraph\(context,master/);
+  assert.match(source,/selected==='procedural'.*calm-documentary/s);
 });
 
 test('video renderer mixes procedural BGM through the normal BGM gain path',async()=>{
