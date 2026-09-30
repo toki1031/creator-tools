@@ -92,6 +92,29 @@ export function normalizeLegacyAutoProductionProject(project) {
   }
 
   for (const scene of scenes) {
+    const speech = clean(scene?.speechText);
+    if (speech && !clean(scene?.subtitleText)) {
+      scene.subtitleText = speech;
+      repairs.push(`${scene.id || 'scene'}:subtitleFromSpeech`);
+    }
+    if (speech && !clean(scene?.text)) {
+      scene.text = clean(scene.subtitleText) || speech;
+      repairs.push(`${scene.id || 'scene'}:textFromSpeech`);
+    }
+  }
+
+  const narrationScript = scenes.map(scene => clean(scene?.speechText)).filter(Boolean).join('\n\n');
+  const displayScript = scenes.map(scene => clean(scene?.subtitleText || scene?.text || scene?.speechText)).filter(Boolean).join('\n\n');
+  if (!clean(next.speechScript) && narrationScript) {
+    next.speechScript = narrationScript;
+    repairs.push('project:speechScriptFromScenes');
+  }
+  if (!clean(next.displayScript) && (displayScript || narrationScript)) {
+    next.displayScript = displayScript || narrationScript;
+    repairs.push('project:displayScriptFromScenes');
+  }
+
+  for (const scene of scenes) {
     const values = recovered.get(scene?.id) || [];
     if (!values.length) continue;
     const applied = applyRecoveredTargetedGuidance(scene.productionDirection || {}, values);
