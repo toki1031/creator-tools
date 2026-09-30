@@ -26,11 +26,11 @@ export async function searchArchiveCandidates(plan,{
   const attempts=[];
   let loc;
   try{loc=await searchLoc(plan);}catch(error){loc={status:'error',candidates:[],reason:String(error?.message||'LoC検索に失敗しました')};}
-  const locCandidates=filterArchiveCandidatesForIntent(resultCandidates(loc),plan);
+  const locCandidates=filterArchiveCandidatesForIntent(resultCandidates(loc),plan).map(candidate=>({...candidate,provider:candidate?.provider||'library-of-congress'}));
   attempts.push({provider:'library-of-congress',status:loc?.status||'error',count:resultCandidates(loc).length,matchedCount:locCandidates.length,reason:loc?.reason||''});
   let commons;
   try{commons=await searchCommons(plan);}catch(error){commons={status:'error',candidates:[],reason:String(error?.message||'Commons検索に失敗しました')};}
-  const commonsCandidates=filterArchiveCandidatesForIntent(resultCandidates(commons),plan);
+  const commonsCandidates=filterArchiveCandidatesForIntent(resultCandidates(commons),plan).map(candidate=>({...candidate,provider:candidate?.provider||'wikimedia-commons'}));
   attempts.push({provider:'wikimedia-commons',status:commons?.status||'error',count:resultCandidates(commons).length,matchedCount:commonsCandidates.length,reason:commons?.reason||''});
   const combined=[...locCandidates,...commonsCandidates];
   if(combined.length){
