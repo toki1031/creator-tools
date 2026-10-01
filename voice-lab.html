@@ -21,6 +21,13 @@ pre{white-space:pre-wrap;word-break:break-word;background:#0e1320;padding:12px;b
 <p class="muted">Creator OSの推奨フローをシーン別ナレーションに一本化しました。全文1本ナレーションの新規生成・二重登録は行いません。</p>
 
 <div class="card">
+<h2>制作依頼ならここだけ</h2>
+<p class="muted">1回押すと、音声エンジン準備 → 保存済み音声の再利用判定 → 未生成・変更Sceneだけ生成 → 1Sceneごとに保存、まで続けて実行します。</p>
+<button id="autoSyncScenes">▶ 準備して全Sceneを自動同期</button>
+<pre id="autoSyncStatus">未実行。ボタンを押すまではプロジェクトや音声モデルを読み込みません。</pre>
+</div>
+
+<div class="card">
 <h2>1. 音声を選んで準備</h2>
 <label>声</label>
 <select id="voice">
@@ -106,6 +113,31 @@ async function loadProject(){
 }
 
 $('#voice').onchange=()=>{void updateResumeSummary(currentProject);};
+
+$('#autoSyncScenes').onclick=async()=>{
+  const btn=$('#autoSyncScenes');
+  btn.disabled=true;
+  try{
+    if(projectId==='default')throw new Error('Creator OSのプロジェクトからVoice Labを開いてください。');
+    setLog('#autoSyncStatus','[1/2] 音声エンジンを準備しています…','warn');
+    if(!tts){
+      await $('#prepare').onclick();
+      if(!tts)throw new Error('音声エンジンの準備に失敗しました。上の準備ログを確認してください。');
+    }
+    setLog('#autoSyncStatus','[2/2] 未生成・変更Sceneだけ同期しています…','warn');
+    await $('#generateScenes').onclick();
+    const project=currentProject||await loadProject();
+    const scenes=Array.isArray(project?.scenes)?project.scenes:[];
+    const ready=scenes.filter(scene=>Boolean(scene?.narration?.audioData||scene?.narration?.mediaRef?.id)).length;
+    if(!scenes.length)throw new Error('シーンがありません。');
+    if(ready<scenes.length)throw new Error(`ナレーション同期が完了していません：${ready}/${scenes.length} Scene`);
+    setLog('#autoSyncStatus',`全Scene同期完了 ✓  ${ready}/${scenes.length} Scene\n次は「字幕・BGM」へ進めます。`,'ok');
+  }catch(e){
+    setLog('#autoSyncStatus','自動同期を完了できませんでした：\n'+(e?.message||e),'bad');
+  }finally{
+    btn.disabled=false;
+  }
+};
 
 $('#prepare').onclick=async()=>{
   const btn=$('#prepare');btn.disabled=true;$('#prog').value=5;
