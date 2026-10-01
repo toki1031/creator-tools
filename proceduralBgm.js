@@ -187,11 +187,16 @@ export function createProceduralPreviewWavBytes({preset='calm-documentary',durat
 export function createProceduralPreviewWavBlob(options={}){
   return new Blob([createProceduralPreviewWavBytes(options)],{type:'audio/wav'});
 }
-export function ensurePlaybackAudioSession(navigatorLike=globalThis.navigator){
+export function ensurePlaybackAudioSession(navigatorLike=globalThis.navigator,timer=globalThis.setTimeout){
   try{
     const session=navigatorLike?.audioSession;
     if(!session)return false;
-    session.type='playback';
+    session.type='ambient';
+    if(typeof timer==='function'){
+      timer(()=>{try{session.type='playback';}catch{}},0);
+    }else{
+      session.type='playback';
+    }
     return true;
   }catch{
     return false;
