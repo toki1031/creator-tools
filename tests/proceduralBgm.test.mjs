@@ -12,9 +12,19 @@ test('creates a calm documentary procedural BGM setting from production guidance
   assert.equal(isProceduralBgm(bgm),true);
 });
 
-test('does not invent BGM when production guidance is absent',()=>{
-  assert.equal(createProceduralBgmSettings([]),null);
+test('uses the built-in calm standard BGM when production guidance is absent',()=>{
+  const bgm=createProceduralBgmSettings([],{genre:'great-person'});
+  assert.equal(bgm.source,'procedural');
+  assert.equal(bgm.procedural.preset,'calm-documentary');
+  assert.match(bgm.title,/標準BGM/);
   assert.equal(isProceduralBgm({source:'none'}),false);
+});
+
+test('returns BGM none only when production guidance explicitly requests no music',()=>{
+  const bgm=createProceduralBgmSettings(['BGMなし'],{genre:'great-person'});
+  assert.equal(bgm.source,'none');
+  assert.equal(bgm.volume,0);
+  assert.equal(isProceduralBgm(bgm),false);
 });
 
 test('builds a Web Audio graph and schedules all procedural voices',()=>{
@@ -102,4 +112,14 @@ test('Web Audio graph uses a loopable generated buffer when buffer APIs exist',(
   graph.start(2);
   assert.deepEqual(started,[2]);
   assert.ok(Math.abs(stopped[0]-62.2)<1e-9);
+});
+
+test('each standard preset produces a distinct deterministic waveform',()=>{
+  const ids=['calm-documentary','history-gravity','gentle-learning','challenge-forward','emotional-afterglow'];
+  const signatures=ids.map(preset=>[
+    proceduralBgmSampleAt(1.2,{preset}),
+    proceduralBgmSampleAt(4.7,{preset}),
+    proceduralBgmSampleAt(9.1,{preset})
+  ].map(value=>value.toFixed(5)).join(':'));
+  assert.equal(new Set(signatures).size,ids.length);
 });
