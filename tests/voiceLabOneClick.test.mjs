@@ -32,3 +32,21 @@ test('one-click narration sync verifies every Scene has narration before reporti
   assert.match(html,/if\(ready<scenes\.length\)throw new Error/);
   assert.match(html,/全Scene同期完了 ✓/);
 });
+
+test('one-click narration sync returns to the BGM screen only after every Scene is ready',()=>{
+  const start=html.indexOf("$('#autoSyncScenes').onclick=async()=>");
+  const end=html.indexOf("\n\n$('#prepare').onclick=async()=>",start);
+  assert.ok(start>=0&&end>start);
+  const handler=html.slice(start,end);
+  assert.match(handler,/if\(ready<scenes\.length\)throw new Error/);
+  assert.match(handler,/location\.href=.*\/bgm/);
+});
+
+test('manual Scene narration sync keeps the existing review links and does not auto-navigate',()=>{
+  const start=html.indexOf("$('#generateScenes').onclick=async()=>");
+  assert.ok(start>=0);
+  const handler=html.slice(start);
+  assert.doesNotMatch(handler,/location\.href=.*\/bgm/);
+  assert.match(handler,/afterSceneSync/);
+  assert.match(handler,/次へ：字幕・BGM/);
+});
