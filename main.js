@@ -81,21 +81,6 @@ function bindSavedNavigation(button, flushSave, navigate) {
 }
 
 const escapeHtml = (value = "") => String(value).replace(/[&<>'"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c] ?? c));
-function getVideoGenerationConfirmDialog() {
-  let dialog = document.querySelector('#videoGenerationConfirmDialog');
-  if (dialog) return dialog;
-  dialog = document.createElement('dialog');
-  dialog.id = 'videoGenerationConfirmDialog';
-  dialog.setAttribute('aria-labelledby', 'videoGenerationConfirmTitle');
-  dialog.innerHTML = `<h2 id="videoGenerationConfirmTitle">動画生成を開始しますか？</h2>
-    <p data-generation-message></p>
-    <p class="notice">生成中はこの画面を前面に表示し、画面をロックしないでください。音声を使う場合は「生成を開始」を押した操作でWeb Audioを有効化します。</p>
-    <div class="dialog-actions"><button type="button" data-generation-cancel>キャンセル</button><button type="button" class="primary" data-generation-confirm>生成を開始</button></div>`;
-  document.body.appendChild(dialog);
-  return dialog;
-}
-
-
 function getSubtitleSceneSyncDialog() {
   let dialog = document.querySelector('#subtitleSceneSyncDialog');
   if (dialog) return dialog;
@@ -1159,7 +1144,7 @@ async function renderOutput(id) {
     <div class="render-options"><p>予定尺：${Math.ceil(total)}秒。全編生成は実時間と同程度かかります。生成中は画面を閉じずにお待ちください。</p></div>
     <div class="render-progress"><progress id="renderProgress" max="1" value="0"></progress><span id="renderProgressText">0%</span></div>
     <div class="tool-row"><button id="showFirstFrame">🖼 1フレーム確認</button><button class="primary" id="generateVideo" ${capabilities.supported?'':'disabled'}>🎬 動画を生成</button><button class="danger" id="cancelRender" disabled>生成を中止</button></div>
-    <p class="notice">初版は画像＋字幕＋ナレーション＋BGMの動画生成です。生成中はSafariを前面に表示し、画面をロックしないでください。対応形式は端末が自動判定します。</p>
+    <p class="notice">「動画を生成」を押すとすぐ生成を開始します。生成中はSafariを前面に表示し、画面をロックしないでください。画像＋字幕＋ナレーション＋BGMを合成し、対応形式は端末が自動判定します。</p>
     <div id="renderResult" class="render-result" hidden><h3>生成完了</h3><video id="resultVideo" controls playsinline></video><div class="tool-row"><a id="downloadVideo" class="button-link primary" download>動画を保存</a><button id="shareVideo">共有</button></div><p id="resultInfo"></p></div>
   </section>
 
@@ -1224,25 +1209,13 @@ async function renderOutput(id) {
     if(isMvpShortsProject(project)){const mvp=validateMvpShortsOutput(project,currentTotal);if(mvp.errors.length)return alert(`Shortsの全編生成条件を確認してください。\n\n${mvp.errors.join('\n')}`);}
     if(duration>180)return alert('現在の全編生成は3分以内に制限しています。');
 
-    const generationDialog=getVideoGenerationConfirmDialog();
-    generationDialog.querySelector('[data-generation-message]').textContent=`約${Math.ceil(duration)}秒の動画を生成します。`;
-    const startDecision=await new Promise(resolve=>{
-      const closeDialog=()=>{
-        if(typeof generationDialog.close==='function' && generationDialog.open) generationDialog.close();
-        else generationDialog.removeAttribute('open');
-      };
-      const controller=createGenerationStartController({
-        expectsAudio:projectExpectsVideoAudio(project),
-        AudioContextClass:globalThis.AudioContext||globalThis.webkitAudioContext||null,
-        onApprove:audioState=>{closeDialog();resolve({confirmed:true,...audioState});},
-        onCancel:()=>{closeDialog();resolve({confirmed:false});}
-      });
-      generationDialog.querySelector('[data-generation-confirm]').onclick=()=>controller.approve();
-      generationDialog.querySelector('[data-generation-cancel]').onclick=()=>controller.cancel();
-      generationDialog.oncancel=event=>{event.preventDefault();controller.cancel();};
-      if(typeof generationDialog.showModal==='function') generationDialog.showModal();
-      else generationDialog.setAttribute('open','');
+    let startDecision={confirmed:false,audioContext:null,audioStartError:null,audioResumeResult:Promise.resolve(null)};
+    const startController=createGenerationStartController({
+      expectsAudio:projectExpectsVideoAudio(project),
+      AudioContextClass:globalThis.AudioContext||globalThis.webkitAudioContext||null,
+      onApprove:audioState=>{startDecision={confirmed:true,...audioState};}
     });
+    startController.approve();
     if(!startDecision.confirmed)return;
 
     const expectedSceneNarrations=scenes.filter(scene=>scene?.narration?.audioData||scene?.narration?.mediaRef?.id).length;
