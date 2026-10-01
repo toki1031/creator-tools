@@ -1,3 +1,5 @@
+import { STANDARD_BGM_LIBRARY_VERSION, getStandardBgmPreset, isExplicitNoBgm, selectStandardBgmPreset } from './standardBgmLibrary.js';
+
 function clean(value=''){ return String(value??'').trim(); }
 
 export function isProceduralBgm(bgm){
@@ -7,45 +9,62 @@ export function isProceduralBgm(bgm){
   );
 }
 
-export function createProceduralBgmSettings(guidance=[]){
-  const items=Array.isArray(guidance)?guidance:[guidance];
-  const text=items.map(clean).filter(Boolean).join(' ');
-  if(!text)return null;
-  const calm=/静か|落ち着|教養|documentary|ドキュメンタリー|calm/i.test(text);
-  const preset=calm?'calm-documentary':'calm-documentary';
+export function createStandardBgmSettingsFromPreset(presetId='calm-documentary',{guidance='',selection='manual'}={}){
+  const preset=getStandardBgmPreset(presetId);
   return {
     source:'procedural',
-    title:'Creator OS 自動BGM',
-    category:calm?'calm':'calm',
-    volume:0.08,
+    title:`Creator OS標準BGM｜${preset.label}`,
+    category:preset.category,
+    volume:preset.defaultVolume,
     ducking:true,
     fadeInSec:1.5,
     fadeOutSec:2.5,
     loop:true,
-    license:'Creator OS内生成（外部音源不使用）',
+    license:'Creator OS標準BGM（外部音源不使用・クレジット不要）',
     credit:'',
     audioData:'',
     fileName:'',
     mimeType:'',
-    procedural:{preset,guidance:text}
+    procedural:{
+      preset:preset.id,
+      libraryVersion:STANDARD_BGM_LIBRARY_VERSION,
+      selection,
+      guidance:clean(guidance)
+    }
   };
 }
 
-const PRESETS={
-  'calm-documentary':{
-    loopSec:16,
-    chordSec:4,
-    chords:[
-      [146.83,220.00,293.66,329.63],
-      [116.54,174.61,220.00,293.66],
-      [174.61,261.63,392.00,440.00],
-      [130.81,196.00,293.66,329.63]
-    ]
+export function createProceduralBgmSettings(guidance=[],context={}){
+  const items=Array.isArray(guidance)?guidance:[guidance];
+  const text=items.map(clean).filter(Boolean).join(' ');
+  if(isExplicitNoBgm(items)){
+    return {
+      source:'none',
+      title:'BGMなし',
+      category:'calm',
+      volume:0,
+      ducking:true,
+      fadeInSec:0,
+      fadeOutSec:0,
+      loop:false,
+      license:'',
+      credit:'',
+      audioData:'',
+      fileName:'',
+      mimeType:''
+    };
   }
-};
+  const preset=selectStandardBgmPreset({
+    guidance:items,
+    tone:context?.tone,
+    objective:context?.objective,
+    genre:context?.genre
+  });
+  return createStandardBgmSettingsFromPreset(preset?.id||'calm-documentary',{guidance:text,selection:'auto'});
+}
 
 function presetConfig(name='calm-documentary'){
-  return PRESETS[name]||PRESETS['calm-documentary'];
+  return getStandardBgmPreset(name);
 }
 function clamp(value,min,max){return Math.min(max,Math.max(min,value));}
 function mixChord(chord,t){
@@ -59,7 +78,7 @@ function mixChord(chord,t){
   });
   return sum;
 }
-function pluck(chord,tInChord){
+function pluck(chord,tInChord,amount=0.12){
   const beat=Math.floor(tInChord);
   const local=tInChord-beat;
   const index=beat%chord.length;
@@ -68,7 +87,7 @@ function pluck(chord,tInChord){
   return (
     Math.sin(Math.PI*2*frequency*local)+
     Math.sin(Math.PI*2*frequency*2*local)*0.18
-  )*0.12*env;
+  )*amount*env;
 }
 export function proceduralBgmSampleAt(timeSec,{preset='calm-documentary'}={}){
   const config=presetConfig(preset);
@@ -83,8 +102,9 @@ export function proceduralBgmSampleAt(timeSec,{preset='calm-documentary'}={}){
   const current=mixChord(config.chords[chordIndex],t);
   const next=mixChord(config.chords[nextIndex],t);
   const pad=current*(1-smoothBlend)+next*smoothBlend;
-  const pulse=0.90+Math.sin(Math.PI*2*(1/8)*t)*0.10;
-  return clamp((pad*pulse+pluck(config.chords[chordIndex],inChord))*0.68,-1,1);
+  const pulseHz=Number(config.pulseHz)||0.125;
+  const pulse=0.90+Math.sin(Math.PI*2*pulseHz*t)*0.10;
+  return clamp((pad*pulse+pluck(config.chords[chordIndex],inChord,Number(config.pluckGain)||0.12))*(Number(config.padGain)||0.68),-1,1);
 }
 
 export function createProceduralPcmSamples({preset='calm-documentary',durationSec=16,sampleRate=22050}={}){
