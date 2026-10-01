@@ -8,10 +8,10 @@ test('BGM UI exposes Creator OS procedural source and output readiness recognize
   assert.match(source,/isProceduralBgm\(project\.bgm\)/);
   assert.match(source,/Creator OS内生成/);
   assert.match(source,/自動BGMを6秒試聴/);
-  assert.match(source,/createProceduralBgmGraph\(context,master/);
-  assert.match(source,/createProceduralPreviewCue\(context,master/);
-  assert.match(source,/getProceduralPreviewVolume\(root\.querySelector\('#volume'\)\.value\)/);
-  assert.match(source,/確認音 → BGMを試聴中/);
+  assert.match(source,/createProceduralPreviewWavBlob/);
+  assert.match(source,/URL\.createObjectURL\(createProceduralPreviewWavBlob/);
+  assert.match(source,/await player\.play\(\)/);
+  assert.match(source,/通常の音声プレーヤーで試聴中/);
   assert.match(source,/selected==='procedural'.*calm-documentary/s);
 });
 
@@ -21,4 +21,5 @@ test('video renderer mixes procedural BGM through the normal BGM gain path',asyn
   assert.match(source,/createProceduralBgmGraph\(context, bgmGain/);
   assert.match(source,/bgmGain\.gain\.value = 0/);
   assert.match(source,/project\.bgm\?\.ducking !== false/);
+  assert.match(source,/ensurePlaybackAudioSession\(\)/);
 });
