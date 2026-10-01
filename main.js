@@ -8,7 +8,8 @@ import { addImageAsset, assetUsageCount, assetUsageScenes, ensureMediaLibrary, e
 import { resolveSceneImageForDisplay } from "./sceneImageDisplay.js";
 import { runMultiSceneAssetPipeline } from "./multiSceneAssetPipeline.js";
 import { normalizeLegacyAutoProductionProject } from "./autoProductionCompatibility.js";
-import { createProceduralPreviewWavBlob, ensurePlaybackAudioSession, isProceduralBgm } from "./proceduralBgm.js";
+import { createProceduralPreviewWavBlob, createStandardBgmSettingsFromPreset, ensurePlaybackAudioSession, isProceduralBgm } from "./proceduralBgm.js";
+import { listStandardBgmPresets } from "./standardBgmLibrary.js";
 import { createAudioAssetIdFromFile, normalizeAudioAssetId } from "./audioAssetIdentity.js";
 import { normalizeSubtitleOffset, resolveEffectiveSubtitlePosition, resolveSubtitleYRatio } from "./subtitlePosition.js";
 import { assessMvpVideoResult, describeVideoExportFailure, isMvpShortsProject, validateMvpShortsOutput } from "./videoMvp.js";
@@ -723,11 +724,12 @@ async function renderBgm(id) {
   const project=await getProject(id); if(!project){goHome();return;}
   ensureProjectSettings(project);
   const b=project.bgm, st=project.subtitleStyle, scenes=project.scenes||[];
+  const standardBgms=listStandardBgmPresets();
   root.innerHTML=`<main class="shell editor-shell">
     <header class="editor-head"><button id="back">←</button><div><span>${labelPlatform(project.platform)}</span><h1>${escapeHtml(project.title)}</h1></div><button id="menu">•••</button></header>
     <nav class="steps"><button id="stepAi">0 AIスタッフ</button><button id="stepScript">1 台本</button><button id="stepScenes">2 シーン・ナレーション</button><button class="active">3 字幕・BGM</button><button id="stepOutput">4 出力</button></nav>
     <section class="editor-card"><div class="section-head"><div><h2>BGM・音源</h2><p>音源の種類、音量、ループ、利用条件を保存します。</p></div><span id="saveState">保存済み</span></div>
-      <div class="form-grid"><label>音源の種類<select id="source"><option value="none">BGMなし</option><option value="upload">自分の音源をアップロード</option><option value="free">無料BGM（情報を登録）</option><option value="procedural">Creator OS 自動BGM（無料・外部素材なし）</option><option value="ai">AI生成BGM（後で追加）</option></select></label><label>雰囲気<select id="category"><option value="calm">教養・落ち着き</option><option value="history">歴史・重厚</option><option value="challenge">挑戦・前進</option><option value="emotion">感動・余韻</option><option value="rain">雨・環境音</option><option value="sleep">睡眠・リラックス</option></select></label></div>
+      <div class="form-grid"><label>音源の種類<select id="source"><option value="none">BGMなし</option><option value="upload">自分の音源をアップロード</option><option value="free">無料BGM（情報を登録）</option><option value="procedural">Creator OS 標準BGM</option><option value="ai">AI生成BGM（後で追加）</option></select></label><label>雰囲気<select id="category"><option value="calm">教養・落ち着き</option><option value="history">歴史・重厚</option><option value="challenge">挑戦・前進</option><option value="emotion">感動・余韻</option><option value="rain">雨・環境音</option><option value="sleep">睡眠・リラックス</option></select></label><label id="standardBgmField">標準BGM<select id="standardBgmPreset">${standardBgms.map(item=>`<option value="${escapeHtml(item.id)}">${escapeHtml(item.label)}</option>`).join("")}</select><small id="standardBgmDescription"></small></label></div>
       <label>BGM名<input id="bgmTitle" value="${escapeHtml(b.title||"")}" placeholder="例：静かなピアノと雨音"></label>
       <label>音源ファイル<input id="audioFile" type="file" accept="audio/*,.mp3,.m4a,.aac,.wav"><small id="fileName">${escapeHtml(b.fileName||"未登録")}</small><small>MP3 / M4A / AAC / WAV対応。MOV / MP4などの動画は、まず音声ファイルにして登録してください。</small></label>
       <audio id="audioPreview" controls ${b.audioData?`src="${b.audioData}"`:""}></audio><div class="tool-row"><button type="button" id="previewProceduralBgm" ${isProceduralBgm(b)?"":"hidden"}>▶ 自動BGMを8秒試聴</button><span id="proceduralBgmStatus" class="muted"></span></div>
@@ -760,6 +762,7 @@ async function renderBgm(id) {
     <section class="actions"><button id="backScenes">← シーンへ</button><button id="exportJson">プロジェクトバックアップJSON</button><button class="primary" id="nextOutput">次へ：出力設定</button></section>
   </main>`;
   root.querySelector('#source').value=b.source; root.querySelector('#category').value=b.category;
+  root.querySelector('#standardBgmPreset').value=b.procedural?.preset||'calm-documentary';
   root.querySelector('#subtitlePreset').value=st.preset||'standard'; root.querySelector('#subtitlePosition').value=st.position; root.querySelector('#maxLines').value=String(st.maxLines);
   attachProjectMenu(project,root.querySelector('#menu'),()=>goStudio(studioForGenre(project.genre)));
 
@@ -789,7 +792,16 @@ async function renderBgm(id) {
   const updateLabels=()=>{root.querySelector('#volumeValue').textContent=`${Math.round(Number(root.querySelector('#volume').value)*100)}%`;root.querySelector('#fontSizeValue').textContent=root.querySelector('#fontSize').value;const offset=normalizeSubtitleOffset(root.querySelector('#positionOffset').value);root.querySelector('#positionOffsetValue').textContent=`${offset>0?'+':''}${offset}%`;root.querySelector('#outlineWidthValue').textContent=root.querySelector('#outlineWidth').value;root.querySelector('#backgroundOpacityValue').textContent=`${Math.round(Number(root.querySelector('#backgroundOpacity').value)*100)}%`;};
   const proceduralPreviewButton=root.querySelector('#previewProceduralBgm');
   const proceduralPreviewStatus=root.querySelector('#proceduralBgmStatus');
-  const updateProceduralPreviewVisibility=()=>{if(proceduralPreviewButton)proceduralPreviewButton.hidden=root.querySelector('#source').value!=='procedural';};
+  const standardBgmField=root.querySelector('#standardBgmField');
+  const standardBgmSelect=root.querySelector('#standardBgmPreset');
+  const standardBgmDescription=root.querySelector('#standardBgmDescription');
+  const updateProceduralPreviewVisibility=()=>{
+    const active=root.querySelector('#source').value==='procedural';
+    if(proceduralPreviewButton)proceduralPreviewButton.hidden=!active;
+    if(standardBgmField)standardBgmField.hidden=!active;
+    const selected=standardBgms.find(item=>item.id===standardBgmSelect?.value);
+    if(standardBgmDescription)standardBgmDescription.textContent=selected?.description||'';
+  };
   let proceduralPreviewObjectUrl='';
   if(proceduralPreviewButton) proceduralPreviewButton.onclick=async()=>{
     proceduralPreviewButton.disabled=true;
@@ -798,7 +810,7 @@ async function renderBgm(id) {
       const player=root.querySelector('#audioPreview');
       if(!player)throw new Error('試聴プレーヤーを初期化できません。');
       if(proceduralPreviewObjectUrl)URL.revokeObjectURL(proceduralPreviewObjectUrl);
-      proceduralPreviewObjectUrl=URL.createObjectURL(createProceduralPreviewWavBlob({durationSec:8}));
+      proceduralPreviewObjectUrl=URL.createObjectURL(createProceduralPreviewWavBlob({preset:b.procedural?.preset||standardBgmSelect?.value||'calm-documentary',durationSec:8}));
       player.src=proceduralPreviewObjectUrl;
       player.currentTime=0;
       proceduralPreviewStatus.textContent='通常の音声プレーヤーで試聴中…';
@@ -812,7 +824,36 @@ async function renderBgm(id) {
     }
   };
 
-  ['source','category','bgmTitle','license','credit'].forEach(k=>root.querySelector('#'+k).oninput=()=>{if(k==='source'){const selected=root.querySelector('#source').value;if(selected==='procedural'&&!b.procedural?.preset)b.procedural={preset:'calm-documentary',guidance:'Creator OS 自動BGM'};updateProceduralPreviewVisibility();}updateLabels();save();});
+  if(standardBgmSelect) standardBgmSelect.onchange=()=>{
+    const previousVolume=Number(root.querySelector('#volume').value);
+    const settings=createStandardBgmSettingsFromPreset(standardBgmSelect.value,{selection:'manual'});
+    Object.assign(b,settings);
+    if(Number.isFinite(previousVolume)&&previousVolume>0)b.volume=previousVolume;
+    root.querySelector('#source').value='procedural';
+    root.querySelector('#category').value=b.category;
+    root.querySelector('#bgmTitle').value=b.title;
+    root.querySelector('#license').value=b.license;
+    root.querySelector('#credit').value=b.credit;
+    root.querySelector('#volume').value=String(b.volume);
+    updateProceduralPreviewVisibility();
+    updateLabels();
+    save();
+  };
+  ['source','category','bgmTitle','license','credit'].forEach(k=>root.querySelector('#'+k).oninput=()=>{
+    if(k==='source'){
+      const selected=root.querySelector('#source').value;
+      if(selected==='procedural'&&!b.procedural?.preset){
+        Object.assign(b,createStandardBgmSettingsFromPreset(standardBgmSelect?.value||'calm-documentary',{selection:'manual'}));
+        root.querySelector('#category').value=b.category;
+        root.querySelector('#bgmTitle').value=b.title;
+        root.querySelector('#license').value=b.license;
+        root.querySelector('#credit').value=b.credit;
+        root.querySelector('#volume').value=String(b.volume);
+      }
+      updateProceduralPreviewVisibility();
+    }
+    updateLabels();save();
+  });
   const bgmFadeInBeforeByElement=new WeakMap();
 const fadeInEl=root.querySelector('#fadeIn');
 const rememberBgmFadeInBefore=el=>{if(bgmFadeInBeforeByElement.has(el))return;bgmFadeInBeforeByElement.set(el,snapshotBgmFadeIn(el.value));};
