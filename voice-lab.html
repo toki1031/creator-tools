@@ -131,7 +131,8 @@ $('#autoSyncScenes').onclick=async()=>{
     const ready=scenes.filter(scene=>Boolean(scene?.narration?.audioData||scene?.narration?.mediaRef?.id)).length;
     if(!scenes.length)throw new Error('シーンがありません。');
     if(ready<scenes.length)throw new Error(`ナレーション同期が完了していません：${ready}/${scenes.length} Scene`);
-    setLog('#autoSyncStatus',`全Scene同期完了 ✓  ${ready}/${scenes.length} Scene\n次は「字幕・BGM」へ進めます。`,'ok');
+    setLog('#autoSyncStatus',`全Scene同期完了 ✓  ${ready}/${scenes.length} Scene\n字幕・BGMへ移動します…`,'ok');
+    location.href=`./index.html#/project/${encodeURIComponent(projectId)}/bgm`;
   }catch(e){
     setLog('#autoSyncStatus','自動同期を完了できませんでした：\n'+(e?.message||e),'bad');
   }finally{
