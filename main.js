@@ -8,7 +8,7 @@ import { addImageAsset, assetUsageCount, assetUsageScenes, ensureMediaLibrary, e
 import { resolveSceneImageForDisplay } from "./sceneImageDisplay.js";
 import { runMultiSceneAssetPipeline } from "./multiSceneAssetPipeline.js";
 import { normalizeLegacyAutoProductionProject } from "./autoProductionCompatibility.js";
-import { createProceduralBgmGraph, createProceduralPreviewCue, getProceduralPreviewVolume, isProceduralBgm } from "./proceduralBgm.js";
+import { createProceduralPreviewWavBlob, ensurePlaybackAudioSession, isProceduralBgm } from "./proceduralBgm.js";
 import { createAudioAssetIdFromFile, normalizeAudioAssetId } from "./audioAssetIdentity.js";
 import { normalizeSubtitleOffset, resolveEffectiveSubtitlePosition, resolveSubtitleYRatio } from "./subtitlePosition.js";
 import { assessMvpVideoResult, describeVideoExportFailure, isMvpShortsProject, validateMvpShortsOutput } from "./videoMvp.js";
@@ -790,31 +790,25 @@ async function renderBgm(id) {
   const proceduralPreviewButton=root.querySelector('#previewProceduralBgm');
   const proceduralPreviewStatus=root.querySelector('#proceduralBgmStatus');
   const updateProceduralPreviewVisibility=()=>{if(proceduralPreviewButton)proceduralPreviewButton.hidden=root.querySelector('#source').value!=='procedural';};
+  let proceduralPreviewObjectUrl='';
   if(proceduralPreviewButton) proceduralPreviewButton.onclick=async()=>{
-    const AudioContextClass=globalThis.AudioContext||globalThis.webkitAudioContext;
-    if(!AudioContextClass)return alert('この端末では自動BGMの試聴に必要なWeb Audioを利用できません。');
     proceduralPreviewButton.disabled=true;
-    let context=null;
     try{
-      context=new AudioContextClass();
-      if(context.state!=='running')await context.resume();
-      const master=context.createGain();
-      master.gain.value=getProceduralPreviewVolume(root.querySelector('#volume').value);
-      master.connect(context.destination);
-      const startAt=context.currentTime;
-      createProceduralPreviewCue(context,master,{baseTime:startAt});
-      const graph=createProceduralBgmGraph(context,master,{preset:b.procedural?.preset||'calm-documentary',durationSec:6});
-      graph.start(startAt+0.45);
-      proceduralPreviewStatus.textContent='確認音 → BGMを試聴中…';
-      await new Promise(resolve=>setTimeout(resolve,6200));
-      proceduralPreviewStatus.textContent='試聴完了 ✓';
+      ensurePlaybackAudioSession();
+      const player=root.querySelector('#audioPreview');
+      if(!player)throw new Error('試聴プレーヤーを初期化できません。');
+      if(proceduralPreviewObjectUrl)URL.revokeObjectURL(proceduralPreviewObjectUrl);
+      proceduralPreviewObjectUrl=URL.createObjectURL(createProceduralPreviewWavBlob({durationSec:6.6}));
+      player.src=proceduralPreviewObjectUrl;
+      player.currentTime=0;
+      proceduralPreviewStatus.textContent='通常の音声プレーヤーで試聴中…';
+      await player.play();
+      player.onended=()=>{proceduralPreviewStatus.textContent='試聴完了 ✓';proceduralPreviewButton.disabled=false;};
     }catch(error){
       console.error(error);
       proceduralPreviewStatus.textContent='試聴できませんでした';
-      alert(`自動BGMを試聴できませんでした：${error?.message||'不明なエラー'}`);
-    }finally{
-      try{if(context&&context.state!=='closed')await context.close();}catch{}
       proceduralPreviewButton.disabled=false;
+      alert(`自動BGMを試聴できませんでした：${error?.message||'不明なエラー'}`);
     }
   };
 
