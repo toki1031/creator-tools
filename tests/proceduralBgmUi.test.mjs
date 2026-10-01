@@ -12,7 +12,7 @@ test('BGM UI exposes Creator OS procedural source and output readiness recognize
   assert.match(source,/listStandardBgmPresets\(\)/);
   assert.match(source,/createStandardBgmSettingsFromPreset\(standardBgmSelect\.value/);
   assert.match(source,/createProceduralPreviewWavBlob/);
-  assert.match(source,/URL\.createObjectURL\(createProceduralPreviewWavBlob\(\{durationSec:8\}\)\)/);
+  assert.match(source,/URL\.createObjectURL\(createProceduralPreviewWavBlob\(\{preset:.*durationSec:8\}\)\)/);
   assert.match(source,/await player\.play\(\)/);
   assert.match(source,/通常の音声プレーヤーで試聴中/);
   assert.match(source,/selected==='procedural'.*calm-documentary/s);
