@@ -24,3 +24,21 @@ test('uses generated narration duration as a proposed scene duration', () => {
   assert.ok(plan.project.scenes[0].durationSec < 8);
   assert.equal(plan.steps.find(step => step.id === 'duration').status, 'prepared');
 });
+
+test('treats MediaRef narration as generated in the production plan',()=>{
+  const project={
+    id:'p-mediaref',
+    scenes:[{
+      id:'s1',
+      text:'本文',
+      subtitleText:'字幕',
+      durationSec:3,
+      imageAssetId:'a1',
+      narration:{mediaRef:{id:'narr-1'},durationSec:3}
+    }]
+  };
+  const plan=buildProductionPlan(project);
+  const narration=plan.steps.find(step=>step.id==='narration');
+  assert.equal(narration.status,'ready');
+  assert.equal(narration.count,0);
+});

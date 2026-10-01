@@ -2,6 +2,7 @@ import { splitIntoScenes } from './qualityLogic.js';
 import { syncProjectSceneDurationsToNarration } from './productionEfficiency.js';
 import { inspectProductionProject } from './productionPreflight.js';
 import { safeAutofillProject } from './productionSafeAutofill.js';
+import { hasReadySceneNarration } from './productionReadiness.js';
 
 export const PRODUCTION_PIPELINE_VERSION = '1.2.1';
 
@@ -38,7 +39,7 @@ export function buildProductionPlan(project, options = {}) {
   const missingImages = (prepared.scenes || []).filter(scene => !scene.imageAssetId && !scene.imageData).length;
   steps.push({ id: 'images', status: missingImages ? 'needs-input' : 'ready', count: missingImages, message: missingImages ? `画像未設定 ${missingImages} Scene` : '画像準備済み' });
 
-  const missingNarration = (prepared.scenes || []).filter(scene => !scene?.narration?.audioData).length;
+  const missingNarration = (prepared.scenes || []).filter(scene => !hasReadySceneNarration(scene)).length;
   steps.push({ id: 'narration', status: missingNarration ? 'needs-generation' : 'ready', count: missingNarration, message: missingNarration ? `音声未生成 ${missingNarration} Scene` : '音声準備済み' });
 
   const synced = syncProjectSceneDurationsToNarration(prepared);
