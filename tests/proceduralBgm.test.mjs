@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createProceduralBgmGraph, createProceduralBgmSettings, createProceduralPreviewWavBytes, createProceduralPreviewWavBlob, ensurePlaybackAudioSession, isProceduralBgm } from '../proceduralBgm.js';
+import { createProceduralBgmGraph, createProceduralBgmSettings, createProceduralPcmSamples, createProceduralPreviewWavBytes, createProceduralPreviewWavBlob, ensurePlaybackAudioSession, isProceduralBgm, proceduralBgmSampleAt } from '../proceduralBgm.js';
 
 test('creates a calm documentary procedural BGM setting from production guidance',()=>{
   const bgm=createProceduralBgmSettings(['静かなドキュメンタリーBGM']);
@@ -62,4 +62,39 @@ test('requests playback audio session when the platform exposes it',()=>{
   assert.equal(ensurePlaybackAudioSession(navigatorLike),true);
   assert.equal(navigatorLike.audioSession.type,'playback');
   assert.equal(ensurePlaybackAudioSession({}),false);
+});
+
+test('calm documentary synthesis changes harmony over time instead of holding one tone',()=>{
+  const points=[0.8,4.8,8.8,12.8].map(time=>proceduralBgmSampleAt(time));
+  assert.ok(points.every(Number.isFinite));
+  assert.ok(new Set(points.map(value=>value.toFixed(5))).size>=3);
+  const pcm=createProceduralPcmSamples({durationSec:8,sampleRate:8000});
+  assert.equal(pcm.length,64000);
+  const firstEnergy=pcm.slice(4000,12000).reduce((sum,v)=>sum+Math.abs(v),0);
+  const secondEnergy=pcm.slice(36000,44000).reduce((sum,v)=>sum+Math.abs(v),0);
+  assert.ok(firstEnergy>10);
+  assert.ok(secondEnergy>10);
+});
+
+test('Web Audio graph uses a loopable generated buffer when buffer APIs exist',()=>{
+  let copied=null,started=[],stopped=[];
+  const source={buffer:null,loop:false,connect(){},start(time){started.push(time);},stop(time){stopped.push(time);}};
+  const context={
+    sampleRate:8000,
+    createGain(){return{gain:{value:0},connect(){}};},
+    createBuffer(channels,length,rate){
+      assert.equal(channels,1);
+      assert.equal(rate,8000);
+      return{copyToChannel(samples){copied=samples;},getChannelData(){return new Float32Array(length);}};
+    },
+    createBufferSource(){return source;}
+  };
+  const graph=createProceduralBgmGraph(context,{},{durationSec:60});
+  assert.equal(graph.sources.length,1);
+  assert.ok(copied instanceof Float32Array);
+  assert.ok(copied.some(value=>Math.abs(value)>0.001));
+  assert.equal(source.loop,true);
+  graph.start(2);
+  assert.deepEqual(started,[2]);
+  assert.ok(Math.abs(stopped[0]-62.2)<1e-9);
 });
