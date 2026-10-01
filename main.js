@@ -8,7 +8,7 @@ import { addImageAsset, assetUsageCount, assetUsageScenes, ensureMediaLibrary, e
 import { resolveSceneImageForDisplay } from "./sceneImageDisplay.js";
 import { runMultiSceneAssetPipeline } from "./multiSceneAssetPipeline.js";
 import { normalizeLegacyAutoProductionProject } from "./autoProductionCompatibility.js";
-import { createProceduralBgmGraph, isProceduralBgm } from "./proceduralBgm.js";
+import { createProceduralBgmGraph, createProceduralPreviewCue, getProceduralPreviewVolume, isProceduralBgm } from "./proceduralBgm.js";
 import { createAudioAssetIdFromFile, normalizeAudioAssetId } from "./audioAssetIdentity.js";
 import { normalizeSubtitleOffset, resolveEffectiveSubtitlePosition, resolveSubtitleYRatio } from "./subtitlePosition.js";
 import { assessMvpVideoResult, describeVideoExportFailure, isMvpShortsProject, validateMvpShortsOutput } from "./videoMvp.js";
@@ -799,11 +799,13 @@ async function renderBgm(id) {
       context=new AudioContextClass();
       if(context.state!=='running')await context.resume();
       const master=context.createGain();
-      master.gain.value=Math.max(0,Math.min(0.5,Number(root.querySelector('#volume').value)||0.08));
+      master.gain.value=getProceduralPreviewVolume(root.querySelector('#volume').value);
       master.connect(context.destination);
+      const startAt=context.currentTime;
+      createProceduralPreviewCue(context,master,{baseTime:startAt});
       const graph=createProceduralBgmGraph(context,master,{preset:b.procedural?.preset||'calm-documentary',durationSec:6});
-      graph.start(context.currentTime);
-      proceduralPreviewStatus.textContent='試聴中…';
+      graph.start(startAt+0.45);
+      proceduralPreviewStatus.textContent='確認音 → BGMを試聴中…';
       await new Promise(resolve=>setTimeout(resolve,6200));
       proceduralPreviewStatus.textContent='試聴完了 ✓';
     }catch(error){
