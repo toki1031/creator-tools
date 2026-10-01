@@ -132,7 +132,7 @@ $('#autoSyncScenes').onclick=async()=>{
     if(!scenes.length)throw new Error('シーンがありません。');
     if(ready<scenes.length)throw new Error(`ナレーション同期が完了していません：${ready}/${scenes.length} Scene`);
     setLog('#autoSyncStatus',`全Scene同期完了 ✓  ${ready}/${scenes.length} Scene\n字幕・BGMへ移動します…`,'ok');
-    location.href=`./index.html#/project/${encodeURIComponent(projectId)}/bgm`;
+    location.href=`./index.html?autoContinue=output#/project/${encodeURIComponent(projectId)}/bgm`;
   }catch(e){
     setLog('#autoSyncStatus','自動同期を完了できませんでした：\n'+(e?.message||e),'bad');
   }finally{
