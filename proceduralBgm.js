@@ -73,25 +73,64 @@ export function createProceduralBgmGraph(context,destination,{preset='calm-docum
   };
 }
 
-export function createProceduralPreviewCue(context,destination,{baseTime=0}={}){
-  if(!context||typeof context.createOscillator!=='function'||typeof context.createGain!=='function'){
-    throw new Error('試聴確認音に必要なWeb Audio機能を利用できません。');
-  }
-  const oscillator=context.createOscillator();
-  const gain=context.createGain();
-  oscillator.type='sine';
-  oscillator.frequency.value=659.25;
-  gain.gain.value=0.24;
-  oscillator.connect(gain);
-  gain.connect(destination);
-  const start=Math.max(0,Number(baseTime)||0);
-  oscillator.start(start);
-  if(typeof oscillator.stop==='function') oscillator.stop(start+0.28);
-  return {oscillator,gain,startTime:start,stopTime:start+0.28};
+function writeAscii(view,offset,text){
+  for(let i=0;i<text.length;i++)view.setUint8(offset+i,text.charCodeAt(i));
 }
+function clampSample(value){return Math.max(-1,Math.min(1,value));}
+export function createProceduralPreviewWavBytes({durationSec=6.6,sampleRate=22050}={}){
+  const duration=Math.max(1,Math.min(15,Number(durationSec)||6.6));
+  const rate=Math.max(8000,Math.min(48000,Math.round(Number(sampleRate)||22050)));
+  const samples=Math.floor(duration*rate);
+  const bytes=new Uint8Array(44+samples*2);
+  const view=new DataView(bytes.buffer);
+  writeAscii(view,0,'RIFF');
+  view.setUint32(4,36+samples*2,true);
+  writeAscii(view,8,'WAVE');
+  writeAscii(view,12,'fmt ');
+  view.setUint32(16,16,true);
+  view.setUint16(20,1,true);
+  view.setUint16(22,1,true);
+  view.setUint32(24,rate,true);
+  view.setUint32(28,rate*2,true);
+  view.setUint16(32,2,true);
+  view.setUint16(34,16,true);
+  writeAscii(view,36,'data');
+  view.setUint32(40,samples*2,true);
 
-export function getProceduralPreviewVolume(projectVolume){
-  const value=Number(projectVolume);
-  const scaled=Number.isFinite(value)&&value>0?value*3:0.24;
-  return Math.max(0.22,Math.min(0.45,scaled));
+  const bgmStart=0.45;
+  for(let i=0;i<samples;i++){
+    const t=i/rate;
+    let value=0;
+    if(t<0.28){
+      const cueEnv=Math.min(1,t/0.02)*Math.min(1,(0.28-t)/0.04);
+      value+=Math.sin(Math.PI*2*659.25*t)*0.55*cueEnv;
+    }
+    if(t>=bgmStart){
+      const x=t-bgmStart;
+      const fadeIn=Math.min(1,x/0.35);
+      const fadeOut=Math.min(1,Math.max(0,duration-t)/0.35);
+      const env=fadeIn*fadeOut;
+      const pad=(
+        Math.sin(Math.PI*2*146.83*x)*0.34+
+        Math.sin(Math.PI*2*220*x)*0.25+
+        Math.sin(Math.PI*2*293.66*x)*0.14
+      );
+      value+=pad*0.62*env;
+    }
+    view.setInt16(44+i*2,Math.round(clampSample(value)*32767),true);
+  }
+  return bytes;
+}
+export function createProceduralPreviewWavBlob(options={}){
+  return new Blob([createProceduralPreviewWavBytes(options)],{type:'audio/wav'});
+}
+export function ensurePlaybackAudioSession(navigatorLike=globalThis.navigator){
+  try{
+    const session=navigatorLike?.audioSession;
+    if(!session)return false;
+    session.type='playback';
+    return true;
+  }catch{
+    return false;
+  }
 }
