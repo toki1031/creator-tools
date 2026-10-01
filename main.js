@@ -730,7 +730,7 @@ async function renderBgm(id) {
       <div class="form-grid"><label>音源の種類<select id="source"><option value="none">BGMなし</option><option value="upload">自分の音源をアップロード</option><option value="free">無料BGM（情報を登録）</option><option value="procedural">Creator OS 自動BGM（無料・外部素材なし）</option><option value="ai">AI生成BGM（後で追加）</option></select></label><label>雰囲気<select id="category"><option value="calm">教養・落ち着き</option><option value="history">歴史・重厚</option><option value="challenge">挑戦・前進</option><option value="emotion">感動・余韻</option><option value="rain">雨・環境音</option><option value="sleep">睡眠・リラックス</option></select></label></div>
       <label>BGM名<input id="bgmTitle" value="${escapeHtml(b.title||"")}" placeholder="例：静かなピアノと雨音"></label>
       <label>音源ファイル<input id="audioFile" type="file" accept="audio/*,.mp3,.m4a,.aac,.wav"><small id="fileName">${escapeHtml(b.fileName||"未登録")}</small><small>MP3 / M4A / AAC / WAV対応。MOV / MP4などの動画は、まず音声ファイルにして登録してください。</small></label>
-      <audio id="audioPreview" controls ${b.audioData?`src="${b.audioData}"`:""}></audio><div class="tool-row"><button type="button" id="previewProceduralBgm" ${isProceduralBgm(b)?"":"hidden"}>▶ 自動BGMを6秒試聴</button><span id="proceduralBgmStatus" class="muted"></span></div>
+      <audio id="audioPreview" controls ${b.audioData?`src="${b.audioData}"`:""}></audio><div class="tool-row"><button type="button" id="previewProceduralBgm" ${isProceduralBgm(b)?"":"hidden"}>▶ 自動BGMを8秒試聴</button><span id="proceduralBgmStatus" class="muted"></span></div>
     </section>
     <section class="editor-card"><h2>ミックス設定</h2><div class="form-grid"><label>音量<div class="range-line"><input id="volume" type="range" min="0" max="0.5" step="0.01" value="${b.volume}"><span id="volumeValue">${Math.round(b.volume*100)}%</span></div></label><label>フェードイン<input id="fadeIn" type="number" min="0" max="30" step="0.5" value="${b.fadeInSec}">秒</label><label>フェードアウト<input id="fadeOut" type="number" min="0" max="30" step="0.5" value="${b.fadeOutSec}">秒</label><label class="check"><input id="ducking" type="checkbox" ${b.ducking?"checked":""}>ナレーション中は自動で音量を下げる</label><label class="check"><input id="loop" type="checkbox" ${b.loop?"checked":""}>動画の長さに合わせてループ</label></div></section>
     <section class="editor-card"><h2>利用条件</h2><label>ライセンス・利用条件<input id="license" value="${escapeHtml(b.license||"")}" placeholder="例：商用利用可・クレジット不要"></label><label>クレジット表記<input id="credit" value="${escapeHtml(b.credit||"")}" placeholder="必要な場合のみ入力"></label><p class="notice">無料BGMを使う場合は、配布元の最新規約を必ず確認してください。</p></section>
@@ -798,7 +798,7 @@ async function renderBgm(id) {
       const player=root.querySelector('#audioPreview');
       if(!player)throw new Error('試聴プレーヤーを初期化できません。');
       if(proceduralPreviewObjectUrl)URL.revokeObjectURL(proceduralPreviewObjectUrl);
-      proceduralPreviewObjectUrl=URL.createObjectURL(createProceduralPreviewWavBlob({durationSec:6.6}));
+      proceduralPreviewObjectUrl=URL.createObjectURL(createProceduralPreviewWavBlob({durationSec:8}));
       player.src=proceduralPreviewObjectUrl;
       player.currentTime=0;
       proceduralPreviewStatus.textContent='通常の音声プレーヤーで試聴中…';
