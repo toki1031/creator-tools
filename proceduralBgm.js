@@ -72,3 +72,26 @@ export function createProceduralBgmGraph(context,destination,{preset='calm-docum
     }
   };
 }
+
+export function createProceduralPreviewCue(context,destination,{baseTime=0}={}){
+  if(!context||typeof context.createOscillator!=='function'||typeof context.createGain!=='function'){
+    throw new Error('試聴確認音に必要なWeb Audio機能を利用できません。');
+  }
+  const oscillator=context.createOscillator();
+  const gain=context.createGain();
+  oscillator.type='sine';
+  oscillator.frequency.value=659.25;
+  gain.gain.value=0.24;
+  oscillator.connect(gain);
+  gain.connect(destination);
+  const start=Math.max(0,Number(baseTime)||0);
+  oscillator.start(start);
+  if(typeof oscillator.stop==='function') oscillator.stop(start+0.28);
+  return {oscillator,gain,startTime:start,stopTime:start+0.28};
+}
+
+export function getProceduralPreviewVolume(projectVolume){
+  const value=Number(projectVolume);
+  const scaled=Number.isFinite(value)&&value>0?value*3:0.24;
+  return Math.max(0.22,Math.min(0.45,scaled));
+}
