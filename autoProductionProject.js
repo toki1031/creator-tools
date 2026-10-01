@@ -3,6 +3,7 @@ import { parseProductionRequest } from './productionBriefParser.js';
 import { applyProductionBriefScenes } from './productionBriefScenes.js';
 import { distributeGlobalNarration } from './autoNarrationScenes.js';
 import { createProceduralBgmSettings } from './proceduralBgm.js';
+import { isExplicitNoBgm } from './standardBgmLibrary.js';
 
 export function createAutoProductionProject({ requestText, title = '', genre = 'great-person', platform = 'youtube-shorts', targetDurationSec = 60 } = {}) {
   const request = String(requestText ?? '').trim();
@@ -21,7 +22,8 @@ export function createAutoProductionProject({ requestText, title = '', genre = '
   const displayScript = built.scenes.map(scene => String(scene?.subtitleText || scene?.text || scene?.speechText || '').trim()).filter(Boolean).join('\n\n');
   built.speechScript = narrationScript;
   built.displayScript = displayScript || narrationScript;
-  const autoBgm = createProceduralBgmSettings(brief.bgmGuidance,{tone:brief.tone,objective:brief.objective,genre});
+  const bgmGuidance=isExplicitNoBgm([request])?['BGMなし']:brief.bgmGuidance;
+  const autoBgm = createProceduralBgmSettings(bgmGuidance,{tone:brief.tone,objective:brief.objective,genre});
   if (autoBgm) built.bgm = autoBgm;
   built.autoProduction = {
     mode: 'production-request',
