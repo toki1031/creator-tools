@@ -8,6 +8,7 @@ import { addImageAsset, assetUsageCount, assetUsageScenes, ensureMediaLibrary, e
 import { resolveSceneImageForDisplay } from "./sceneImageDisplay.js";
 import { runMultiSceneAssetPipeline } from "./multiSceneAssetPipeline.js";
 import { evaluateAssetToVoiceHandoff } from "./assetToVoiceHandoff.js";
+import { evaluateBgmToOutputHandoff } from "./bgmToOutputHandoff.js";
 import { normalizeLegacyAutoProductionProject } from "./autoProductionCompatibility.js";
 import { createProceduralPreviewWavBlob, createStandardBgmSettingsFromPreset, ensurePlaybackAudioSession, isProceduralBgm } from "./proceduralBgm.js";
 import { listStandardBgmPresets } from "./standardBgmLibrary.js";
@@ -733,7 +734,7 @@ async function renderBgm(id) {
   const standardBgms=listStandardBgmPresets();
   root.innerHTML=`<main class="shell editor-shell">
     <header class="editor-head"><button id="back">←</button><div><span>${labelPlatform(project.platform)}</span><h1>${escapeHtml(project.title)}</h1></div><button id="menu">•••</button></header>
-    <nav class="steps"><button id="stepAi">0 AIスタッフ</button><button id="stepScript">1 台本</button><button id="stepScenes">2 シーン・ナレーション</button><button class="active">3 字幕・BGM</button><button id="stepOutput">4 出力</button></nav>
+    <nav class="steps"><button id="stepAi">0 AIスタッフ</button><button id="stepScript">1 台本</button><button id="stepScenes">2 シーン・ナレーション</button><button class="active">3 字幕・BGM</button><button id="stepOutput">4 出力</button></nav><p id="autoOutputHandoffStatus" class="notice" hidden aria-live="polite"></p>
     <section class="editor-card"><div class="section-head"><div><h2>BGM・音源</h2><p>音源の種類、音量、ループ、利用条件を保存します。</p></div><span id="saveState">保存済み</span></div>
       <div class="form-grid"><label>音源の種類<select id="source"><option value="none">BGMなし</option><option value="upload">自分の音源をアップロード</option><option value="free">無料BGM（情報を登録）</option><option value="procedural">Creator OS 標準BGM</option><option value="ai">AI生成BGM（後で追加）</option></select></label><label>雰囲気<select id="category"><option value="calm">教養・落ち着き</option><option value="history">歴史・重厚</option><option value="challenge">挑戦・前進</option><option value="emotion">感動・余韻</option><option value="rain">雨・環境音</option><option value="sleep">睡眠・リラックス</option></select></label><label id="standardBgmField">標準BGM<select id="standardBgmPreset">${standardBgms.map(item=>`<option value="${escapeHtml(item.id)}">${escapeHtml(item.label)}</option>`).join("")}</select><small id="standardBgmDescription"></small></label></div>
       <label>BGM名<input id="bgmTitle" value="${escapeHtml(b.title||"")}" placeholder="例：静かなピアノと雨音"></label>
@@ -1119,6 +1120,23 @@ fontSizeEl.onblur=()=>commitSubtitleFontSizeDecision(fontSizeEl);
   root.querySelector('#exportSrt').onclick=()=>{const srt=buildSrt(project);if(!srt.trim())return alert('書き出せる字幕がありません。');downloadText(`${safeName(project.title)}.srt`,srt,'application/x-subrip;charset=utf-8');};
   root.querySelector('#exportJson').onclick=()=>downloadProjectBackup(project);
   updateProceduralPreviewVisibility(); updateLabels(); renderSubtitleEditor(); renderSubtitlePreview();
+  const autoContinueToOutput=new URLSearchParams(location.search).get('autoContinue')==='output';
+  if(autoContinueToOutput){
+    const url=new URL(location.href);
+    url.searchParams.delete('autoContinue');
+    history.replaceState(null,'',`${url.pathname}${url.search}${url.hash}`);
+    const status=root.querySelector('#autoOutputHandoffStatus');
+    const handoff=evaluateBgmToOutputHandoff(project);
+    if(status)status.hidden=false;
+    if(handoff.canContinue){
+      if(status)status.textContent='✓ 字幕・BGM準備済み。出力へ移動します…';
+      project.updatedAt=new Date().toISOString();
+      await saveProject(project);
+      goOutput(id);
+      return;
+    }
+    if(status)status.textContent=`自動制作をここで停止しました：${handoff.reason}`;
+  }
 }
 
 async function renderOutput(id) {
