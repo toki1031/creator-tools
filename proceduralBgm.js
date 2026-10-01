@@ -33,42 +33,125 @@ export function createProceduralBgmSettings(guidance=[]){
 
 const PRESETS={
   'calm-documentary':{
-    voices:[
-      {frequency:146.83,type:'sine',gain:0.20,detune:-3},
-      {frequency:220.00,type:'sine',gain:0.14,detune:2},
-      {frequency:293.66,type:'triangle',gain:0.07,detune:-1}
+    loopSec:16,
+    chordSec:4,
+    chords:[
+      [146.83,220.00,293.66,329.63],
+      [116.54,174.61,220.00,293.66],
+      [174.61,261.63,392.00,440.00],
+      [130.81,196.00,293.66,329.63]
     ]
   }
 };
 
+function presetConfig(name='calm-documentary'){
+  return PRESETS[name]||PRESETS['calm-documentary'];
+}
+function clamp(value,min,max){return Math.min(max,Math.max(min,value));}
+function mixChord(chord,t){
+  let sum=0;
+  const gains=[0.34,0.20,0.12,0.08];
+  chord.forEach((frequency,index)=>{
+    const phase=index*0.37;
+    const fundamental=Math.sin(Math.PI*2*frequency*t+phase);
+    const harmonic=Math.sin(Math.PI*2*frequency*2*t+phase*0.7)*0.12;
+    sum+=(fundamental+harmonic)*gains[index];
+  });
+  return sum;
+}
+function pluck(chord,tInChord){
+  const beat=Math.floor(tInChord);
+  const local=tInChord-beat;
+  const index=beat%chord.length;
+  const frequency=chord[index]*2;
+  const env=Math.exp(-4.4*local);
+  return (
+    Math.sin(Math.PI*2*frequency*local)+
+    Math.sin(Math.PI*2*frequency*2*local)*0.18
+  )*0.12*env;
+}
+export function proceduralBgmSampleAt(timeSec,{preset='calm-documentary'}={}){
+  const config=presetConfig(preset);
+  const t=Math.max(0,Number(timeSec)||0);
+  const loopTime=t%config.loopSec;
+  const chordIndex=Math.floor(loopTime/config.chordSec)%config.chords.length;
+  const nextIndex=(chordIndex+1)%config.chords.length;
+  const inChord=loopTime%config.chordSec;
+  const transitionStart=config.chordSec-0.85;
+  const blend=clamp((inChord-transitionStart)/0.85,0,1);
+  const smoothBlend=blend*blend*(3-2*blend);
+  const current=mixChord(config.chords[chordIndex],t);
+  const next=mixChord(config.chords[nextIndex],t);
+  const pad=current*(1-smoothBlend)+next*smoothBlend;
+  const pulse=0.90+Math.sin(Math.PI*2*(1/8)*t)*0.10;
+  return clamp((pad*pulse+pluck(config.chords[chordIndex],inChord))*0.68,-1,1);
+}
+
+export function createProceduralPcmSamples({preset='calm-documentary',durationSec=16,sampleRate=22050}={}){
+  const duration=Math.max(0.5,Math.min(120,Number(durationSec)||16));
+  const rate=Math.max(8000,Math.min(48000,Math.round(Number(sampleRate)||22050)));
+  const samples=new Float32Array(Math.floor(duration*rate));
+  const fadeSec=Math.min(0.35,duration/4);
+  for(let i=0;i<samples.length;i++){
+    const t=i/rate;
+    const fadeIn=fadeSec>0?clamp(t/fadeSec,0,1):1;
+    const fadeOut=fadeSec>0?clamp((duration-t)/fadeSec,0,1):1;
+    samples[i]=proceduralBgmSampleAt(t,{preset})*fadeIn*fadeOut;
+  }
+  return samples;
+}
+
 export function createProceduralBgmGraph(context,destination,{preset='calm-documentary',durationSec=60}={}){
-  if(!context||typeof context.createOscillator!=='function'||typeof context.createGain!=='function'){
+  if(!context||typeof context.createGain!=='function'){
     throw new Error('自動BGM生成に必要なWeb Audio機能を利用できません。');
   }
-  const config=PRESETS[preset]||PRESETS['calm-documentary'];
   const duration=Math.max(0.5,Number(durationSec)||60);
+  const config=presetConfig(preset);
+  const sampleRate=Math.max(8000,Math.min(48000,Math.round(Number(context.sampleRate)||22050)));
+  if(typeof context.createBuffer==='function'&&typeof context.createBufferSource==='function'){
+    const samples=createProceduralPcmSamples({preset,durationSec:config.loopSec,sampleRate});
+    const buffer=context.createBuffer(1,samples.length,sampleRate);
+    if(typeof buffer.copyToChannel==='function')buffer.copyToChannel(samples,0);
+    else buffer.getChannelData(0).set(samples);
+    const source=context.createBufferSource();
+    source.buffer=buffer;
+    source.loop=duration>config.loopSec;
+    source.connect(destination);
+    return {
+      sources:[source],
+      gains:[],
+      start(baseTime=0){
+        source.start(baseTime);
+        if(typeof source.stop==='function')source.stop(baseTime+duration+0.2);
+      }
+    };
+  }
+
+  if(typeof context.createOscillator!=='function'){
+    throw new Error('自動BGM生成に必要なWeb Audio機能を利用できません。');
+  }
   const sources=[];
   const gains=[];
-  for(const voice of config.voices){
+  const chord=config.chords[0];
+  chord.forEach((frequency,index)=>{
     const oscillator=context.createOscillator();
     const gain=context.createGain();
-    oscillator.type=voice.type;
-    if(oscillator.frequency) oscillator.frequency.value=voice.frequency;
-    if(oscillator.detune) oscillator.detune.value=voice.detune||0;
-    if(gain.gain) gain.gain.value=voice.gain;
+    oscillator.type=index<2?'sine':'triangle';
+    oscillator.frequency.value=frequency;
+    gain.gain.value=[0.16,0.10,0.06,0.04][index]||0.04;
     oscillator.connect(gain);
     gain.connect(destination);
     sources.push(oscillator);
     gains.push(gain);
-  }
+  });
   return {
     sources,
     gains,
     start(baseTime=0){
-      for(const source of sources){
+      sources.forEach(source=>{
         source.start(baseTime);
-        if(typeof source.stop==='function') source.stop(baseTime+duration+0.2);
-      }
+        if(typeof source.stop==='function')source.stop(baseTime+duration+0.2);
+      });
     }
   };
 }
@@ -77,14 +160,14 @@ function writeAscii(view,offset,text){
   for(let i=0;i<text.length;i++)view.setUint8(offset+i,text.charCodeAt(i));
 }
 function clampSample(value){return Math.max(-1,Math.min(1,value));}
-export function createProceduralPreviewWavBytes({durationSec=6.6,sampleRate=22050}={}){
-  const duration=Math.max(1,Math.min(15,Number(durationSec)||6.6));
+export function createProceduralPreviewWavBytes({preset='calm-documentary',durationSec=8,sampleRate=22050}={}){
+  const duration=Math.max(1,Math.min(15,Number(durationSec)||8));
   const rate=Math.max(8000,Math.min(48000,Math.round(Number(sampleRate)||22050)));
-  const samples=Math.floor(duration*rate);
-  const bytes=new Uint8Array(44+samples*2);
+  const pcm=createProceduralPcmSamples({preset,durationSec:duration,sampleRate:rate});
+  const bytes=new Uint8Array(44+pcm.length*2);
   const view=new DataView(bytes.buffer);
   writeAscii(view,0,'RIFF');
-  view.setUint32(4,36+samples*2,true);
+  view.setUint32(4,36+pcm.length*2,true);
   writeAscii(view,8,'WAVE');
   writeAscii(view,12,'fmt ');
   view.setUint32(16,16,true);
@@ -95,29 +178,9 @@ export function createProceduralPreviewWavBytes({durationSec=6.6,sampleRate=2205
   view.setUint16(32,2,true);
   view.setUint16(34,16,true);
   writeAscii(view,36,'data');
-  view.setUint32(40,samples*2,true);
-
-  const bgmStart=0.45;
-  for(let i=0;i<samples;i++){
-    const t=i/rate;
-    let value=0;
-    if(t<0.28){
-      const cueEnv=Math.min(1,t/0.02)*Math.min(1,(0.28-t)/0.04);
-      value+=Math.sin(Math.PI*2*659.25*t)*0.55*cueEnv;
-    }
-    if(t>=bgmStart){
-      const x=t-bgmStart;
-      const fadeIn=Math.min(1,x/0.35);
-      const fadeOut=Math.min(1,Math.max(0,duration-t)/0.35);
-      const env=fadeIn*fadeOut;
-      const pad=(
-        Math.sin(Math.PI*2*146.83*x)*0.34+
-        Math.sin(Math.PI*2*220*x)*0.25+
-        Math.sin(Math.PI*2*293.66*x)*0.14
-      );
-      value+=pad*0.62*env;
-    }
-    view.setInt16(44+i*2,Math.round(clampSample(value)*32767),true);
+  view.setUint32(40,pcm.length*2,true);
+  for(let i=0;i<pcm.length;i++){
+    view.setInt16(44+i*2,Math.round(clampSample(pcm[i]*0.82)*32767),true);
   }
   return bytes;
 }
