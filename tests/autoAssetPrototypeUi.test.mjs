@@ -7,7 +7,9 @@ test('prototype auto-asset action is limited to production-request projects and 
   assert.match(source,/project\.autoProduction\?\.mode==="production-request"/);
   assert.match(source,/id="autoAcquireAssets"/);
   assert.match(source,/実物史料・文書はLibrary of Congressを優先評価し、安全に自動採用できない場合はWikimedia Commonsの候補も評価/);
-  assert.match(source,/confirm\("Sceneごとに素材を自動取得します/);
+  assert.doesNotMatch(source,/confirm\("Sceneごとに素材を自動取得します/);
+  assert.match(source,/autoAcquireButton\.onclick=async\(\)=>/);
+  assert.match(source,/evaluateAssetToVoiceHandoff\(project,result\)/);
   assert.match(source,/normalizeLegacyAutoProductionProject\(project\)/);
   assert.match(source,/await runMultiSceneAssetPipeline\(project\)/);
   assert.match(source,/await saveProject\(project\)/);
