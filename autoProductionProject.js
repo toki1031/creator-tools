@@ -21,7 +21,7 @@ export function createAutoProductionProject({ requestText, title = '', genre = '
   const displayScript = built.scenes.map(scene => String(scene?.subtitleText || scene?.text || scene?.speechText || '').trim()).filter(Boolean).join('\n\n');
   built.speechScript = narrationScript;
   built.displayScript = displayScript || narrationScript;
-  const autoBgm = createProceduralBgmSettings(brief.bgmGuidance);
+  const autoBgm = createProceduralBgmSettings(brief.bgmGuidance,{tone:brief.tone,objective:brief.objective,genre});
   if (autoBgm) built.bgm = autoBgm;
   built.autoProduction = {
     mode: 'production-request',
