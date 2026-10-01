@@ -4,10 +4,13 @@ import { readFile } from 'node:fs/promises';
 
 test('BGM UI exposes Creator OS procedural source and output readiness recognizes it',async()=>{
   const source=await readFile(new URL('../main.js',import.meta.url),'utf8');
-  assert.match(source,/value="procedural">Creator OS 自動BGM/);
+  assert.match(source,/value="procedural">Creator OS 標準BGM/);
   assert.match(source,/isProceduralBgm\(project\.bgm\)/);
   assert.match(source,/Creator OS内生成/);
   assert.match(source,/自動BGMを8秒試聴/);
+  assert.match(source,/id="standardBgmPreset"/);
+  assert.match(source,/listStandardBgmPresets\(\)/);
+  assert.match(source,/createStandardBgmSettingsFromPreset\(standardBgmSelect\.value/);
   assert.match(source,/createProceduralPreviewWavBlob/);
   assert.match(source,/URL\.createObjectURL\(createProceduralPreviewWavBlob\(\{durationSec:8\}\)\)/);
   assert.match(source,/await player\.play\(\)/);
