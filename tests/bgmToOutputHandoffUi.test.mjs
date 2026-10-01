@@ -21,10 +21,14 @@ test('BGM page only goes to output after readiness passes',()=>{
   assert.match(main,/自動制作をここで停止しました/);
 });
 
-test('manual BGM navigation remains available and has no unconditional output redirect',()=>{
+test('manual BGM navigation remains available while automatic output stays gated',()=>{
   assert.match(main,/id="nextOutput">次へ：出力設定/);
   const start=main.indexOf('async function renderBgm(id)');
   const end=main.indexOf('\nasync function renderOutput(id)',start);
   const renderBgm=main.slice(start,end);
-  assert.doesNotMatch(renderBgm,/^\s*goOutput\(id\);/m);
+  assert.match(renderBgm,/bindSavedNavigation\(root\.querySelector\('#nextOutput'\),flushSave,\(\)=>goOutput\(id\)\)/);
+  const gate=renderBgm.indexOf('if(autoContinueToOutput)');
+  const readiness=renderBgm.indexOf('if(handoff.canContinue)',gate);
+  const autoGo=renderBgm.indexOf('goOutput(id);',readiness);
+  assert.ok(gate>=0&&readiness>gate&&autoGo>readiness);
 });
