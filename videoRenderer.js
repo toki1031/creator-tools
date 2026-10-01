@@ -2,7 +2,7 @@ import { getMedia } from './mediaStore.js';
 import { resolveSceneImageSource } from './mediaLibrary.js';
 import { resolveEffectiveSubtitlePosition, resolveSubtitleYRatio } from './subtitlePosition.js';
 import { calculateBgmLoopCount, splitSubtitlePhrases } from './qualityLogic.js';
-import { createProceduralBgmGraph, isProceduralBgm } from './proceduralBgm.js';
+import { createProceduralBgmGraph, ensurePlaybackAudioSession, isProceduralBgm } from './proceduralBgm.js';
 
 const MIME_CANDIDATES_AUDIO = [
   'video/mp4;codecs="avc1.42E01E,mp4a.40.2"',
@@ -454,6 +454,7 @@ async function createAudio(project, prepared, providedContext = null) {
   const hasSceneNarration = sceneSources.some(x => x?.audioData || x?.mediaRef?.id);
   const hasNarration = !hasSceneNarration && Boolean(prepared.narrationArrayBuffer);
   if (!hasBgm && !hasNarration && !hasSceneNarration) return { audio: null, warning: '' };
+  ensurePlaybackAudioSession();
   const AudioContextClass = globalThis.AudioContext || globalThis.webkitAudioContext;
   if (!AudioContextClass) throw new Error('この端末ではBGM・ナレーション合成に必要なWeb Audioを利用できません。別の対応端末で再試行してください。');
   const context = providedContext || new AudioContextClass();
