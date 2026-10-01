@@ -1,5 +1,6 @@
 import { inspectProductionProject } from './productionPreflight.js';
 import { publishMetadataApprovalMatches } from './decisionLog.js';
+import { hasReadyProjectBgm, hasReadySceneNarration } from './productionReadiness.js';
 
 const ROUTES = {
   project: 'project',
@@ -23,9 +24,9 @@ export function buildProductionChecklist(project = {}) {
   const scenes = Array.isArray(project.scenes) ? project.scenes : [];
   const hasScenes = scenes.length > 0;
   const hasImages = hasScenes && scenes.every(scene => Boolean(scene.imageAssetId || scene.imageData));
-  const hasNarration = hasScenes && scenes.every(scene => Boolean(scene?.narration?.audioData));
+  const hasNarration = hasScenes && scenes.every(scene => hasReadySceneNarration(scene));
   const subtitlesReady = project?.subtitleStyle?.enabled === false || (hasScenes && scenes.every(scene => String(scene.subtitleText ?? scene.text ?? '').trim()));
-  const bgmReady = project?.bgm?.enabled === false || Boolean(project?.bgm?.audioData || project?.bgm?.dataUrl);
+  const bgmReady = hasReadyProjectBgm(project);
   const exportReady = report.errors === 0 && report.warnings === 0;
   const publish = project?.publish || {};
   const publishReady = Boolean(publish?.approval?.approved && publishMetadataApprovalMatches(publish.approval, publish));
