@@ -133,3 +133,28 @@ test('keeps an explicit subtitle separate from narration in project scripts',()=
   assert.equal(result.project.displayScript,'表示する字幕です。');
   assert.equal(result.project.scenes[0].subtitleText,'表示する字幕です。');
 });
+
+test('adds a standard BGM even when a production request omits BGM instructions',()=>{
+  const request=`# トーン
+やさしい教育
+Scene 1
+ナレーション: 今日の学びです。
+映像: ノートを見る手元。`;
+  const result=createAutoProductionProject({requestText:request,title:'標準BGM自動選択',genre:'education'});
+  assert.equal(result.ok,true);
+  assert.equal(result.project.bgm.source,'procedural');
+  assert.equal(result.project.bgm.procedural.preset,'gentle-learning');
+  assert.match(result.project.bgm.title,/教養・やさしい/);
+});
+
+test('honors an explicit no-BGM request in production mode',()=>{
+  const request=`# BGM
+BGMなし
+Scene 1
+ナレーション: 音楽なしで確認します。
+映像: 静かな画面。`;
+  const result=createAutoProductionProject({requestText:request,title:'BGMなし'});
+  assert.equal(result.ok,true);
+  assert.equal(result.project.bgm.source,'none');
+  assert.equal(result.project.bgm.volume,0);
+});
