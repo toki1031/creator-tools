@@ -39,3 +39,41 @@ test('editing approved publish metadata returns publish preparation to incomplet
   assert.equal(buildProductionChecklist(project).find(x=>x.id==='publish').done,false);
   assert.equal(nextProductionDestination(project).route,'publish');
 });
+
+test('MediaRef narration and Creator OS standard BGM are complete in navigation',()=>{
+  const project={
+    scenes:[{
+      text:'本文',
+      subtitleText:'字幕',
+      durationSec:3,
+      imageAssetId:'a',
+      narration:{mediaRef:{id:'narr-1'}}
+    }],
+    subtitleStyle:{enabled:true},
+    output:{bgmEnabled:true},
+    bgm:{source:'procedural',procedural:{preset:'calm-documentary'}}
+  };
+  const checklist=buildProductionChecklist(project);
+  assert.equal(checklist.find(x=>x.id==='narration').done,true);
+  assert.equal(checklist.find(x=>x.id==='bgm').done,true);
+  assert.equal(checklist.find(x=>x.id==='output').done,true);
+  assert.equal(nextProductionDestination(project).route,'publish');
+});
+
+test('still routes genuinely missing enabled BGM to the BGM screen',()=>{
+  const project={
+    scenes:[{
+      text:'本文',
+      subtitleText:'字幕',
+      durationSec:3,
+      imageAssetId:'a',
+      narration:{mediaRef:{id:'narr-1'}}
+    }],
+    subtitleStyle:{enabled:true},
+    output:{bgmEnabled:true},
+    bgm:{source:'upload',audioData:''}
+  };
+  assert.equal(buildProductionChecklist(project).find(x=>x.id==='bgm').done,false);
+  const nav=preflightNavigation(project);
+  assert.ok(nav.some(issue=>issue.code==='bgm-missing'&&issue.route==='bgm'));
+});
