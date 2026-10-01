@@ -4,8 +4,10 @@ import { createGenerationStartController, projectExpectsVideoAudio } from '../vi
 
 test('シーン別ナレーションだけでも動画生成時にWeb Audioが必要と判定する', () => {
   assert.equal(projectExpectsVideoAudio({ output:{bgmEnabled:false}, scenes:[{narration:{audioData:'data:audio/wav;base64,AA=='}}] }), true);
+  assert.equal(projectExpectsVideoAudio({ output:{bgmEnabled:false}, scenes:[{narration:{mediaRef:{id:'scene-audio'}}}] }), true);
   assert.equal(projectExpectsVideoAudio({ output:{bgmEnabled:false}, bgm:{audioData:'data:audio/wav;base64,AA=='}, scenes:[] }), false);
   assert.equal(projectExpectsVideoAudio({ output:{bgmEnabled:true}, bgm:{audioData:'data:audio/wav;base64,AA=='}, scenes:[] }), true);
+  assert.equal(projectExpectsVideoAudio({ output:{bgmEnabled:true}, bgm:{source:'procedural',procedural:{preset:'calm-documentary'}}, scenes:[] }), true);
 });
 
 test('アプリ内確認の承認操作でAudioContext生成とresumeを先に実行する', async () => {

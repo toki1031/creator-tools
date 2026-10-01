@@ -35,6 +35,7 @@ Scene 8
 Scene 9
 目的：今日の行動で終える
 現代の手元。資料に数字・具体例・比較のどれか一つを加える。
+■音声・BGM: 静かなドキュメンタリーBGM
 ## 最終QA
 約60秒
 9シーン
@@ -50,6 +51,9 @@ test('creates a new nine-scene auto-production project locally', () => {
   assert.equal(result.project.scenes.length, 9);
   assert.equal(result.project.productionBrief.sceneDirectives.length, 9);
   assert.equal(result.project.autoProduction.source, 'local-parser');
+  assert.equal(result.project.bgm.source, 'procedural');
+  assert.equal(result.project.bgm.procedural.preset, 'calm-documentary');
+  assert.equal(result.project.bgm.ducking, true);
   const total = result.project.scenes.reduce((sum, scene) => sum + scene.durationSec, 0);
   assert.ok(Math.abs(total - 60) < 0.1);
 });
@@ -104,3 +108,28 @@ Scene 3
 });
 
 test('carries trailing Scene-specific archive guidance into runtime productionDirection',()=>{const request=`Scene 5\n映像: 統計を「見える形」にしたことを示す。\nここは可能な限り確認可能な実物史料を使用する。\nScene 9\n映像: 今日できる一歩。\n■Scene 5の重要指定\nナイチンゲールの統計図は、\n1858年前後の確認可能な実物史料を優先して使用する。\n■完成条件\n55〜60秒`;const result=createAutoProductionProject({requestText:request,title:'Nightingale targeted guidance'});assert.equal(result.ok,true);const s5=result.project.scenes.find(s=>s.id==='scene-5');assert.match(s5.productionDirection.searchHint,/ナイチンゲール/);assert.match(s5.productionDirection.searchHint,/1858/);assert.doesNotMatch(s5.productionDirection.visualDirection,/Scene 5の重要指定/)});
+
+test('builds project-level scripts and subtitles from Scene narration',()=>{
+  const request=`Scene 1
+ナレーション: これは自動BGMの動作確認です。
+映像: 現代の机の上で、ノートに数字を書く場面。
+■音声・BGM: 静かなドキュメンタリーBGM`;
+  const result=createAutoProductionProject({requestText:request,title:'簡易QA'});
+  assert.equal(result.ok,true);
+  assert.equal(result.project.displayScript,'これは自動BGMの動作確認です。');
+  assert.equal(result.project.speechScript,'これは自動BGMの動作確認です。');
+  assert.equal(result.project.scenes[0].subtitleText,'これは自動BGMの動作確認です。');
+  assert.equal(result.project.scenes[0].speechText,'これは自動BGMの動作確認です。');
+  assert.equal(result.project.bgm.source,'procedural');
+});
+
+test('keeps an explicit subtitle separate from narration in project scripts',()=>{
+  const request=`Scene 1
+ナレーション: 読み上げる文章です。
+字幕: 表示する字幕です。
+映像: 現代の机。`;
+  const result=createAutoProductionProject({requestText:request,title:'字幕分離QA'});
+  assert.equal(result.project.speechScript,'読み上げる文章です。');
+  assert.equal(result.project.displayScript,'表示する字幕です。');
+  assert.equal(result.project.scenes[0].subtitleText,'表示する字幕です。');
+});

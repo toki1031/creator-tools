@@ -2,6 +2,7 @@ import { getMedia } from './mediaStore.js';
 import { resolveSceneImageSource } from './mediaLibrary.js';
 import { resolveEffectiveSubtitlePosition, resolveSubtitleYRatio } from './subtitlePosition.js';
 import { calculateBgmLoopCount, splitSubtitlePhrases } from './qualityLogic.js';
+import { createProceduralBgmGraph, ensurePlaybackAudioSession, isProceduralBgm } from './proceduralBgm.js';
 
 const MIME_CANDIDATES_AUDIO = [
   'video/mp4;codecs="avc1.42E01E,mp4a.40.2"',
@@ -63,7 +64,7 @@ export function validateVideoProject(project) {
   const imageCount = scenes.filter(scene => resolveSceneImageSource(project, scene).data).length;
   if (imageCount < scenes.length) warnings.push(`画像未登録のシーンが${scenes.length - imageCount}件あります。背景色で代用します。`);
   if (getProjectDuration(project) <= 0) errors.push('動画の長さが0秒です。');
-  if (project.output?.bgmEnabled && project.bgm?.source !== 'none' && !project.bgm?.audioData) warnings.push('BGM設定はありますが、音源ファイルが登録されていません。');
+  if (project.output?.bgmEnabled && project.bgm?.source !== 'none' && !project.bgm?.audioData && !isProceduralBgm(project.bgm)) warnings.push('BGM設定はありますが、音源ファイルが登録されていません。');
   const bgmInvalid = Boolean(project.output?.bgmEnabled && project.bgm?.audioData && bgmLooksLikeVideo(project));
   if (bgmInvalid) errors.push('現在のBGMはMOV / MP4などの動画ファイルです。BGM・字幕画面でMP3・M4A・AAC・WAVなどの音声ファイルを再登録してください。');
   const sceneNarrationCount = scenes.filter(scene => scene?.narration?.audioData || scene?.narration?.mediaRef?.id).length;
@@ -75,7 +76,7 @@ export function validateVideoProject(project) {
     const missingNarrations = scenes.flatMap((scene, index) => (scene?.narration?.audioData || scene?.narration?.mediaRef?.id) ? [] : [index + 1]);
     if (missingImages.length) errors.push(`自動制作を完成できません。画像未登録：シーン${missingImages.join('・')}`);
     if (missingNarrations.length) errors.push(`自動制作を完成できません。ナレーション未生成：シーン${missingNarrations.join('・')}`);
-    if (project.output?.bgmEnabled && !project.bgm?.audioData) errors.push('自動制作を完成できません。BGMを使用する設定ですが音源が未登録です。');
+    if (project.output?.bgmEnabled && !project.bgm?.audioData && !isProceduralBgm(project.bgm)) errors.push('自動制作を完成できません。BGMを使用する設定ですが音源が未登録です。');
   }
   return { errors, warnings, imageCount, sceneCount: scenes.length, durationSec: getProjectDuration(project), bgmInvalid, narrationInvalid, sceneNarrationCount };
 }
@@ -447,11 +448,13 @@ async function createAudio(project, prepared, providedContext = null) {
   if (preparedErrors.length) throw new Error(`${preparedErrors.join('／')}。BGM・ナレーション画面で音声ファイルを確認してください。`);
   if (project.output?.bgmEnabled && (prepared.audioInvalid || bgmLooksLikeVideo(project))) throw new Error('BGMに動画ファイルが登録されています。MP3・M4A・AAC・WAVなどの音声ファイルへ差し替えてください。');
   if (prepared.narrationInvalid || narrationLooksLikeVideo(project)) throw new Error('ナレーションに動画ファイルが登録されています。MP3・M4A・AAC・WAVなどの音声ファイルへ差し替えてください。');
-  const hasBgm = Boolean(project.output?.bgmEnabled && prepared.audioArrayBuffer);
+  const hasProceduralBgm = Boolean(project.output?.bgmEnabled && isProceduralBgm(project.bgm));
+  const hasBgm = Boolean(project.output?.bgmEnabled && (prepared.audioArrayBuffer || hasProceduralBgm));
   const sceneSources = Array.isArray(prepared.sceneNarrationSources) ? prepared.sceneNarrationSources : [];
   const hasSceneNarration = sceneSources.some(x => x?.audioData || x?.mediaRef?.id);
   const hasNarration = !hasSceneNarration && Boolean(prepared.narrationArrayBuffer);
   if (!hasBgm && !hasNarration && !hasSceneNarration) return { audio: null, warning: '' };
+  ensurePlaybackAudioSession();
   const AudioContextClass = globalThis.AudioContext || globalThis.webkitAudioContext;
   if (!AudioContextClass) throw new Error('この端末ではBGM・ナレーション合成に必要なWeb Audioを利用できません。別の対応端末で再試行してください。');
   const context = providedContext || new AudioContextClass();
@@ -464,10 +467,22 @@ async function createAudio(project, prepared, providedContext = null) {
     let narrationGain = null;
     let narrationDuration = 0;
     if (hasBgm) {
-      const buffer = await context.decodeAudioData(prepared.audioArrayBuffer);
-      prepared.audioArrayBuffer = null;
-      const source = context.createBufferSource(); source.buffer = buffer; source.loop = calculateBgmLoopCount(getProjectDuration(project), buffer.duration, project.bgm?.loop !== false) > 1;
-      bgmGain = context.createGain(); source.connect(bgmGain); bgmGain.connect(destination); staticStarts.push(baseTime => source.start(baseTime)); staticSources.push(source);
+      bgmGain = context.createGain();
+      bgmGain.gain.value = 0;
+      bgmGain.connect(destination);
+      if (hasProceduralBgm) {
+        const graph = createProceduralBgmGraph(context, bgmGain, {
+          preset: project.bgm?.procedural?.preset || 'calm-documentary',
+          durationSec: getProjectDuration(project)
+        });
+        staticStarts.push(baseTime => graph.start(baseTime));
+        staticSources.push(...graph.sources);
+      } else {
+        const buffer = await context.decodeAudioData(prepared.audioArrayBuffer);
+        prepared.audioArrayBuffer = null;
+        const source = context.createBufferSource(); source.buffer = buffer; source.loop = calculateBgmLoopCount(getProjectDuration(project), buffer.duration, project.bgm?.loop !== false) > 1;
+        source.connect(bgmGain); staticStarts.push(baseTime => source.start(baseTime)); staticSources.push(source);
+      }
     }
     if (hasNarration) {
       const buffer = await context.decodeAudioData(prepared.narrationArrayBuffer); prepared.narrationArrayBuffer = null; narrationDuration = buffer.duration || 0;

@@ -36,7 +36,8 @@ export function buildScenesFromProductionBrief(brief, options = {}) {
 
     const order = sceneNumber(directive.sceneId, index + 1) || index + 1;
     const narrationText = clean(directive.narrationText);
-    const subtitleText = clean(directive.subtitleText);
+    const explicitSubtitleText = clean(directive.subtitleText);
+    const subtitleText = explicitSubtitleText || narrationText;
     const text = subtitleText || narrationText;
     const motion = resolveMotion(directive.motionGuidance);
     const startSec = Number(directive.startSec), endSec = Number(directive.endSec);
