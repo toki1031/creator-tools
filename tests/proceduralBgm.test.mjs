@@ -36,9 +36,9 @@ test('builds a Web Audio graph and schedules all procedural voices',()=>{
   };
   const destination={kind:'destination'};
   const graph=createProceduralBgmGraph(context,destination,{preset:'calm-documentary',durationSec:60});
-  assert.equal(graph.sources.length,3);
+  assert.equal(graph.sources.length,4);
   graph.start(10);
-  assert.deepEqual(starts,[10,10,10]);
+  assert.deepEqual(starts,[10,10,10,10]);
   assert.ok(stops.every(value=>value===70.2));
   assert.ok(connections.length>=6);
 });
