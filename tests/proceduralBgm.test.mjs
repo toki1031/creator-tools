@@ -57,11 +57,16 @@ test('creates a playable PCM WAV preview with audible sample data',()=>{
   assert.equal(blob.size,bytes.length);
 });
 
-test('requests playback audio session when the platform exposes it',()=>{
-  const navigatorLike={audioSession:{type:'ambient'}};
-  assert.equal(ensurePlaybackAudioSession(navigatorLike),true);
+test('cycles iOS audio session through ambient to playback so stale Safari state is refreshed',()=>{
+  let scheduled=null;
+  const timer=callback=>{scheduled=callback;return 1;};
+  const navigatorLike={audioSession:{type:'playback'}};
+  assert.equal(ensurePlaybackAudioSession(navigatorLike,timer),true);
+  assert.equal(navigatorLike.audioSession.type,'ambient');
+  assert.equal(typeof scheduled,'function');
+  scheduled();
   assert.equal(navigatorLike.audioSession.type,'playback');
-  assert.equal(ensurePlaybackAudioSession({}),false);
+  assert.equal(ensurePlaybackAudioSession({},timer),false);
 });
 
 test('calm documentary synthesis changes harmony over time instead of holding one tone',()=>{
