@@ -59,8 +59,9 @@ test('preview cue schedules a short audible confirmation tone',()=>{
   assert.equal(oscillator.frequency.value,659.25);
   assert.equal(gain.gain.value,0.24);
   assert.deepEqual(starts,[2]);
-  assert.deepEqual(stops,[2.28]);
+  assert.equal(stops.length,1);
+  assert.ok(Math.abs(stops[0]-2.28)<1e-9);
   assert.equal(result.startTime,2);
-  assert.equal(result.stopTime,2.28);
+  assert.ok(Math.abs(result.stopTime-2.28)<1e-9);
   assert.equal(connections.length,2);
 });
