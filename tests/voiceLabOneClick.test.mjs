@@ -1,0 +1,34 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+
+const html=await readFile(new URL('../voice-lab.html',import.meta.url),'utf8');
+
+test('Voice Lab exposes a one-click production-request narration sync action',()=>{
+  assert.match(html,/id="autoSyncScenes"/);
+  assert.match(html,/準備して全Sceneを自動同期/);
+  assert.match(html,/音声エンジン準備 → 保存済み音声の再利用判定 → 未生成・変更Sceneだけ生成/);
+});
+
+test('one-click narration sync stays user-triggered and does not preload heavy project or model work',()=>{
+  assert.match(html,/ボタンを押すまではプロジェクトや音声モデルを読み込みません/);
+  assert.doesNotMatch(html,/\$\('#autoSyncScenes'\)\.onclick\(\);/);
+  assert.doesNotMatch(html,/loadProject\(\);\s*\n\s*\$\('#autoSyncScenes'/);
+});
+
+test('one-click narration sync prepares only when needed and then runs existing Scene sync',()=>{
+  const start=html.indexOf("$('#autoSyncScenes').onclick=async()=>");
+  const end=html.indexOf("\n\n$('#prepare').onclick=async()=>",start);
+  assert.ok(start>=0&&end>start);
+  const handler=html.slice(start,end);
+  assert.match(handler,/if\(!tts\)\{/);
+  assert.match(handler,/await \$\('#prepare'\)\.onclick\(\);/);
+  assert.match(handler,/if\(!tts\)throw new Error\('音声エンジンの準備に失敗しました/);
+  assert.match(handler,/await \$\('#generateScenes'\)\.onclick\(\);/);
+});
+
+test('one-click narration sync verifies every Scene has narration before reporting completion',()=>{
+  assert.match(html,/const ready=scenes\.filter\(scene=>Boolean\(scene\?\.narration\?\.audioData\|\|scene\?\.narration\?\.mediaRef\?\.id\)\)\.length/);
+  assert.match(html,/if\(ready<scenes\.length\)throw new Error/);
+  assert.match(html,/全Scene同期完了 ✓/);
+});
