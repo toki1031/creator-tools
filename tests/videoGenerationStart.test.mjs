@@ -10,7 +10,7 @@ test('シーン別ナレーションだけでも動画生成時にWeb Audioが�
   assert.equal(projectExpectsVideoAudio({ output:{bgmEnabled:true}, bgm:{source:'procedural',procedural:{preset:'calm-documentary'}}, scenes:[] }), true);
 });
 
-test('アプリ内確認の承認操作でAudioContext生成とresumeを先に実行する', async () => {
+test('動画生成のユーザー操作でAudioContext生成とresumeを先に実行する', async () => {
   const order=[];
   class FakeAudioContext {
     constructor(){order.push('construct');this.state='running';}
