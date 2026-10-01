@@ -842,8 +842,10 @@ async function renderBgm(id) {
   ['source','category','bgmTitle','license','credit'].forEach(k=>root.querySelector('#'+k).oninput=()=>{
     if(k==='source'){
       const selected=root.querySelector('#source').value;
-      if(selected==='procedural'&&!b.procedural?.preset){
-        Object.assign(b,createStandardBgmSettingsFromPreset(standardBgmSelect?.value||'calm-documentary',{selection:'manual'}));
+      if(selected==='procedural'){
+        const previousVolume=Number(root.querySelector('#volume').value);
+        Object.assign(b,createStandardBgmSettingsFromPreset(standardBgmSelect?.value||b.procedural?.preset||'calm-documentary',{selection:'manual'}));
+        if(Number.isFinite(previousVolume)&&previousVolume>0)b.volume=previousVolume;
         root.querySelector('#category').value=b.category;
         root.querySelector('#bgmTitle').value=b.title;
         root.querySelector('#license').value=b.license;
