@@ -9,6 +9,9 @@ test('BGM UI exposes Creator OS procedural source and output readiness recognize
   assert.match(source,/Creator OS内生成/);
   assert.match(source,/自動BGMを6秒試聴/);
   assert.match(source,/createProceduralBgmGraph\(context,master/);
+  assert.match(source,/createProceduralPreviewCue\(context,master/);
+  assert.match(source,/getProceduralPreviewVolume\(root\.querySelector\('#volume'\)\.value\)/);
+  assert.match(source,/確認音 → BGMを試聴中/);
   assert.match(source,/selected==='procedural'.*calm-documentary/s);
 });
 
