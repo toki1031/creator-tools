@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {onRequestPost} from '../functions/api/generate-image.js';
+import {onRequestGet,onRequestPost} from '../functions/api/generate-image.js';
 
 const request=(body)=>new Request('https://example.test/api/generate-image',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
 
@@ -28,3 +28,6 @@ test('server never sends a prompt longer than the FLUX 2048 character limit',asy
   assert.equal(res.status,200);
   assert.equal(Array.from(seen).length,2048);
 });
+
+test('GET diagnostic reports binding availability without invoking AI',async()=>{let called=false;const env={AI:{run:async()=>{called=true}}};const res=await onRequestGet({request:new Request('https://preview.example/api/generate-image'),env});assert.equal(res.status,200);const body=await res.json();assert.deepEqual(body,{endpoint:'creator-os-generate-image',diagnosticVersion:1,aiBindingAvailable:true,host:'preview.example'});assert.equal(called,false)});
+test('GET diagnostic safely reports missing binding',async()=>{const res=await onRequestGet({request:new Request('https://production.example/api/generate-image'),env:{}});const body=await res.json();assert.equal(body.aiBindingAvailable,false);assert.equal(body.endpoint,'creator-os-generate-image')});
