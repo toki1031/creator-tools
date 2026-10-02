@@ -37,7 +37,7 @@ function pickScene(project, scene) {
 }
 
 function pickReferencedImageAssets(project, scenes) {
-  const ids = new Set(scenes.map(scene => scene?.imageAssetId).filter(Boolean));
+  const ids = new Set(scenes.filter(scene => scene?.imageAssetId && !scene?.imageData).map(scene => scene.imageAssetId));
   if (!ids.size) return [];
   return (Array.isArray(project?.mediaLibrary) ? project.mediaLibrary : [])
     .filter(asset => asset?.type === 'image' && ids.has(asset.id))
