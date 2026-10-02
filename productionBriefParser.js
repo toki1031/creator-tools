@@ -36,6 +36,12 @@ function detectExtendedGlobalSection(line) {
 function detectSceneField(line) { for (const [name, pattern] of SCENE_FIELD_ALIASES) { const match = clean(line).match(pattern); if (match) return { name, inline: clean(match[1]) }; } return null; }
 function detectSceneEndingGlobalSection(line) {
   const text=clean(line).replace(/^#{1,6}\s*/,"");
+  const bracket=text.match(/^【\s*(画像・映像方針|映像方針|ナレーション|字幕|BGM|最終確認|最終QA)\s*】\s*(.*)$/i);
+  if(bracket){
+    const key=bracket[1].toLowerCase();
+    const name=/ナレーション/.test(key)?"narrationGuidance":/字幕/.test(key)?"subtitleGuidance":/bgm/i.test(key)?"bgmGuidance":/(最終確認|最終qa)/i.test(key)?"qaCriteria":"globalRules";
+    return {name,inline:clean(bracket[2])};
+  }
   const match=text.match(/^(?:最終QA|QA(?:条件|基準|criteria)?|完成条件|最終チェック)(?:\s*[:：]\s*(.*)|\s*)$/i);
   return match?{name:"qaCriteria",inline:clean(match[1])}:null;
 }
@@ -150,7 +156,7 @@ function parseSceneBlock(sceneId, blockLines) {
     }
 
     const bulletRule = /^[-*・]\s*/.test(line) && isRule(line);
-    const productionRule = isRule(line) && activeField !== "narrationText" && activeField !== "subtitleText";
+    const productionRule = isRule(line) && activeField !== "narrationText" && activeField !== "subtitleText" && activeField !== "visualDirection";
     if (bulletRule) { rules.push(value); continue; }
     if (productionRule) {
       const split=splitVisualDirectionAndRules(value);
@@ -161,6 +167,12 @@ function parseSceneBlock(sceneId, blockLines) {
       continue;
     }
 
+    if (activeField === "visualDirection") {
+      const split=splitVisualDirectionAndRules(value);
+      if(split.visualDirection)fields.visualDirection.push(split.visualDirection);
+      rules.push(...split.rules);
+      continue;
+    }
     if (activeField) fields[activeField].push(value);
     else fields.visualDirection.push(value); // Backward-compatible unlabeled Scene text stays a visual direction.
   }
@@ -169,7 +181,7 @@ function parseSceneBlock(sceneId, blockLines) {
     sceneId,
     visualDirection: fields.visualDirection.join("\n"),
     purpose,
-    assetType: inferAssetTypeFromText(joined),
+    assetType: inferAssetTypeFromText([fields.visualDirection.join("\n"), purpose, fields.narrationText.join("\n")].filter(Boolean).join("\n")),
     motionGuidance,
     rules,
     narrationText: stripWrappingQuotes(fields.narrationText.join("\n")),
