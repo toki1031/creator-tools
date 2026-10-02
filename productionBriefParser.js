@@ -13,9 +13,9 @@ const SECTION_ALIASES = [
   ["seGuidance", /^(?:SE(?:方針|ガイダンス)?|se(?:\s*guidance)?)\s*[:：]?\s*(.*)$/i], ["qaCriteria", /^(?:最終QA|QA(?:条件|基準|criteria)?)\s*[:：]?\s*(.*)$/i],
 ];
 const SCENE_FIELD_ALIASES = [
-  ["narrationText", /^(?:ナレーション|セリフ|読み上げ|narration|speech)\s*[:：]?\s*(.*)$/i],
-  ["subtitleText", /^(?:字幕|subtitle)\s*[:：]?\s*(.*)$/i],
-  ["visualDirection", /^(?:映像|画|ビジュアル|visual(?:\s*direction)?)\s*[:：]?\s*(.*)$/i],
+  ["narrationText", /^(?:ナレーション|セリフ|読み上げ|narration|speech)(?:\s*[:：]\s*(.*)|\s*)$/i],
+  ["subtitleText", /^(?:字幕|subtitle)(?:\s*[:：]\s*(.*)|\s*)$/i],
+  ["visualDirection", /^(?:映像|画|ビジュアル|visual(?:\s*direction)?)(?:\s*[:：]\s*(.*)|\s*)$/i],
 ];
 
 function detectSection(line) { const text = clean(line).replace(/^#{1,6}\s*/, ""); for (const [name, pattern] of SECTION_ALIASES) { const match = text.match(pattern); if (match) return { name, inline: clean(match[1]) }; } return null; }
@@ -28,6 +28,11 @@ function detectExtendedGlobalSection(line) {
   return null;
 }
 function detectSceneField(line) { for (const [name, pattern] of SCENE_FIELD_ALIASES) { const match = clean(line).match(pattern); if (match) return { name, inline: clean(match[1]) }; } return null; }
+function detectSceneEndingGlobalSection(line) {
+  const text=clean(line).replace(/^#{1,6}\s*/,"");
+  const match=text.match(/^(?:最終QA|QA(?:条件|基準|criteria)?|完成条件|最終チェック)\s*[:：]?\s*(.*)$/i);
+  return match?{name:"qaCriteria",inline:clean(match[1])}:null;
+}
 function extractTargetedSceneGuidance(lines) {
   const kept = [], targeted = new Map();
   let target = '';
@@ -60,6 +65,17 @@ function applyTargetedSceneGuidance(brief, targeted) {
 }
 export function inferAssetTypeFromText(text) { const value = text.toLowerCase().replace(/\s+/g, ' '); const explicit = value.match(/asset\s*type\s*[:：]\s*([a-z-]+)/i)?.[1]; if (explicit && ASSET_TYPES.has(explicit)) return explicit; if (/実物|実際の.*史料|一次史料|確認可能な実物史料|historical[- ]source/.test(value)) return "historical-source"; if (/ai再現|ai[- ]reconstruction|再現場面|再現映像|再現イメージ/.test(value)) return "ai-reconstruction"; if (/現代|今日できる|会議|説明場面|modern[- ]visual/.test(value)) return "modern-visual"; if (/文書|書類|document/.test(value)) return "document"; if (/クリミア戦争期|軍病院|戦争後.*ナイチンゲール|死亡記録.*分析|軍衛生改革/.test(value)) return "ai-reconstruction"; return "other"; }
 function isRule(line) { return /禁止|しない|使わない|描かない|作らない|扱わない|代用しない|避ける|不可|NG/i.test(line); }
+export function splitVisualDirectionAndRules(value = "") {
+  const text=clean(value);
+  if(!text)return { visualDirection:"", rules:[] };
+  const parts=(text.match(/[^。！？!?]+[。！？!?]?/g)||[text]).map(clean).filter(Boolean);
+  const visualParts=[],rules=[];
+  for(const part of parts){
+    if(isRule(part))rules.push(part);
+    else visualParts.push(part);
+  }
+  return { visualDirection:visualParts.join("").trim(), rules };
+}
 function stripWrappingQuotes(value = "") {
   const text = clean(value);
   const pairs = [["「","」"],["『","』"],["“","”"],["\"","\""]];
@@ -107,16 +123,30 @@ function parseSceneBlock(sceneId, blockLines) {
     const detectedField = detectSceneField(line);
     if (detectedField) {
       activeField = detectedField.name;
-      if (detectedField.inline) fields[activeField].push(bulletValue(detectedField.inline));
+      if (detectedField.inline) {
+        const value=bulletValue(detectedField.inline);
+        if(activeField==="visualDirection"){
+          const split=splitVisualDirectionAndRules(value);
+          if(split.visualDirection)fields.visualDirection.push(split.visualDirection);
+          rules.push(...split.rules);
+        } else fields[activeField].push(value);
+      }
+      continue;
+    }
+
+    const value = bulletValue(line);
+    if (!value) continue;
+    if (activeField === "visualDirection") {
+      const split=splitVisualDirectionAndRules(value);
+      if(split.visualDirection)fields.visualDirection.push(split.visualDirection);
+      rules.push(...split.rules);
       continue;
     }
 
     const bulletRule = /^[-*・]\s*/.test(line) && isRule(line);
     const productionRule = isRule(line) && activeField !== "narrationText" && activeField !== "subtitleText";
-    if (bulletRule || productionRule) { rules.push(bulletValue(line)); continue; }
+    if (bulletRule || productionRule) { rules.push(value); continue; }
 
-    const value = bulletValue(line);
-    if (!value) continue;
     if (activeField) fields[activeField].push(value);
     else fields.visualDirection.push(value); // Backward-compatible unlabeled Scene text stays a visual direction.
   }
@@ -147,6 +177,13 @@ export function parseProductionRequest(input) {
     if (sceneMatch) { flushScene(); section = null; currentScene = `scene-${Number(sceneMatch[1])}`; if (clean(sceneMatch[2])) sceneLines.push(sceneMatch[2]); continue; }
     const extendedGlobal = /^■/.test(line) ? detectExtendedGlobalSection(line) : null;
     if (extendedGlobal) { if (currentScene) flushScene(); section=extendedGlobal.name; if(extendedGlobal.inline) brief[section].push(extendedGlobal.inline); continue; }
+    const sceneEndingGlobal=currentScene?detectSceneEndingGlobalSection(line):null;
+    if(sceneEndingGlobal){
+      flushScene();
+      section=sceneEndingGlobal.name;
+      if(sceneEndingGlobal.inline)brief[section].push(sceneEndingGlobal.inline);
+      continue;
+    }
     // Plain labels inside Scene blocks are scene-local unless they are explicit global production headings.
     if (currentScene && !/^#{1,6}\s*/.test(line)) { sceneLines.push(line); continue; }
     const detected = detectSection(line);
