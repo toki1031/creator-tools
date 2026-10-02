@@ -150,7 +150,7 @@ test('subtitle narration and BGM guidance stay in their own sections',()=>{
 });
 
 test('section words inside ordinary sentences do not become headings without a colon',()=>{
-  const brief=parseProductionRequest('最終QA\\nナレーションと字幕を合わせる。\\nBGMが大きすぎないこと。\\n目的は達成できること。');
+  const brief=parseProductionRequest('最終QA\nナレーションと字幕を合わせる。\nBGMが大きすぎないこと。\n目的は達成できること。');
   assert.deepEqual(brief.qaCriteria,[
     'ナレーションと字幕を合わせる。',
     'BGMが大きすぎないこと。',
