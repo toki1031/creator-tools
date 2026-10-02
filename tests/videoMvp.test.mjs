@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {MVP_SHORTS_SPEC,SAFE_SHORTS_SPEC,assessMvpVideoResult,describeVideoExportFailure,isMvpShortsProject,validateMvpShortsOutput} from '../videoMvp.js';
-import {getRecorderMimeCandidates,validatePreparedAudioForExport,validateVideoProject} from '../videoRenderer.js';
+import {getRecorderMimeCandidates,prepareVideoImageSources,validatePreparedAudioForExport,validatePreparedImagesForExport,validateVideoProject} from '../videoRenderer.js';
 const make=()=>({genre:'great-person',platform:'youtube-shorts',output:{width:1080,height:1920,fps:30,format:'mp4',subtitles:true,bgmEnabled:true},scenes:[{durationSec:10,subtitleText:'字幕',subtitleEnabled:true,imageData:'data:image/png;base64,AA=='}],bgm:{source:'none',audioData:''},narration:{audioData:''}});
 test('MVP Shorts基準をPASSする',()=>{const p=make();assert.equal(isMvpShortsProject(p),true);assert.equal(validateMvpShortsOutput(p,68).pass,true);assert.equal(MVP_SHORTS_SPEC.maxDurationSec,180);});
 test('720×1280安定生成もPASSし警告を返す',()=>{const p=make();p.output.width=720;p.output.height=1280;const r=validateMvpShortsOutput(p,68);assert.equal(r.pass,true);assert.equal(SAFE_SHORTS_SPEC.width,720);assert.ok(r.warnings.some(x=>x.includes('720×1280')));});
@@ -23,4 +23,46 @@ test('動画ファイルをBGMへ登録した主要validationエラーを検出�
 });
 test('シーンなしは動画validationで明示的に失敗する',()=>{
   const p=make();p.scenes=[];const r=validateVideoProject(p);assert.ok(r.errors.some(x=>x.includes('シーンがありません')));assert.ok(r.errors.some(x=>x.includes('0秒')));
+});
+
+
+test('separated MediaRef image counts as a production image before heavy loading',()=>{
+  const p=make();
+  p.autoProduction={mode:'production-request'};
+  p.scenes[0].imageData='';
+  p.scenes[0].imageAssetId='generated-1';
+  p.scenes[0].narration={mediaRef:{id:'n1'}};
+  p.mediaLibrary=[{id:'generated-1',type:'image',data:'',mediaRef:{id:'generated-1',kind:'image',mimeType:'image/jpeg',sizeBytes:123}}];
+  const r=validateVideoProject(p);
+  assert.equal(r.imageCount,1);
+  assert.equal(r.errors.some(x=>x.includes('画像未登録')),false);
+});
+
+test('video image preparation resolves MediaRef blobs and reports missing stored blobs',async()=>{
+  const project={
+    id:'p-mediaref',
+    scenes:[
+      {imageAssetId:'ok'},
+      {imageAssetId:'missing'}
+    ],
+    mediaLibrary:[
+      {id:'ok',type:'image',data:'',mediaRef:{id:'ok',kind:'image',mimeType:'image/jpeg',sizeBytes:3}},
+      {id:'missing',type:'image',data:'',mediaRef:{id:'missing',kind:'image',mimeType:'image/jpeg',sizeBytes:4}}
+    ]
+  };
+  const prepared=await prepareVideoImageSources(project,{
+    loadMedia:async({mediaId})=>mediaId==='ok'
+      ? {status:'resolved',blob:new Blob(['abc'],{type:'image/jpeg'})}
+      : {status:'missing',reason:'not found'},
+    createObjectUrl:()=> 'blob:fake',
+    revokeObjectUrl:()=>{}
+  });
+  assert.ok(prepared.imageBlobs[0] instanceof Blob);
+  assert.equal(prepared.imageBlobs[1],null);
+  assert.deepEqual(prepared.imageFailures.map(x=>x.index),[1]);
+
+  project.autoProduction={mode:'production-request'};
+  const errors=validatePreparedImagesForExport(project,prepared);
+  assert.equal(errors.length,1);
+  assert.match(errors[0],/シーン2/);
 });

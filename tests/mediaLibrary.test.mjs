@@ -140,3 +140,14 @@ test('MediaRef画像をlibrary集計・rename・削除対象として扱いData 
   assert.equal(removeUnusedAsset(project,'auto-b'),true);
   assert.equal(project.mediaLibrary[0].data,'');
 });
+
+
+test('resolveSceneImageSource exposes a separated image MediaRef without inventing embedded data',()=>{
+  const ref={id:'generated-1',kind:'image',mimeType:'image/jpeg',sizeBytes:100};
+  const project={mediaLibrary:[{id:'generated-1',type:'image',data:'',mediaRef:ref}]};
+  const resolved=resolveSceneImageSource(project,{imageAssetId:'generated-1'});
+  assert.equal(resolved.source,'media-ref');
+  assert.equal(resolved.data,'');
+  assert.equal(resolved.mediaRef,ref);
+  assert.equal(resolved.assetId,'generated-1');
+});

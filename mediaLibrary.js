@@ -72,9 +72,12 @@ export function findMediaAsset(project, assetId) {
 
 export function resolveSceneImageSource(project, scene) {
   const asset = findMediaAsset(project, scene?.imageAssetId);
-  if (asset) return { data:asset.data, assetId:asset.id, source:'library' };
-  if (isImageDataUrl(scene?.imageData)) return { data:scene.imageData, assetId:'', source:'legacy' };
-  return { data:'', assetId:'', source:'none' };
+  if (asset) {
+    const mediaRef = isMediaRef(asset.mediaRef) && asset.mediaRef.kind === 'image' ? asset.mediaRef : null;
+    return { data:isImageDataUrl(asset.data) ? asset.data : '', mediaRef, assetId:asset.id, source:mediaRef ? 'media-ref' : 'library' };
+  }
+  if (isImageDataUrl(scene?.imageData)) return { data:scene.imageData, mediaRef:null, assetId:'', source:'legacy' };
+  return { data:'', mediaRef:null, assetId:'', source:'none' };
 }
 
 export function addImageAsset(project, { data, fileName = '', createId, now = () => new Date().toISOString() } = {}) {

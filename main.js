@@ -1127,7 +1127,7 @@ fontSizeEl.onblur=()=>commitSubtitleFontSizeDecision(fontSizeEl);
 async function renderOutput(id) {
   const project=await getProject(id); if(!project){goHome();return;} ensureProjectSettings(project);
   const o=project.output, st=project.subtitleStyle, scenes=project.scenes||[];
-  const hasImages=scenes.filter(s=>resolveSceneImageSource(project,s).data).length, total=getProjectDuration(project);
+  const hasImages=scenes.filter(s=>{const source=resolveSceneImageSource(project,s);return Boolean(source.data||source.mediaRef?.id);}).length, total=getProjectDuration(project);
   const timeline=buildSubtitleTimeline(project), subtitleReady=timeline.length, subtitleWarnings=scenes.filter(s=>{const f=formatSubtitleLines(s.subtitleText||'',st.maxCharsPerLine,st.maxLines);return s.subtitleEnabled!==false&&f.overflow;}).length;
   const capabilities=getVideoCapabilities();
   const validation=validateVideoProject(project);
