@@ -145,7 +145,15 @@ function parseSceneBlock(sceneId, blockLines) {
 
     const bulletRule = /^[-*・]\s*/.test(line) && isRule(line);
     const productionRule = isRule(line) && activeField !== "narrationText" && activeField !== "subtitleText";
-    if (bulletRule || productionRule) { rules.push(value); continue; }
+    if (bulletRule) { rules.push(value); continue; }
+    if (productionRule) {
+      const split=splitVisualDirectionAndRules(value);
+      if(split.visualDirection){
+        fields.visualDirection.push(split.visualDirection);
+        rules.push(...split.rules);
+      } else rules.push(value);
+      continue;
+    }
 
     if (activeField) fields[activeField].push(value);
     else fields.visualDirection.push(value); // Backward-compatible unlabeled Scene text stays a visual direction.
