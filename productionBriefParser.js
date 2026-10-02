@@ -144,6 +144,13 @@ function parseSceneBlock(sceneId, blockLines) {
     }
     if (detectedField) {
       activeField = detectedField.name;
+      if (detectedField.name === "narrationText" && fields.visualDirection.length === 0 && rules.length) {
+        const carry = rules.filter(value => !isRule(value));
+        if (carry.length) {
+          fields.visualDirection.push(...carry);
+          for (const value of carry) rules.splice(rules.indexOf(value), 1);
+        }
+      }
       if (detectedField.inline) {
         const value=bulletValue(detectedField.inline);
         if(activeField==="visualDirection"){
