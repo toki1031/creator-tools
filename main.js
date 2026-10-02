@@ -16,6 +16,7 @@ import { createAudioAssetIdFromFile, normalizeAudioAssetId } from "./audioAssetI
 import { normalizeSubtitleOffset, resolveEffectiveSubtitlePosition, resolveSubtitleYRatio } from "./subtitlePosition.js";
 import { assessMvpVideoResult, describeVideoExportFailure, isMvpShortsProject, validateMvpShortsOutput } from "./videoMvp.js";
 import { createGenerationStartController, projectExpectsVideoAudio } from "./videoGenerationStart.js";
+import { describeFinalVideoStorage, loadFinalVideoArtifact, storeFinalVideoArtifact } from "./finalVideoArtifact.js";
 import { applyDictionaryEntries, normalizeSubtitleContentForSync, splitIntoScenes, splitSubtitleCards, subtitleContentChanged } from "./qualityLogic.js";
 import { ensureLearningState, moveSceneWithDecision, recordBgmDuckingChange, recordBgmFadeInChange, recordBgmFadeOutChange, recordBgmLoopChange, recordBgmSelectionChange, recordBgmVolumeChange, recordGlobalSubtitlePositionChange, recordSceneDurationChange, recordSceneImageSelection, recordSceneMotionChange, recordSceneSubtitlePositionChange, recordSceneTransitionChange, recordSubtitleContentChange, recordSubtitleBackgroundEnabledChange, recordSubtitleBackgroundOpacityChange, recordSubtitleEnabledChange, recordSubtitleFontSizeChange, recordSubtitleTextColorChange, recordSubtitleOutlineColorChange, recordSubtitleBackgroundColorChange, recordFinalReviewApproval, recordPublishMetadataApproval, recordSubtitleMaxCharsChange, recordSubtitleMaxLinesChange, recordSubtitleOutlineWidthChange, recordSubtitlePresetChange, recordSubtitleSceneSyncDecision, snapshotBgmFadeIn, snapshotBgmFadeOut, snapshotGlobalSubtitlePosition, snapshotSceneSubtitlePosition, snapshotSubtitleBackgroundEnabled, snapshotSubtitleBackgroundOpacity, snapshotSubtitleEnabled, snapshotSubtitleFontSize, snapshotSubtitleMaxChars, snapshotSubtitleTextColor, snapshotSubtitleOutlineColor, snapshotSubtitleBackgroundColor, snapshotFinalReviewApproval, snapshotPublishMetadata, publishMetadataApprovalMatches, snapshotSubtitleMaxLines, snapshotSubtitleOutlineWidth, snapshotSubtitlePresetState } from "./decisionLog.js";
 
@@ -1145,7 +1146,7 @@ async function renderOutput(id) {
     <div class="render-progress"><progress id="renderProgress" max="1" value="0"></progress><span id="renderProgressText">0%</span></div>
     <div class="tool-row"><button id="showFirstFrame">🖼 1フレーム確認</button><button class="primary" id="generateVideo" ${capabilities.supported?'':'disabled'}>🎬 動画を生成</button><button class="danger" id="cancelRender" disabled>生成を中止</button></div>
     <p class="notice">「動画を生成」を押すとすぐ生成を開始します。生成中はSafariを前面に表示し、画面をロックしないでください。画像＋字幕＋ナレーション＋BGMを合成し、対応形式は端末が自動判定します。</p>
-    <div id="renderResult" class="render-result" hidden><h3>生成完了</h3><video id="resultVideo" controls playsinline></video><div class="tool-row"><a id="downloadVideo" class="button-link primary" download>動画を保存</a><button id="shareVideo">共有</button></div><p id="resultInfo"></p></div>
+    <div id="renderResult" class="render-result" hidden><h3>完成動画</h3><p id="resultStorageState" class="notice"></p><video id="resultVideo" controls playsinline></video><div class="tool-row"><button id="shareVideo" class="primary">iPhoneに保存・共有</button><a id="downloadVideo" class="button-link" download>ファイルをダウンロード</a></div><p id="resultInfo"></p></div>
   </section>
 
   <section class="editor-card"><h2>制作データの書き出し</h2><div class="tool-row"><button id="exportSrt">字幕SRT</button><button id="exportPlan">制作プランJSON</button><button class="primary" id="publish">投稿準備へ</button></div></section>
@@ -1199,6 +1200,46 @@ async function renderOutput(id) {
     return preparedPromise;
   };
   let renderController=null,resultUrl='';let resultFile=null;
+  const showCompletedVideo=({blob,mimeType='',extension='',durationSec=0,diagnostics=null,storageResult=null,restored=false})=>{
+    if(!(blob instanceof Blob)||!blob.size)return false;
+    if(resultUrl)URL.revokeObjectURL(resultUrl);
+    resultUrl=URL.createObjectURL(blob);
+    const resolvedMime=mimeType||blob.type||'video/mp4';
+    const resolvedExtension=extension||(resolvedMime.includes('mp4')?'mp4':'webm');
+    resultFile=new File([blob],`${safeName(project.title)}.${resolvedExtension}`,{type:resolvedMime});
+    const resultBox=root.querySelector('#renderResult');
+    resultBox.hidden=false;
+    const resultVideo=root.querySelector('#resultVideo');
+    resultVideo.src=resultUrl;
+    const link=root.querySelector('#downloadVideo');
+    link.href=resultUrl;
+    link.download=resultFile.name;
+    const storageState=root.querySelector('#resultStorageState');
+    storageState.textContent=describeFinalVideoStorage(storageResult||{status:'resolved'});
+    const info=root.querySelector('#resultInfo');
+    const sizeMb=(blob.size/1024/1024).toFixed(1);
+    if(restored){
+      info.textContent=`${resolvedExtension.toUpperCase()}・${resolvedMime}・${sizeMb}MB\nCreator OS内の前回完成動画を復元しました。`;
+      resultVideo.onloadedmetadata=()=>{info.textContent=`${resolvedExtension.toUpperCase()}・${resolvedMime}・${sizeMb}MB・${Number(resultVideo.duration||0).toFixed(1)}秒\n生成Blob ${resultVideo.videoWidth||'?'}×${resultVideo.videoHeight||'?'}／Creator OS内の前回完成動画`;};
+      renderStatus.textContent='前回の完成動画をCreator OS内から復元しました。';
+      return true;
+    }
+    const d=diagnostics||{};
+    const captureSize=d.captureWidth&&d.captureHeight?`${d.captureWidth}×${d.captureHeight}`:'取得不可';
+    const captureFps=d.captureFrameRate?`・約${Number(d.captureFrameRate).toFixed(1)}fps`:'';
+    const baseInfo=`${resolvedExtension.toUpperCase()}・${resolvedMime}・${sizeMb}MB・${Number(durationSec||0).toFixed(1)}秒`;
+    info.textContent=`${baseInfo}\n要求 ${d.requestedWidth||'?'}×${d.requestedHeight||'?'} ／ Canvas ${d.canvasWidth||'?'}×${d.canvasHeight||'?'} ／ captureStream ${captureSize}`;
+    resultVideo.onloadedmetadata=()=>{info.textContent=`${baseInfo}\n要求 ${d.requestedWidth||'?'}×${d.requestedHeight||'?'} ／ Canvas ${d.canvasWidth||'?'}×${d.canvasHeight||'?'} ／ captureStream ${captureSize}${captureFps} ／ 生成Blob ${resultVideo.videoWidth||'?'}×${resultVideo.videoHeight||'?'}${isMvpShortsProject(project)?`\nMVP確認：${assessMvpVideoResult({project,durationSec,mimeType:resolvedMime,selectedMimeType:d.selectedMimeType,videoWidth:resultVideo.videoWidth,videoHeight:resultVideo.videoHeight,captureFrameRate:d.captureFrameRate,hasAudio:d.hasAudio}).text}`:''}`;};
+    return true;
+  };
+
+  const restorePreviousFinalVideo=async()=>{
+    const restored=await loadFinalVideoArtifact(project);
+    if(restored?.status!=='resolved'||!(restored.blob instanceof Blob)||!restored.blob.size)return;
+    showCompletedVideo({blob:restored.blob,mimeType:restored.mediaRef?.mimeType||restored.blob.type,storageResult:restored,restored:true});
+  };
+  void restorePreviousFinalVideo().catch(error=>console.warn('Final video restore failed',error));
+
   root.querySelector('#showFirstFrame').onclick=async()=>{try{applySettings();const assets=await ensurePreparedAssets();drawProjectFrame(project,assets,canvas,0);canvas.scrollIntoView({behavior:'smooth',block:'center'});renderStatus.textContent='先頭フレームを表示しました。';}catch(error){alert(`画像確認に失敗しました：${error.message}`);}};
 
   root.querySelector('#generateVideo').onclick=async()=>{
@@ -1242,14 +1283,18 @@ async function renderOutput(id) {
       const preparedSceneNarrations=Array.isArray(assets.sceneNarrations)?assets.sceneNarrations.filter(item=>item?.arrayBuffer).length:0;
       if((project.output?.bgmEnabled&&project.bgm?.audioData&&!assets.audioArrayBuffer)||(project.narration?.audioData&&!expectedSceneNarrations&&!assets.narrationArrayBuffer)||(expectedSceneNarrations&&preparedSceneNarrations<expectedSceneNarrations)){assets=await prepareVideoProject(project,{onStatus:text=>renderStatus.textContent=text});prepared=assets;describeAssets(assets);}
       const result=await exportProjectVideo(project,assets,canvas,{durationLimit:limit,signal:renderController.signal,onProgress:updateProgress,onStatus:text=>renderStatus.textContent=text,audioContext:unlockedAudioContext});
-      if(resultUrl)URL.revokeObjectURL(resultUrl);resultUrl=URL.createObjectURL(result.blob);resultFile=new File([result.blob],`${safeName(project.title)}.${result.extension}`,{type:result.mimeType});
-      const resultBox=root.querySelector('#renderResult');resultBox.hidden=false;const resultVideo=root.querySelector('#resultVideo');resultVideo.src=resultUrl;const link=root.querySelector('#downloadVideo');link.href=resultUrl;link.download=resultFile.name;const info=root.querySelector('#resultInfo');const d=result.diagnostics||{};const captureSize=d.captureWidth&&d.captureHeight?`${d.captureWidth}×${d.captureHeight}`:'取得不可';const captureFps=d.captureFrameRate?`・約${Number(d.captureFrameRate).toFixed(1)}fps`:'';const baseInfo=`${result.extension.toUpperCase()}・${result.mimeType}・${(result.blob.size/1024/1024).toFixed(1)}MB・${result.durationSec.toFixed(1)}秒`;info.textContent=`${baseInfo}\n要求 ${d.requestedWidth||'?'}×${d.requestedHeight||'?'} ／ Canvas ${d.canvasWidth||'?'}×${d.canvasHeight||'?'} ／ captureStream ${captureSize}`;resultVideo.onloadedmetadata=()=>{info.textContent=`${baseInfo}\n要求 ${d.requestedWidth||'?'}×${d.requestedHeight||'?'} ／ Canvas ${d.canvasWidth||'?'}×${d.canvasHeight||'?'} ／ captureStream ${captureSize}${captureFps} ／ 生成Blob ${resultVideo.videoWidth||'?'}×${resultVideo.videoHeight||'?'}${isMvpShortsProject(project)?`\nMVP確認：${assessMvpVideoResult({project,durationSec:result.durationSec,mimeType:result.mimeType,selectedMimeType:d.selectedMimeType,videoWidth:resultVideo.videoWidth,videoHeight:resultVideo.videoHeight,captureFrameRate:d.captureFrameRate,hasAudio:d.hasAudio}).text}`:''}`;};renderStatus.textContent='動画生成が完了しました。';
-      resultBox.scrollIntoView({behavior:'smooth',block:'center'});
+      renderStatus.textContent='完成動画をCreator OS内へ保持しています…';
+      const storageResult=await storeFinalVideoArtifact(project,result.blob);
+      showCompletedVideo({...result,storageResult});
+      renderStatus.textContent=storageResult?.status==='stored'
+        ? '動画生成が完了しました。Creator OS内に保持しました。'
+        : '動画生成は完了しました。Creator OS内に保持できなかったため、ページを閉じる前にiPhoneへ保存してください。';
+      root.querySelector('#renderResult').scrollIntoView({behavior:'smooth',block:'center'});
     }catch(error){if(error.name!=='AbortError'){console.error(error);alert(`動画生成に失敗しました。\n\n${describeVideoExportFailure(error,{durationSec:duration,width:o.width,height:o.height,fps:o.fps})}`);}renderStatus.textContent=error.name==='AbortError'?'動画生成を中止しました':'動画生成エラー';}
     finally{await closeUnlockedAudioContext();renderController=null;root.querySelector('#cancelRender').disabled=true;root.querySelector('#generateVideo').disabled=!capabilities.supported;}
   };
   root.querySelector('#cancelRender').onclick=()=>renderController?.abort();
-  root.querySelector('#shareVideo').onclick=async()=>{if(!resultFile)return;try{if(navigator.canShare?.({files:[resultFile]}))await navigator.share({title:project.title,files:[resultFile]});else alert('この端末ではファイル共有を利用できません。「動画を保存」をお使いください。');}catch(error){if(error.name!=='AbortError')alert(`共有できませんでした：${error.message}`);}};
+  root.querySelector('#shareVideo').onclick=async()=>{if(!resultFile)return;try{if(navigator.canShare?.({files:[resultFile]}))await navigator.share({title:project.title,files:[resultFile]});else alert('この端末ではファイル共有を利用できません。「ファイルをダウンロード」をお使いください。');}catch(error){if(error.name!=='AbortError')alert(`共有できませんでした：${error.message}`);}};
   root.querySelector('#exportSrt').onclick=()=>{const srt=buildSrt(project);if(!srt.trim())return alert('書き出せる字幕がありません。');downloadText(`${safeName(project.title)}.srt`,srt,'application/x-subrip;charset=utf-8');};
   root.querySelector('#exportPlan').onclick=()=>downloadJson(`${safeName(project.title)}-production-plan.json`,{schemaVersion:3,title:project.title,output:o,scenes,bgm:project.bgm,narration:project.narration,subtitleStyle:st,subtitles:buildSubtitleTimeline(project),scripts:{display:project.displayScript,speech:project.speechScript}});root.querySelector('#exportJson').onclick=()=>downloadProjectBackup(project);
 }
