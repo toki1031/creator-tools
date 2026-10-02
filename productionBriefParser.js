@@ -212,6 +212,13 @@ export function parseProductionRequest(input) {
     if (sceneMatch) { flushScene(); section = null; currentScene = `scene-${Number(sceneMatch[1])}`; if (clean(sceneMatch[2])) sceneLines.push(sceneMatch[2]); continue; }
     const extendedGlobal = /^■/.test(line) ? detectExtendedGlobalSection(line) : null;
     if (extendedGlobal) { if (currentScene) flushScene(); section=extendedGlobal.name; if(extendedGlobal.inline) brief[section].push(extendedGlobal.inline); continue; }
+    const bracketGlobal = /^【/.test(line) ? detectSceneEndingGlobalSection(line) : null;
+    if (bracketGlobal) {
+      if (currentScene) flushScene();
+      section = bracketGlobal.name;
+      if (bracketGlobal.inline) brief[section].push(bracketGlobal.inline);
+      continue;
+    }
     const sceneEndingGlobal=currentScene?detectSceneEndingGlobalSection(line):null;
     if(sceneEndingGlobal){
       flushScene();
