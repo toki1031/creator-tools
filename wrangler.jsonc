@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "creator-tools-23h",
+  "name": "creator-tools",
   "compatibility_date": "2026-10-02",
   "pages_build_output_dir": "./dist",
   "ai": {
