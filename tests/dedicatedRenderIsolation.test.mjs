@@ -13,3 +13,13 @@ assert.match(runner, /createRenderJob\(project\)/, 'prepare stage should compact
 assert.match(runner, /location\.replace\('\.\/render-runner\.html\?stage=generate'\)/, 'prepare stage must reload to release the full project before encoding');
 assert.match(runner, /exportProjectVideo\(job, prepared, canvas/, 'generation must use the compact render job, not the full project');
 assert.match(html, /renderRunnerStart/, 'dedicated page should require an explicit generation tap for Web Audio');
+
+
+assert.match(runner, /storeFinalVideoArtifact\(job, result\.blob\)/, 'dedicated runner must retain the completed video');
+assert.match(runner, /loadFinalVideoArtifact\(job\)/, 'dedicated runner should restore the latest retained final video');
+assert.match(runner, /resultVideo\.load\(\)/, 'dedicated runner should explicitly ask Safari to load the Blob URL');
+assert.match(runner, /mediaErrorText\(resultVideo\.error\)/, 'dedicated runner should surface in-page playback errors');
+assert.match(runner, /onProgress: \(elapsed, total\)/, 'dedicated runner progress must use elapsed and total rather than treating elapsed seconds as a ratio');
+assert.match(html, /iPhoneに保存・共有/, 'dedicated result UI should distinguish device saving');
+assert.match(html, /ファイルをダウンロード/, 'dedicated result UI should keep direct download as a separate action');
+assert.match(html, /renderRunnerStorageState/, 'dedicated result UI should show Creator OS retention state');
