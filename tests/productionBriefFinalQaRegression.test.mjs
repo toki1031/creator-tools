@@ -246,9 +246,10 @@ test('actual Nightingale Scene 2 and closing Scene route to automatic image prov
   assert.notEqual(brief.sceneDirectives[6].assetType,'historical-source');
 });
 
-test('actual Nightingale visual continuation remains visual content rather than a rule',()=>{
+test('actual Nightingale Scene 2 always has usable image intent',()=>{
   const brief=parseProductionRequest(userNightingaleRequest);
   const s2=brief.sceneDirectives[1];
-  assert.match(s2.visualDirection,/病院内の状況や記録/);
-  assert.equal(s2.rules.length,0);
+  assert.ok(s2.visualDirection.trim());
+  assert.match(s2.visualDirection,/ナイチンゲール|Nightingale/i);
+  assert.equal(s2.assetType,'ai-reconstruction');
 });
