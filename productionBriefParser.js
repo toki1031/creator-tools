@@ -7,10 +7,10 @@ const bulletValue = (line) => clean(line).replace(/^[-*・]\s*/, "").replace(/^\
 const round2 = (value) => Math.round(Number(value) * 100) / 100;
 
 const SECTION_ALIASES = [
-  ["objective", /^(?:目的|objective)\s*[:：]?\s*(.*)$/i], ["tone", /^(?:トーン|tone)\s*[:：]?\s*(.*)$/i],
-  ["globalRules", /^(?:全体ルール|global\s*rules?|禁止事項)\s*[:：]?\s*(.*)$/i], ["subtitleGuidance", /^(?:字幕(?:方針|ガイダンス)?|subtitle(?:\s*guidance)?)\s*[:：]?\s*(.*)$/i],
-  ["narrationGuidance", /^(?:ナレーション(?:方針|ガイダンス)?|narration(?:\s*guidance)?)\s*[:：]?\s*(.*)$/i], ["bgmGuidance", /^(?:BGM(?:方針|ガイダンス)?|bgm(?:\s*guidance)?)\s*[:：]?\s*(.*)$/i],
-  ["seGuidance", /^(?:SE(?:方針|ガイダンス)?|se(?:\s*guidance)?)\s*[:：]?\s*(.*)$/i], ["qaCriteria", /^(?:最終QA|QA(?:条件|基準|criteria)?)\s*[:：]?\s*(.*)$/i],
+  ["objective", /^(?:目的|objective)(?:\s*[:：]\s*(.*)|\s*)$/i], ["tone", /^(?:トーン|tone)(?:\s*[:：]\s*(.*)|\s*)$/i],
+  ["globalRules", /^(?:全体ルール|global\s*rules?|禁止事項)(?:\s*[:：]\s*(.*)|\s*)$/i], ["subtitleGuidance", /^(?:字幕(?:方針|ガイダンス)?|subtitle(?:\s*guidance)?)(?:\s*[:：]\s*(.*)|\s*)$/i],
+  ["narrationGuidance", /^(?:ナレーション(?:方針|ガイダンス)?|narration(?:\s*guidance)?)(?:\s*[:：]\s*(.*)|\s*)$/i], ["bgmGuidance", /^(?:BGM(?:方針|ガイダンス)?|bgm(?:\s*guidance)?)(?:\s*[:：]\s*(.*)|\s*)$/i],
+  ["seGuidance", /^(?:SE(?:方針|ガイダンス)?|se(?:\s*guidance)?)(?:\s*[:：]\s*(.*)|\s*)$/i], ["qaCriteria", /^(?:最終QA|QA(?:条件|基準|criteria)?)(?:\s*[:：]\s*(.*)|\s*)$/i],
 ];
 const SCENE_FIELD_ALIASES = [
   ["narrationText", /^(?:ナレーション|セリフ|読み上げ|narration|speech)(?:\s*[:：]\s*(.*)|\s*)$/i],
@@ -21,7 +21,13 @@ const SCENE_FIELD_ALIASES = [
 function detectSection(line) { const text = clean(line).replace(/^#{1,6}\s*/, ""); for (const [name, pattern] of SECTION_ALIASES) { const match = text.match(pattern); if (match) return { name, inline: clean(match[1]) }; } return null; }
 function detectExtendedGlobalSection(line) {
   const text=clean(line).replace(/^#{1,6}\s*/,"").replace(/^■\s*/,"");
-  const mappings=[["globalRules",/^(?:禁止事項|半自動素材制作ルール|半自動進行)\s*[:：]?\s*(.*)$/i],["subtitleGuidance",/^字幕\s*[:：]?\s*(.*)$/i],["narrationGuidance",/^ナレーション(?:方針|ガイダンス)?\s*[:：]?\s*(.*)$/i],["bgmGuidance",/^(?:音声・BGM|BGM(?:方針|ガイダンス)?)\s*[:：]?\s*(.*)$/i],["qaCriteria",/^(?:完成条件|最終チェック)\s*[:：]?\s*(.*)$/i]];
+  const mappings=[
+    ["globalRules",/^(?:禁止事項|半自動素材制作ルール|半自動進行)(?:\s*[:：]\s*(.*)|\s*)$/i],
+    ["subtitleGuidance",/^字幕(?:\s*[:：]\s*(.*)|\s*)$/i],
+    ["narrationGuidance",/^ナレーション(?:方針|ガイダンス)?(?:\s*[:：]\s*(.*)|\s*)$/i],
+    ["bgmGuidance",/^(?:音声・BGM|BGM(?:方針|ガイダンス)?)(?:\s*[:：]\s*(.*)|\s*)$/i],
+    ["qaCriteria",/^(?:完成条件|最終チェック)(?:\s*[:：]\s*(.*)|\s*)$/i]
+  ];
   for(const [name,pattern] of mappings){const match=text.match(pattern);if(match)return{name,inline:clean(match[1])};}
   if(/^映像モーション\s*[:：]?/i.test(text))return{name:"globalRules",inline:text};
   if(/^■/.test(clean(line))&&text)return{name:"globalRules",inline:text};
@@ -30,7 +36,7 @@ function detectExtendedGlobalSection(line) {
 function detectSceneField(line) { for (const [name, pattern] of SCENE_FIELD_ALIASES) { const match = clean(line).match(pattern); if (match) return { name, inline: clean(match[1]) }; } return null; }
 function detectSceneEndingGlobalSection(line) {
   const text=clean(line).replace(/^#{1,6}\s*/,"");
-  const match=text.match(/^(?:最終QA|QA(?:条件|基準|criteria)?|完成条件|最終チェック)\s*[:：]?\s*(.*)$/i);
+  const match=text.match(/^(?:最終QA|QA(?:条件|基準|criteria)?|完成条件|最終チェック)(?:\s*[:：]\s*(.*)|\s*)$/i);
   return match?{name:"qaCriteria",inline:clean(match[1])}:null;
 }
 function extractTargetedSceneGuidance(lines) {
