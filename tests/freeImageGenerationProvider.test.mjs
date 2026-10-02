@@ -1,6 +1,82 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {planFreeImageGeneration,requestFreeGeneratedImage} from '../freeImageGenerationProvider.js';
-test('only reconstruction and modern visuals may use free generation',()=>{assert.equal(planFreeImageGeneration({requestedType:'ai-reconstruction'}).status,'ready');assert.equal(planFreeImageGeneration({requestedType:'modern-visual'}).status,'ready');assert.equal(planFreeImageGeneration({requestedType:'historical-source'}).status,'blocked');});
-test('free quota exhaustion never falls back to paid generation',()=>{const r=planFreeImageGeneration({requestedType:'modern-visual'},{dailyQuotaAvailable:false});assert.equal(r.status,'free-quota-exhausted');assert.equal(r.paidFallback,false);});
-test('generation provider is server-side only',()=>{const r=planFreeImageGeneration({requestedType:'modern-visual'});assert.equal(r.serverSideOnly,true);assert.equal(r.paidFallback,false);});
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {buildFreeImagePrompt,FREE_IMAGE_PROMPT_MAX_CHARS,planFreeImageGeneration,requestFreeGeneratedImage} from '../freeImageGenerationProvider.js';
 
-test('generation request uses asset requirement queryHint as prompt',async()=>{let sent=null;const fetchImpl=async(_url,options)=>{sent=JSON.parse(options.body);return new Response(JSON.stringify({id:'g1',data:'data:image/jpeg;base64,AA'}),{status:200,headers:{'content-type':'application/json'}})};const r=await requestFreeGeneratedImage({requestedType:'modern-visual',queryHint:'modern meeting explanation'},{fetchImpl});assert.equal(sent.prompt,'modern meeting explanation');assert.equal(r.status,'resolved');assert.equal(r.asset.requestedType,'modern-visual')});
+test('only reconstruction and modern visuals may use free generation',()=>{
+  assert.equal(planFreeImageGeneration({requestedType:'ai-reconstruction'}).status,'ready');
+  assert.equal(planFreeImageGeneration({requestedType:'modern-visual'}).status,'ready');
+  assert.equal(planFreeImageGeneration({requestedType:'historical-source'}).status,'blocked');
+});
+
+test('free quota exhaustion never falls back to paid generation',()=>{
+  const r=planFreeImageGeneration({requestedType:'modern-visual'},{dailyQuotaAvailable:false});
+  assert.equal(r.status,'free-quota-exhausted');
+  assert.equal(r.paidFallback,false);
+});
+
+test('generation provider is server-side only',()=>{
+  const r=planFreeImageGeneration({requestedType:'modern-visual'});
+  assert.equal(r.serverSideOnly,true);
+  assert.equal(r.paidFallback,false);
+});
+
+test('historical reconstruction prompt keeps Nightingale scene intent and blocks fantasy drift',()=>{
+  const prompt=buildFreeImagePrompt({
+    requestedType:'ai-reconstruction',
+    queryHint:'19世紀の軍病院。フローレンス・ナイチンゲールが患者の記録と報告書を確認している。',
+    prohibitedContent:['文字は描かない','実在する写真として扱わない']
+  });
+  assert.match(prompt,/photorealistic historical documentary reconstruction/i);
+  assert.match(prompt,/Florence Nightingale/i);
+  assert.match(prompt,/19th-century/i);
+  assert.match(prompt,/hospital ward/i);
+  assert.match(prompt,/paper records and reports/i);
+  assert.match(prompt,/ナイチンゲール/);
+  assert.match(prompt,/fantasy/i);
+  assert.match(prompt,/monsters/i);
+  assert.match(prompt,/文字は描かない/);
+  assert.match(prompt,/Do not add readable text/i);
+  assert.ok(Array.from(prompt).length<=FREE_IMAGE_PROMPT_MAX_CHARS);
+});
+
+test('statistical papers on a desk stay documentary rather than fantasy objects',()=>{
+  const prompt=buildFreeImagePrompt({
+    requestedType:'ai-reconstruction',
+    queryHint:'ナイチンゲールが机の上の統計資料と死亡記録を比較し、分析している場面。'
+  });
+  assert.match(prompt,/Florence Nightingale/i);
+  assert.match(prompt,/statistical papers and charts/i);
+  assert.match(prompt,/desk with papers/i);
+  assert.match(prompt,/no surreal substitutions/i);
+  assert.match(prompt,/fantasy weapons/i);
+});
+
+test('modern meeting prompt explicitly asks for realistic contemporary imagery',()=>{
+  const prompt=buildFreeImagePrompt({
+    requestedType:'modern-visual',
+    queryHint:'現代の会議。説明資料を見ながら複数人が議論し、数字・具体例・比較を使って説明を改善する。'
+  });
+  assert.match(prompt,/photorealistic contemporary documentary/i);
+  assert.match(prompt,/meeting or discussion/i);
+  assert.match(prompt,/present-day people/i);
+  assert.match(prompt,/anime/i);
+  assert.match(prompt,/historical costumes/i);
+  assert.match(prompt,/現代の会議/);
+});
+
+test('generation request sends the structured prompt instead of raw queryHint',async()=>{
+  let sent=null;
+  const fetchImpl=async(_url,options)=>{
+    sent=JSON.parse(options.body);
+    return new Response(JSON.stringify({id:'g1',data:'data:image/jpeg;base64,AA'}),{status:200,headers:{'content-type':'application/json'}});
+  };
+  const raw='現代の会議で説明資料を改善する。';
+  const r=await requestFreeGeneratedImage({requestedType:'modern-visual',queryHint:raw,prohibitedContent:['文字は描かない']},{fetchImpl});
+  assert.notEqual(sent.prompt,raw);
+  assert.match(sent.prompt,/Scene description/);
+  assert.match(sent.prompt,/現代の会議/);
+  assert.match(sent.prompt,/文字は描かない/);
+  assert.equal(sent.requestedType,'modern-visual');
+  assert.equal(r.status,'resolved');
+  assert.equal(r.asset.requestedType,'modern-visual');
+});
