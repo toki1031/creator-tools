@@ -203,6 +203,9 @@ function parseSceneBlock(sceneId, blockLines) {
       }
     }
   }
+  if (!fields.visualDirection.length && fields.narrationText.length) {
+    fields.visualDirection.push(...fields.narrationText);
+  }
   const result = {
     sceneId,
     visualDirection: fields.visualDirection.join("\n"),
