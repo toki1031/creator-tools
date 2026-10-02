@@ -116,3 +116,58 @@ test('does not overwrite existing project scripts or explicit subtitles during c
   assert.equal(result.project.speechScript,'編集済み読み上げ台本');
   assert.equal(result.project.scenes[0].subtitleText,'表示する字幕');
 });
+
+
+test('repairs the saved QA project with mixed visual rules and leaked final QA',()=>{
+  const broken={
+    id:'qa-real-project',
+    autoProduction:{mode:'production-request'},
+    scenes:[
+      {
+        id:'scene-2',order:2,
+        productionDirection:{
+          visualDirection:'',
+          assetType:'ai-reconstruction',
+          rules:['AI再現。統計資料や図表を整理する机上の場面。文字は描かない。']
+        }
+      },
+      {
+        id:'scene-4',order:4,
+        productionDirection:{
+          visualDirection:'現代の会議で、分かりやすい図を使って説明する場面。\n最終QA\n像、ナレーション、字幕、BGMがすべて入っていること。',
+          assetType:'modern-visual',
+          rules:['Scene番号、秒数、矢印、制作指示が字幕やナレーションに混入しないこと。']
+        }
+      }
+    ],
+    productionBrief:{
+      sceneDirectives:[
+        {
+          sceneId:'scene-2',
+          visualDirection:'',
+          assetType:'ai-reconstruction',
+          rules:['AI再現。統計資料や図表を整理する机上の場面。文字は描かない。']
+        },
+        {
+          sceneId:'scene-4',
+          visualDirection:'現代の会議で、分かりやすい図を使って説明する場面。\n最終QA\n像、ナレーション、字幕、BGMがすべて入っていること。',
+          assetType:'modern-visual',
+          rules:['Scene番号、秒数、矢印、制作指示が字幕やナレーションに混入しないこと。']
+        }
+      ]
+    }
+  };
+  const result=normalizeLegacyAutoProductionProject(broken);
+  assert.equal(result.changed,true);
+  const scene2=result.project.scenes[0].productionDirection;
+  assert.match(scene2.visualDirection,/AI再現/);
+  assert.match(scene2.visualDirection,/統計資料や図表を整理する机上の場面/);
+  assert.deepEqual(scene2.rules,['文字は描かない。']);
+  const scene4=result.project.scenes[1].productionDirection;
+  assert.equal(scene4.visualDirection,'現代の会議で、分かりやすい図を使って説明する場面。');
+  assert.doesNotMatch(scene4.visualDirection,/最終QA|像、ナレーション/);
+  const brief2=result.project.productionBrief.sceneDirectives[0];
+  assert.match(brief2.visualDirection,/統計資料や図表/);
+  assert.deepEqual(brief2.rules,['文字は描かない。']);
+  assert.equal(result.project.productionBrief.sceneDirectives[1].visualDirection,'現代の会議で、分かりやすい図を使って説明する場面。');
+});
