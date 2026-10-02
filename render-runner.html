@@ -23,11 +23,12 @@
       <a id="renderRunnerBack" href="./index.html">Creator OSへ戻る</a>
     </div>
     <section id="renderRunnerResult" hidden>
-      <h2>生成完了</h2>
-      <video id="renderRunnerVideo" controls playsinline></video>
+      <h2>完成動画</h2>
+      <p id="renderRunnerStorageState" class="notice"></p>
+      <video id="renderRunnerVideo" controls playsinline preload="metadata"></video>
       <div class="actions">
-        <a id="renderRunnerDownload" class="button primary" download>動画を保存</a>
-        <button id="renderRunnerShare" type="button">共有</button>
+        <button id="renderRunnerShare" type="button" class="primary">iPhoneに保存・共有</button>
+        <a id="renderRunnerDownload" class="button" download>ファイルをダウンロード</a>
       </div>
       <p id="renderRunnerInfo" class="notice"></p>
     </section>
