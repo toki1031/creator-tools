@@ -677,6 +677,13 @@ async function createAudio(project, prepared, providedContext = null) {
   } catch (error) { try { if (context.state !== 'closed') await context.close(); } catch {} throw error; }
 }
 
+export function ensureVideoBlobMime(blob, mimeType = '') {
+  if (!(blob instanceof Blob)) return blob;
+  const resolved = String(mimeType || '').trim();
+  if (!resolved || blob.type === resolved) return blob;
+  return blob.slice(0, blob.size, resolved);
+}
+
 async function createRecordingSink(mimeType) {
   const memoryChunks = [];
   const memorySink = () => ({
@@ -762,6 +769,7 @@ export async function exportProjectVideo(project, prepared, canvas, { durationLi
       let blob;
       try { blob = await recordingSink.finish(); } catch (error) { await recordingSink.abort?.(); return reject(error instanceof Error ? error : new Error(String(error))); }
       if (!blob?.size) return reject(new Error('動画データを生成できませんでした。画面を開いたまま再試行してください。'));
+      blob = ensureVideoBlobMime(blob, actualMime);
       const extension = actualMime.includes('mp4') ? 'mp4' : 'webm';
       resolve({ blob, mimeType: actualMime, extension, durationSec: total, diagnostics: { requestedWidth: exportProfile.requestedWidth, requestedHeight: exportProfile.requestedHeight, canvasWidth: canvas.width, canvasHeight: canvas.height, captureWidth: Number(captureTrackSettings?.width) || null, captureHeight: Number(captureTrackSettings?.height) || null, captureFrameRate: Number(captureTrackSettings?.frameRate) || null, selectedMimeType: mimeType, actualMimeType: actualMime, hasAudio: Boolean(audio?.tracks?.length), iosSafeMode: exportProfile.iosSafeMode } });
     };
