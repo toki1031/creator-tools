@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {MVP_SHORTS_SPEC,SAFE_SHORTS_SPEC,assessMvpVideoResult,describeVideoExportFailure,isMvpShortsProject,validateMvpShortsOutput} from '../videoMvp.js';
-import {getRecorderMimeCandidates,prepareVideoImageSources,validatePreparedAudioForExport,validatePreparedImagesForExport,validateVideoProject} from '../videoRenderer.js';
+import {ensureVideoBlobMime,getRecorderMimeCandidates,prepareVideoImageSources,validatePreparedAudioForExport,validatePreparedImagesForExport,validateVideoProject} from '../videoRenderer.js';
 const make=()=>({genre:'great-person',platform:'youtube-shorts',output:{width:1080,height:1920,fps:30,format:'mp4',subtitles:true,bgmEnabled:true},scenes:[{durationSec:10,subtitleText:'字幕',subtitleEnabled:true,imageData:'data:image/png;base64,AA=='}],bgm:{source:'none',audioData:''},narration:{audioData:''}});
 test('MVP Shorts基準をPASSする',()=>{const p=make();assert.equal(isMvpShortsProject(p),true);assert.equal(validateMvpShortsOutput(p,68).pass,true);assert.equal(MVP_SHORTS_SPEC.maxDurationSec,180);});
 test('720×1280安定生成もPASSし警告を返す',()=>{const p=make();p.output.width=720;p.output.height=1280;const r=validateMvpShortsOutput(p,68);assert.equal(r.pass,true);assert.equal(SAFE_SHORTS_SPEC.width,720);assert.ok(r.warnings.some(x=>x.includes('720×1280')));});
@@ -65,4 +65,17 @@ test('video image preparation resolves MediaRef blobs and reports missing stored
   const errors=validatePreparedImagesForExport(project,prepared);
   assert.equal(errors.length,1);
   assert.match(errors[0],/シーン2/);
+});
+
+
+test('OPFS由来でMIMEなしの動画Blobに実録画MIMEを付け直す',()=>{
+  const raw=new Blob(['abc']);
+  const typed=ensureVideoBlobMime(raw,'video/mp4;codecs="avc1.42E01E,mp4a.40.2"');
+  assert.equal(typed.size,raw.size);
+  assert.equal(typed.type,'video/mp4;codecs="avc1.42e01e,mp4a.40.2"');
+});
+
+test('正しいMIME済みBlobはそのまま返す',()=>{
+  const raw=new Blob(['abc'],{type:'video/mp4'});
+  assert.equal(ensureVideoBlobMime(raw,'video/mp4'),raw);
 });
