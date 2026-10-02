@@ -12,7 +12,7 @@ function isWorkflowMarkerOnly(value = '') {
 }
 function trimLeakedGlobalHeadings(value = '') {
   const lines = String(value ?? '').replace(/\r\n?/g, '\n').split('\n');
-  const index = lines.findIndex(line => /^(?:■|最終QA\b|完成条件\b|最終チェック\b|QA(?:条件|基準)?\b)/i.test(line.trim()));
+  const index = lines.findIndex(line => /^(?:■|最終QA(?:\s*[:：]|$)|完成条件(?:\s*[:：]|$)|最終チェック(?:\s*[:：]|$)|QA(?:条件|基準)?(?:\s*[:：]|$))/i.test(line.trim()));
   return { value: lines.slice(0, index >= 0 ? index : lines.length).join('\n').trim(), leaked: index >= 0 };
 }
 function extractLeakedTargetedGuidance(value = '') {
