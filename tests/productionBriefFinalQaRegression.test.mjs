@@ -79,3 +79,81 @@ test('mixed unlabeled visual and prohibition text is also split safely',()=>{
   assert.match(scene.visualDirection,/机上の統計資料/);
   assert.deepEqual(scene.rules,['文字は描かない。']);
 });
+
+
+const finalQaRequest=`
+目的
+人物紹介だけではなく、現代の視聴者が今日から使える形で伝える。
+
+ナレーション方針
+自然な日本語にする。
+Scene番号、秒数、矢印、制作指示、見出しは読み上げない。
+説明口調になりすぎず、短く分かりやすくする。
+
+字幕方針
+ナレーション内容に合わせる。
+Scene番号、秒数、矢印、制作指示、見出しは字幕に表示しない。
+1画面の文字量を多くしすぎない。
+
+BGM
+落ち着いたドキュメンタリー調。
+ナレーションを邪魔しない音量。
+Creator OSの標準BGMを使用してよい。
+
+Scene 1
+ナレーション:
+テストです。
+字幕:
+テスト
+映像:
+AI再現。机上の資料を見る場面。
+asset type: ai-reconstruction
+
+最終QA
+画像、ナレーション、字幕、BGMがすべて入っていること。
+4つすべてのSceneに画像があること。
+Scene番号、秒数、矢印、制作指示が字幕やナレーションに混入しないこと。
+ナレーションと字幕の内容が大きくずれないこと。
+BGMがナレーションを邪魔しないこと。
+完成動画が正常に再生できること。
+`;
+
+test('ordinary QA sentences beginning with ナレーション or BGM remain QA criteria',()=>{
+  const brief=parseProductionRequest(finalQaRequest);
+  assert.deepEqual(brief.qaCriteria,[
+    '画像、ナレーション、字幕、BGMがすべて入っていること。',
+    '4つすべてのSceneに画像があること。',
+    'Scene番号、秒数、矢印、制作指示が字幕やナレーションに混入しないこと。',
+    'ナレーションと字幕の内容が大きくずれないこと。',
+    'BGMがナレーションを邪魔しないこと。',
+    '完成動画が正常に再生できること。'
+  ]);
+});
+
+test('subtitle narration and BGM guidance stay in their own sections',()=>{
+  const brief=parseProductionRequest(finalQaRequest);
+  assert.deepEqual(brief.narrationGuidance,[
+    '自然な日本語にする。',
+    'Scene番号、秒数、矢印、制作指示、見出しは読み上げない。',
+    '説明口調になりすぎず、短く分かりやすくする。'
+  ]);
+  assert.deepEqual(brief.subtitleGuidance,[
+    'ナレーション内容に合わせる。',
+    'Scene番号、秒数、矢印、制作指示、見出しは字幕に表示しない。',
+    '1画面の文字量を多くしすぎない。'
+  ]);
+  assert.deepEqual(brief.bgmGuidance,[
+    '落ち着いたドキュメンタリー調。',
+    'ナレーションを邪魔しない音量。',
+    'Creator OSの標準BGMを使用してよい。'
+  ]);
+});
+
+test('section words inside ordinary sentences do not become headings without a colon',()=>{
+  const brief=parseProductionRequest('最終QA\\nナレーションと字幕を合わせる。\\nBGMが大きすぎないこと。\\n目的は達成できること。');
+  assert.deepEqual(brief.qaCriteria,[
+    'ナレーションと字幕を合わせる。',
+    'BGMが大きすぎないこと。',
+    '目的は達成できること。'
+  ]);
+});
