@@ -56,12 +56,17 @@ function narrationLooksLikeVideo(project) {
   return mime.startsWith('video/') || /\.(mov|mp4|m4v|avi|webm)$/.test(name);
 }
 
+export function hasVideoSceneImageReference(project, scene) {
+  const resolved = resolveSceneImageSource(project, scene);
+  return Boolean(resolved.data || resolved.mediaRef?.id);
+}
+
 export function validateVideoProject(project) {
   const scenes = Array.isArray(project.scenes) ? project.scenes : [];
   const errors = [];
   const warnings = [];
   if (!scenes.length) errors.push('シーンがありません。');
-  const imageCount = scenes.filter(scene => resolveSceneImageSource(project, scene).data).length;
+  const imageCount = scenes.filter(scene => hasVideoSceneImageReference(project, scene)).length;
   if (imageCount < scenes.length) warnings.push(`画像未登録のシーンが${scenes.length - imageCount}件あります。背景色で代用します。`);
   if (getProjectDuration(project) <= 0) errors.push('動画の長さが0秒です。');
   if (project.output?.bgmEnabled && project.bgm?.source !== 'none' && !project.bgm?.audioData && !isProceduralBgm(project.bgm)) warnings.push('BGM設定はありますが、音源ファイルが登録されていません。');
@@ -72,13 +77,89 @@ export function validateVideoProject(project) {
   if (narrationInvalid) errors.push('現在のナレーションは動画ファイルです。台本・音声画面でMP3・M4A・AAC・WAVなどの音声ファイルを再登録してください。');
   if (project.output?.subtitles && !scenes.some(scene => scene.subtitleEnabled !== false && String(scene.subtitleText || '').trim())) warnings.push('表示できる字幕がありません。');
   if (project.autoProduction?.mode === 'production-request') {
-    const missingImages = scenes.flatMap((scene, index) => resolveSceneImageSource(project, scene).data ? [] : [index + 1]);
+    const missingImages = scenes.flatMap((scene, index) => hasVideoSceneImageReference(project, scene) ? [] : [index + 1]);
     const missingNarrations = scenes.flatMap((scene, index) => (scene?.narration?.audioData || scene?.narration?.mediaRef?.id) ? [] : [index + 1]);
     if (missingImages.length) errors.push(`自動制作を完成できません。画像未登録：シーン${missingImages.join('・')}`);
     if (missingNarrations.length) errors.push(`自動制作を完成できません。ナレーション未生成：シーン${missingNarrations.join('・')}`);
     if (project.output?.bgmEnabled && !project.bgm?.audioData && !isProceduralBgm(project.bgm)) errors.push('自動制作を完成できません。BGMを使用する設定ですが音源が未登録です。');
   }
   return { errors, warnings, imageCount, sceneCount: scenes.length, durationSec: getProjectDuration(project), bgmInvalid, narrationInvalid, sceneNarrationCount };
+}
+
+export async function prepareVideoImageSources(project, {
+  loadMedia = getMedia,
+  createObjectUrl = blob => URL.createObjectURL(blob),
+  revokeObjectUrl = url => URL.revokeObjectURL(url),
+  onStatus = () => {}
+} = {}) {
+  const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+  const imageSources = Array(scenes.length).fill('');
+  const imageBlobs = Array(scenes.length).fill(null);
+  const imageSourceKinds = Array(scenes.length).fill('none');
+  const imageObjectUrls = Array(scenes.length).fill('');
+  const imageFailures = [];
+
+  for (let index = 0; index < scenes.length; index += 1) {
+    const resolved = resolveSceneImageSource(project, scenes[index]);
+    if (resolved.data) {
+      imageSources[index] = resolved.data;
+      imageSourceKinds[index] = resolved.source || 'embedded';
+      continue;
+    }
+    if (!resolved.mediaRef?.id) continue;
+
+    imageSourceKinds[index] = 'media-ref';
+    onStatus(`保存済み画像を確認しています… ${index + 1}/${scenes.length}`);
+    let loaded;
+    try {
+      loaded = await loadMedia({ projectId: String(project?.id || ''), mediaId: resolved.mediaRef.id });
+    } catch (error) {
+      imageFailures.push({ index, message: error instanceof Error ? error.message : String(error) });
+      continue;
+    }
+    if (loaded?.status !== 'resolved' || !(loaded.blob instanceof Blob)) {
+      imageFailures.push({ index, message: loaded?.reason || '保存済み画像を読み出せませんでした' });
+      continue;
+    }
+    imageBlobs[index] = loaded.blob;
+  }
+
+  return { imageSources, imageBlobs, imageSourceKinds, imageObjectUrls, imageFailures, createObjectUrl, revokeObjectUrl };
+}
+
+function ensurePreparedImageSourceAt(prepared, index) {
+  const existing = prepared?.imageSources?.[index];
+  if (existing) return existing;
+  const blob = prepared?.imageBlobs?.[index];
+  if (!(blob instanceof Blob)) return '';
+  try {
+    const url = prepared.createObjectUrl(blob);
+    prepared.imageSources[index] = url;
+    prepared.imageObjectUrls[index] = url;
+    return url;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!prepared.imageFailures.some(item => item.index === index)) prepared.imageFailures.push({ index, message });
+    return '';
+  }
+}
+
+function releasePreparedImageSourceAt(prepared, index) {
+  const url = prepared?.imageObjectUrls?.[index];
+  if (!url) return;
+  try { prepared.revokeObjectUrl?.(url); } catch {}
+  prepared.imageObjectUrls[index] = '';
+  if (prepared.imageSourceKinds?.[index] === 'media-ref') prepared.imageSources[index] = '';
+}
+
+export function validatePreparedImagesForExport(project, prepared) {
+  if (project?.autoProduction?.mode !== 'production-request') return [];
+  const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+  const missing = scenes.flatMap((scene, index) => {
+    const ready = Boolean(prepared?.imageSources?.[index] || prepared?.imageBlobs?.[index]);
+    return ready ? [] : [index + 1];
+  });
+  return missing.length ? [`自動制作を完成できません。画像を読み出せません：シーン${missing.join('・')}`] : [];
 }
 
 async function loadImageSafely(source, timeoutMs = 12000) {
@@ -102,7 +183,7 @@ async function loadImageSafely(source, timeoutMs = 12000) {
 }
 
 async function loadPreparedImageAt(prepared, index) {
-  const source = prepared?.imageSources?.[index];
+  const source = ensurePreparedImageSourceAt(prepared, index);
   if (!source || prepared.images?.[index]) return prepared.images?.[index] || null;
   if (prepared.imageFailures?.some(item => item.index === index)) return null;
   prepared.imageLoadPromises ||= [];
@@ -128,10 +209,13 @@ export async function ensurePreparedImageWindow(project, prepared, index, { onSt
   prepared.imageWindowIndex = current;
   const keep = new Set([current, current + 1].filter(i => i >= 0 && i < scenes.length));
   for (let i = 0; i < prepared.images.length; i++) {
-    if (!keep.has(i)) prepared.images[i] = null;
+    if (!keep.has(i)) {
+      prepared.images[i] = null;
+      if (!prepared.imageLoadPromises?.[i]) releasePreparedImageSourceAt(prepared, i);
+    }
   }
   for (const target of keep) {
-    if (!prepared.imageSources[target]) continue;
+    if (!prepared.imageSources[target] && !prepared.imageBlobs?.[target]) continue;
     onStatus(`シーン画像を準備しています… ${target + 1}/${scenes.length}`);
     await loadPreparedImageAt(prepared, target);
   }
@@ -140,16 +224,24 @@ export async function ensurePreparedImageWindow(project, prepared, index, { onSt
 export function releasePreparedImages(prepared) {
   if (!Array.isArray(prepared?.images)) return;
   prepared.images.fill(null);
+  if (Array.isArray(prepared.imageObjectUrls)) {
+    for (let i = 0; i < prepared.imageObjectUrls.length; i += 1) releasePreparedImageSourceAt(prepared, i);
+  }
   prepared.imageWindowIndex = -1;
 }
 
-export async function prepareVideoProject(project, { onStatus = () => {} } = {}) {
+export async function prepareVideoProject(project, { onStatus = () => {}, loadMedia = getMedia, createObjectUrl, revokeObjectUrl } = {}) {
   const scenes = Array.isArray(project.scenes) ? project.scenes : [];
-  const imageFailures = [];
-  const imageSources = scenes.map(scene => resolveSceneImageSource(project, scene).data || '');
+  const preparedSources = await prepareVideoImageSources(project, {
+    loadMedia,
+    ...(createObjectUrl ? { createObjectUrl } : {}),
+    ...(revokeObjectUrl ? { revokeObjectUrl } : {}),
+    onStatus
+  });
+  const { imageSources, imageBlobs, imageSourceKinds, imageObjectUrls, imageFailures } = preparedSources;
   const images = Array(scenes.length).fill(null);
   const imageLoadPromises = Array(scenes.length).fill(null);
-  const imagePreparation = { imageSources, images, imageFailures, imageLoadPromises, imageWindowIndex: -1 };
+  const imagePreparation = { ...preparedSources, images, imageLoadPromises, imageWindowIndex: -1 };
   onStatus('先頭シーンの画像を準備しています…');
   if (scenes.length) await ensurePreparedImageWindow(project, imagePreparation, 0, { onStatus });
 
@@ -205,12 +297,12 @@ export async function prepareVideoProject(project, { onStatus = () => {} } = {})
   const sceneNarrations = sceneNarrationSources.map(item => item ? { available: true, lazy: true } : null);
   if (hasSceneNarrations) onStatus('シーン別ナレーションは再生直前に順番に読み込みます。');
 
-  const loadedImageCount = imageSources.filter(Boolean).length;
+  const loadedImageCount = scenes.reduce((count, _scene, index) => count + ((imageSources[index] || imageBlobs[index]) ? 1 : 0), 0);
   const notes = [];
   if (audioInvalid) notes.push('BGM形式エラー'); else if (audioFetchError) notes.push('BGM読込失敗');
   if (narrationInvalid) notes.push('ナレーション形式エラー'); else if (narrationFetchError) notes.push('ナレーション読込失敗');
   onStatus(`素材準備完了：画像 ${loadedImageCount}/${scenes.length}${notes.length ? `／${notes.join('／')}` : ''}`);
-  return { images, imageSources, imageFailures, imageLoadPromises, imageWindowIndex: imagePreparation.imageWindowIndex, loadedImageCount, audioArrayBuffer, audioMimeType, audioFetchError, audioInvalid, narrationArrayBuffer, narrationMimeType, narrationFetchError, narrationInvalid, sceneNarrations, sceneNarrationSources };
+  return { images, imageSources, imageBlobs, imageSourceKinds, imageObjectUrls, imageFailures, imageLoadPromises, imageWindowIndex: imagePreparation.imageWindowIndex, loadedImageCount, createObjectUrl:preparedSources.createObjectUrl, revokeObjectUrl:preparedSources.revokeObjectUrl, audioArrayBuffer, audioMimeType, audioFetchError, audioInvalid, narrationArrayBuffer, narrationMimeType, narrationFetchError, narrationInvalid, sceneNarrations, sceneNarrationSources };
 }
 
 function clamp(value, min, max) { return Math.min(max, Math.max(min, value)); }
@@ -630,6 +722,8 @@ export async function exportProjectVideo(project, prepared, canvas, { durationLi
   const fullDuration = getProjectDuration(project);
   const total = durationLimit ? Math.min(fullDuration, Math.max(.1, Number(durationLimit))) : fullDuration;
   if (!total) throw new Error('動画にできるシーンがありません。');
+  const preparedImageErrors = validatePreparedImagesForExport(project, prepared);
+  if (preparedImageErrors.length) throw new Error(preparedImageErrors.join('／'));
   const exportProfile = resolveExportProfile(project);
   const fps = clamp(Number(project.output?.fps) || 30, 1, exportProfile.iosSafeMode ? 30 : 60);
   canvas.width = exportProfile.width; canvas.height = exportProfile.height;
