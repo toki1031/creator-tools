@@ -36,6 +36,12 @@ function detectExtendedGlobalSection(line) {
 function detectSceneField(line) { for (const [name, pattern] of SCENE_FIELD_ALIASES) { const match = clean(line).match(pattern); if (match) return { name, inline: clean(match[1]) }; } return null; }
 function detectSceneEndingGlobalSection(line) {
   const text=clean(line).replace(/^#{1,6}\s*/,"");
+  const bracket=text.match(/^【\s*(画像・映像方針|映像方針|ナレーション|字幕|BGM|最終確認|最終QA)\s*】\s*(.*)$/i);
+  if(bracket){
+    const key=bracket[1].toLowerCase();
+    const name=/ナレーション/.test(key)?"narrationGuidance":/字幕/.test(key)?"subtitleGuidance":/bgm/i.test(key)?"bgmGuidance":/(最終確認|最終qa)/i.test(key)?"qaCriteria":"globalRules";
+    return {name,inline:clean(bracket[2])};
+  }
   const match=text.match(/^(?:最終QA|QA(?:条件|基準|criteria)?|完成条件|最終チェック)(?:\s*[:：]\s*(.*)|\s*)$/i);
   return match?{name:"qaCriteria",inline:clean(match[1])}:null;
 }
@@ -69,7 +75,7 @@ function applyTargetedSceneGuidance(brief, targeted) {
     if (rules.length) directive.rules = [...new Set([...(directive.rules || []), ...rules])];
   }
 }
-export function inferAssetTypeFromText(text) { const value = text.toLowerCase().replace(/\s+/g, ' '); const explicit = value.match(/asset\s*type\s*[:：]\s*([a-z-]+)/i)?.[1]; if (explicit && ASSET_TYPES.has(explicit)) return explicit; if (/実物|実際の.*史料|一次史料|確認可能な実物史料|historical[- ]source/.test(value)) return "historical-source"; if (/ai再現|ai[- ]reconstruction|再現場面|再現映像|再現イメージ/.test(value)) return "ai-reconstruction"; if (/現代|今日できる|会議|説明場面|modern[- ]visual/.test(value)) return "modern-visual"; if (/文書|書類|document/.test(value)) return "document"; if (/クリミア戦争期|軍病院|戦争後.*ナイチンゲール|死亡記録.*分析|軍衛生改革/.test(value)) return "ai-reconstruction"; return "other"; }
+export function inferAssetTypeFromText(text) { const value = text.toLowerCase().replace(/\s+/g, ' '); const explicit = value.match(/asset\s*type\s*[:：]\s*([a-z-]+)/i)?.[1]; if (explicit && ASSET_TYPES.has(explicit)) return explicit; if (/ai再現|ai[- ]reconstruction|再現場面|再現映像|再現イメージ/.test(value)) return "ai-reconstruction"; if (/現代|今日できる|会議|説明場面|modern[- ]visual/.test(value)) return "modern-visual"; if (/実物|実際の.*史料|一次史料|確認可能な実物史料|historical[- ]source/.test(value)) return "historical-source"; if (/文書|書類|document/.test(value)) return "document"; if (/クリミア戦争期|19世紀.*病院|軍病院|病院内|ナイチンゲール.*(?:記録|医療|病院)|統計資料|死亡記録.*分析|軍衛生改革/.test(value)) return "ai-reconstruction"; if (/締め|印象的な.*映像|シンプル.*映像/.test(value)) return "modern-visual"; return "other"; }
 function isRule(line) { return /禁止|しない|使わない|描かない|作らない|扱わない|代用しない|避ける|不可|NG/i.test(line); }
 export function splitVisualDirectionAndRules(value = "") {
   const text=clean(value);
@@ -127,8 +133,24 @@ function parseSceneBlock(sceneId, blockLines) {
     if (/^asset\s*type\s*[:：]/i.test(line)) { activeField = null; continue; }
 
     const detectedField = detectSceneField(line);
+    if (!activeField && !detectedField && !/^(?:目的|purpose|動き|motion|asset\s*type)\s*[:：]/i.test(line)) {
+      const value = bulletValue(line);
+      if (value) {
+        const split = splitVisualDirectionAndRules(value);
+        if (split.visualDirection) fields.visualDirection.push(split.visualDirection);
+        rules.push(...split.rules);
+      }
+      continue;
+    }
     if (detectedField) {
       activeField = detectedField.name;
+      if (detectedField.name === "narrationText" && fields.visualDirection.length === 0 && rules.length) {
+        const carry = rules.filter(value => !isRule(value));
+        if (carry.length) {
+          fields.visualDirection.push(...carry);
+          for (const value of carry) rules.splice(rules.indexOf(value), 1);
+        }
+      }
       if (detectedField.inline) {
         const value=bulletValue(detectedField.inline);
         if(activeField==="visualDirection"){
@@ -150,7 +172,7 @@ function parseSceneBlock(sceneId, blockLines) {
     }
 
     const bulletRule = /^[-*・]\s*/.test(line) && isRule(line);
-    const productionRule = isRule(line) && activeField !== "narrationText" && activeField !== "subtitleText";
+    const productionRule = isRule(line) && activeField !== "narrationText" && activeField !== "subtitleText" && activeField !== "visualDirection";
     if (bulletRule) { rules.push(value); continue; }
     if (productionRule) {
       const split=splitVisualDirectionAndRules(value);
@@ -161,15 +183,34 @@ function parseSceneBlock(sceneId, blockLines) {
       continue;
     }
 
+    if (activeField === "visualDirection") {
+      const split=splitVisualDirectionAndRules(value);
+      if(split.visualDirection)fields.visualDirection.push(split.visualDirection);
+      rules.push(...split.rules);
+      continue;
+    }
     if (activeField) fields[activeField].push(value);
     else fields.visualDirection.push(value); // Backward-compatible unlabeled Scene text stays a visual direction.
   }
 
+  if (!fields.visualDirection.length && rules.length) {
+    const misplacedVisual = rules.filter(value => !isRule(value));
+    if (misplacedVisual.length) {
+      fields.visualDirection.push(...misplacedVisual);
+      for (const value of misplacedVisual) {
+        const index = rules.indexOf(value);
+        if (index >= 0) rules.splice(index, 1);
+      }
+    }
+  }
+  if (!fields.visualDirection.length && fields.narrationText.length) {
+    fields.visualDirection.push(...fields.narrationText);
+  }
   const result = {
     sceneId,
     visualDirection: fields.visualDirection.join("\n"),
     purpose,
-    assetType: inferAssetTypeFromText(joined),
+    assetType: inferAssetTypeFromText([fields.visualDirection.join("\n"), purpose, fields.narrationText.join("\n")].filter(Boolean).join("\n")),
     motionGuidance,
     rules,
     narrationText: stripWrappingQuotes(fields.narrationText.join("\n")),
@@ -191,6 +232,13 @@ export function parseProductionRequest(input) {
     if (sceneMatch) { flushScene(); section = null; currentScene = `scene-${Number(sceneMatch[1])}`; if (clean(sceneMatch[2])) sceneLines.push(sceneMatch[2]); continue; }
     const extendedGlobal = /^■/.test(line) ? detectExtendedGlobalSection(line) : null;
     if (extendedGlobal) { if (currentScene) flushScene(); section=extendedGlobal.name; if(extendedGlobal.inline) brief[section].push(extendedGlobal.inline); continue; }
+    const bracketGlobal = /^【/.test(line) ? detectSceneEndingGlobalSection(line) : null;
+    if (bracketGlobal) {
+      if (currentScene) flushScene();
+      section = bracketGlobal.name;
+      if (bracketGlobal.inline) brief[section].push(bracketGlobal.inline);
+      continue;
+    }
     const sceneEndingGlobal=currentScene?detectSceneEndingGlobalSection(line):null;
     if(sceneEndingGlobal){
       flushScene();

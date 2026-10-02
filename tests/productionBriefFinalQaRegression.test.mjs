@@ -157,3 +157,99 @@ test('section words inside ordinary sentences do not become headings without a c
     '目的は達成できること。'
   ]);
 });
+
+
+const userNightingaleRequest=`
+Scene 1
+19世紀の軍病院。Florence Nightingaleが患者の記録や報告書を確認している。
+ナレーション：
+「正しいことを言えば、人は動く。本当にそうでしょうか。」
+
+Scene 2
+病院内の状況や記録を確認し、問題を整理しているFlorence Nightingale。
+ナレーション：
+「ナイチンゲールが向き合ったのは、医療だけではありませんでした。」
+
+Scene 3
+机の上に統計資料や死亡記録を広げ、数字を比較・分析している場面。
+ナレーション：
+「彼女は数字を集め、問題を見える形に変えていきました。」
+
+Scene 4
+統計や図表を使い、相手へ状況を説明している歴史再現場面。
+ナレーション：
+「大切だったのは、正しさではなく、相手が理解できる伝え方でした。」
+
+Scene 5
+資料を見ながら複数人が議論している現代の会議。
+ナレーション：
+「これは、今の仕事でも同じです。」
+
+Scene 6
+一人が説明資料を改善し、数字・具体例・比較を使って分かりやすく整理している現代の場面。
+ナレーション：
+「伝わらないときは、言葉を増やすより、見せ方を変えてみる。」
+
+Scene 7
+シンプルで印象的な締めの映像。
+ナレーション：
+「正しさを、伝わる形にする。それが、人を動かす一歩です。」
+
+【画像・映像方針】
+歴史Sceneは、可能な場合は信頼できる実物史料・歴史資料を優先してください。
+実物史料が適さないSceneでは、AIによる歴史再現画像を使用して構いません。
+AI歴史再現では、
+19世紀として自然な服装、建物、家具、病院環境、紙資料にする
+実写ドキュメンタリー風にする
+
+【ナレーション】
+Sceneごとの指定セリフを使用してください。
+読み上げ用の文章には、
+Scene番号
+秒数
+「ナレーション：」などのラベル
+制作指示
+記号だけの行
+を混入させないでください。
+
+【字幕】
+ナレーション全文をそのまま長文表示するのではなく、意味のまとまりごとに読みやすく表示してください。
+
+【BGM】
+ナレーションを邪魔しない落ち着いたBGMを使用してください。
+
+【最終確認】
+画像がSceneの内容と一致している
+無関係な人物・物体・怪物・武器などが生成されていない
+問題がなければ、YouTube Shortsとして完成動画を生成してください。
+`;
+
+test('actual 7-Scene Nightingale request ends Scene 7 before bracketed production sections',()=>{
+  const brief=parseProductionRequest(userNightingaleRequest);
+  assert.equal(brief.sceneDirectives.length,7);
+  const s7=brief.sceneDirectives[6];
+  assert.equal(s7.narrationText,'正しさを、伝わる形にする。それが、人を動かす一歩です。');
+  assert.doesNotMatch(s7.narrationText,/画像・映像方針|字幕|BGM|最終確認/);
+  assert.doesNotMatch(s7.visualDirection,/画像・映像方針|字幕|BGM|最終確認/);
+  assert.ok(brief.globalRules.length);
+  assert.ok(brief.narrationGuidance.length);
+  assert.ok(brief.subtitleGuidance.length);
+  assert.ok(brief.bgmGuidance.length);
+  assert.ok(brief.qaCriteria.length);
+});
+
+test('actual Nightingale Scene 2 and closing Scene route to automatic image providers',()=>{
+  const brief=parseProductionRequest(userNightingaleRequest);
+  assert.equal(brief.sceneDirectives[1].assetType,'ai-reconstruction');
+  assert.equal(brief.sceneDirectives[6].assetType,'modern-visual');
+  assert.notEqual(brief.sceneDirectives[1].assetType,'other');
+  assert.notEqual(brief.sceneDirectives[6].assetType,'historical-source');
+});
+
+test('actual Nightingale Scene 2 always has usable image intent',()=>{
+  const brief=parseProductionRequest(userNightingaleRequest);
+  const s2=brief.sceneDirectives[1];
+  assert.ok(s2.visualDirection.trim());
+  assert.match(s2.visualDirection,/ナイチンゲール|Nightingale/i);
+  assert.equal(s2.assetType,'ai-reconstruction');
+});
