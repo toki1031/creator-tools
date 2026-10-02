@@ -133,6 +133,15 @@ function parseSceneBlock(sceneId, blockLines) {
     if (/^asset\s*type\s*[:：]/i.test(line)) { activeField = null; continue; }
 
     const detectedField = detectSceneField(line);
+    if (!activeField && !detectedField && !/^(?:目的|purpose|動き|motion|asset\s*type)\s*[:：]/i.test(line)) {
+      const value = bulletValue(line);
+      if (value) {
+        const split = splitVisualDirectionAndRules(value);
+        if (split.visualDirection) fields.visualDirection.push(split.visualDirection);
+        rules.push(...split.rules);
+      }
+      continue;
+    }
     if (detectedField) {
       activeField = detectedField.name;
       if (detectedField.inline) {
