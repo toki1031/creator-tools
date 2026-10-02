@@ -1,4 +1,4 @@
-import { inferAssetTypeFromText } from './productionBriefParser.js';
+import { inferAssetTypeFromText, splitVisualDirectionAndRules } from './productionBriefParser.js';
 import { createProceduralBgmSettings } from './proceduralBgm.js';
 
 function clone(value) {
@@ -12,7 +12,7 @@ function isWorkflowMarkerOnly(value = '') {
 }
 function trimLeakedGlobalHeadings(value = '') {
   const lines = String(value ?? '').replace(/\r\n?/g, '\n').split('\n');
-  const index = lines.findIndex(line => /^■/.test(line.trim()));
+  const index = lines.findIndex(line => /^(?:■|最終QA(?:\s*[:：]|$)|完成条件(?:\s*[:：]|$)|最終チェック(?:\s*[:：]|$)|QA(?:条件|基準)?(?:\s*[:：]|$))/i.test(line.trim()));
   return { value: lines.slice(0, index >= 0 ? index : lines.length).join('\n').trim(), leaked: index >= 0 };
 }
 function extractLeakedTargetedGuidance(value = '') {
@@ -52,9 +52,28 @@ function normalizeDirection(direction = {}) {
   const visual = trimLeakedGlobalHeadings(next.visualDirection);
   let changed = false;
   if (visual.value !== clean(next.visualDirection)) { next.visualDirection = visual.value; changed = true; }
+
+  const currentRules=Array.isArray(next.rules)?next.rules.map(clean).filter(Boolean):[];
+  if(!clean(next.visualDirection) && currentRules.length){
+    const remainingRules=[];
+    const recoveredVisual=[];
+    for(const rule of currentRules){
+      const split=splitVisualDirectionAndRules(rule);
+      if(split.visualDirection && split.rules.length){
+        recoveredVisual.push(split.visualDirection);
+        remainingRules.push(...split.rules);
+      } else remainingRules.push(rule);
+    }
+    if(recoveredVisual.length){
+      next.visualDirection=recoveredVisual.join('\n');
+      next.rules=[...new Set(remainingRules)];
+      changed=true;
+    }
+  }
+
   const rawType = clean(next.assetType);
   if (visual.leaked || !rawType || rawType === 'other') {
-    const inferred = inferAssetTypeFromText([visual.value, clean(next.purpose)].filter(Boolean).join('\n'));
+    const inferred = inferAssetTypeFromText([clean(next.visualDirection), clean(next.purpose)].filter(Boolean).join('\n'));
     if (inferred && inferred !== rawType) { next.assetType = inferred; changed = true; }
   }
   return { direction: next, changed };
