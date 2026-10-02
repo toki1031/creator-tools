@@ -75,7 +75,7 @@ function applyTargetedSceneGuidance(brief, targeted) {
     if (rules.length) directive.rules = [...new Set([...(directive.rules || []), ...rules])];
   }
 }
-export function inferAssetTypeFromText(text) { const value = text.toLowerCase().replace(/\s+/g, ' '); const explicit = value.match(/asset\s*type\s*[:：]\s*([a-z-]+)/i)?.[1]; if (explicit && ASSET_TYPES.has(explicit)) return explicit; if (/ai再現|ai[- ]reconstruction|再現場面|再現映像|再現イメージ/.test(value)) return "ai-reconstruction"; if (/現代|今日できる|会議|説明場面|modern[- ]visual/.test(value)) return "modern-visual"; if (/実物|実際の.*史料|一次史料|確認可能な実物史料|historical[- ]source/.test(value)) return "historical-source"; if (/文書|書類|document/.test(value)) return "document"; if (/クリミア戦争期|19世紀.*病院|軍病院|病院内.*ナイチンゲール|ナイチンゲール.*記録|統計資料|死亡記録.*分析|軍衛生改革/.test(value)) return "ai-reconstruction"; if (/締め|印象的な.*映像|シンプル.*映像/.test(value)) return "modern-visual"; return "other"; }
+export function inferAssetTypeFromText(text) { const value = text.toLowerCase().replace(/\s+/g, ' '); const explicit = value.match(/asset\s*type\s*[:：]\s*([a-z-]+)/i)?.[1]; if (explicit && ASSET_TYPES.has(explicit)) return explicit; if (/ai再現|ai[- ]reconstruction|再現場面|再現映像|再現イメージ/.test(value)) return "ai-reconstruction"; if (/現代|今日できる|会議|説明場面|modern[- ]visual/.test(value)) return "modern-visual"; if (/実物|実際の.*史料|一次史料|確認可能な実物史料|historical[- ]source/.test(value)) return "historical-source"; if (/文書|書類|document/.test(value)) return "document"; if (/クリミア戦争期|19世紀.*病院|軍病院|病院内|ナイチンゲール.*(?:記録|医療|病院)|統計資料|死亡記録.*分析|軍衛生改革/.test(value)) return "ai-reconstruction"; if (/締め|印象的な.*映像|シンプル.*映像/.test(value)) return "modern-visual"; return "other"; }
 function isRule(line) { return /禁止|しない|使わない|描かない|作らない|扱わない|代用しない|避ける|不可|NG/i.test(line); }
 export function splitVisualDirectionAndRules(value = "") {
   const text=clean(value);
@@ -193,6 +193,16 @@ function parseSceneBlock(sceneId, blockLines) {
     else fields.visualDirection.push(value); // Backward-compatible unlabeled Scene text stays a visual direction.
   }
 
+  if (!fields.visualDirection.length && rules.length) {
+    const misplacedVisual = rules.filter(value => !isRule(value));
+    if (misplacedVisual.length) {
+      fields.visualDirection.push(...misplacedVisual);
+      for (const value of misplacedVisual) {
+        const index = rules.indexOf(value);
+        if (index >= 0) rules.splice(index, 1);
+      }
+    }
+  }
   const result = {
     sceneId,
     visualDirection: fields.visualDirection.join("\n"),
