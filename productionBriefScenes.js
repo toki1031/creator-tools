@@ -13,6 +13,27 @@ function resolveMotion(guidance = '') {
 }
 function round2(value) { return Math.round(value * 100) / 100; }
 function positiveNumber(value) { const number = Number(value); return Number.isFinite(number) && number > 0 ? number : 0; }
+function scopedVisualRules(rules = [], assetType = '') {
+  const list = Array.isArray(rules) ? rules.map(clean).filter(Boolean) : [];
+  const type = clean(assetType);
+  const buckets = { shared: [], historical: [], modern: [], source: [] };
+  let scope = 'shared';
+  for (const rule of list) {
+    const historicalHeader = /^(?:歴史Scene|AI歴史再現)/i.test(rule);
+    const modernHeader = /^現代Scene/i.test(rule);
+    const sourceHeader = /^(?:実物史料|史料)/i.test(rule);
+    const sharedHeader = /^(?:各Scene|全Scene|すべてのScene|全体)/i.test(rule);
+    if (sharedHeader) scope = 'shared';
+    else if (historicalHeader) scope = 'historical';
+    else if (modernHeader) scope = 'modern';
+    else if (sourceHeader) scope = 'source';
+    buckets[scope].push(rule);
+  }
+  if (type === 'ai-reconstruction') return [...buckets.shared, ...buckets.historical];
+  if (type === 'modern-visual') return [...buckets.shared, ...buckets.modern];
+  if (type === 'historical-source') return [...buckets.shared, ...buckets.source, ...buckets.historical];
+  return buckets.shared;
+}
 
 /**
  * Converts an already-reviewed ProductionBrief into Creator OS runtime scenes.
@@ -25,11 +46,7 @@ export function buildScenesFromProductionBrief(brief, options = {}) {
   const durations = Array.isArray(options.sceneDurationsSec) ? options.sceneDurationsSec : [];
   const suppliedTotal = durations.slice(0, directives.length).reduce((sum, value) => sum + positiveNumber(value), 0);
   const equalDuration = round2(targetDurationSec / directives.length);
-  const sharedVisualContext = [
-    clean(brief?.objective),
-    clean(brief?.tone),
-    ...(Array.isArray(brief?.globalRules) ? brief.globalRules.map(clean) : [])
-  ].filter(Boolean).join(' ');
+  const sharedVisualContext = [clean(brief?.objective), clean(brief?.tone)].filter(Boolean);
 
   return directives.map((directive, index) => {
     const directiveDuration = positiveNumber(directive.durationSec);
@@ -46,6 +63,9 @@ export function buildScenesFromProductionBrief(brief, options = {}) {
     const text = subtitleText || narrationText;
     const motion = resolveMotion(directive.motionGuidance);
     const startSec = Number(directive.startSec), endSec = Number(directive.endSec);
+    const assetType = clean(directive.assetType) || 'other';
+    const applicableRules = scopedVisualRules(brief?.globalRules, assetType);
+    const sceneVisualContext = [...sharedVisualContext, ...applicableRules].filter(Boolean).join(' ');
     const scene = {
       id: clean(directive.sceneId) || `scene-${index + 1}`,
       order,
@@ -60,11 +80,11 @@ export function buildScenesFromProductionBrief(brief, options = {}) {
         visualDirection: clean(directive.visualDirection),
         searchHint: clean(directive.searchHint) || (
           clean(directive.assetType) === 'ai-reconstruction'
-            ? [clean(directive.visualDirection), sharedVisualContext].filter(Boolean).join(' ')
+            ? [clean(directive.visualDirection), sceneVisualContext].filter(Boolean).join(' ')
             : ''
         ),
         purpose: clean(directive.purpose),
-        assetType: clean(directive.assetType) || 'other',
+        assetType,
         motionGuidance: clean(directive.motionGuidance),
         rules: Array.isArray(directive.rules) ? directive.rules.map(clean).filter(Boolean) : []
       }
