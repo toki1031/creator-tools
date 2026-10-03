@@ -66,3 +66,19 @@ test('uses narration as subtitle text only when no explicit subtitle exists',()=
   assert.equal(scenes[1].subtitleText,'表示専用字幕');
   assert.equal(scenes[1].text,'表示専用字幕');
 });
+
+
+test('historical reconstruction scenes inherit subject and era context without affecting modern scenes',()=>{
+  const brief={
+    objective:'Florence Nightingaleの実践を伝える',
+    globalRules:['19世紀として自然な服装にする'],
+    sceneDirectives:[
+      {sceneId:'scene-1',visualDirection:'机の上に統計資料を広げて分析する場面。',assetType:'ai-reconstruction',narrationText:'彼女は数字を集めた。',rules:[]},
+      {sceneId:'scene-2',visualDirection:'現代の会議。',assetType:'modern-visual',narrationText:'今の仕事でも同じ。',rules:[]}
+    ]
+  };
+  const scenes=buildScenesFromProductionBrief(brief,{targetDurationSec:10});
+  assert.match(scenes[0].productionDirection.searchHint,/Florence Nightingale/);
+  assert.match(scenes[0].productionDirection.searchHint,/19世紀/);
+  assert.equal(scenes[1].productionDirection.searchHint,'');
+});
