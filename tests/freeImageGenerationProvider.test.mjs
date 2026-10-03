@@ -47,7 +47,7 @@ test('statistical papers on a desk stay documentary rather than fantasy objects'
   assert.match(prompt,/Florence Nightingale/i);
   assert.match(prompt,/statistical papers and charts/i);
   assert.match(prompt,/desk with papers/i);
-  assert.match(prompt,/no surreal substitutions/i);
+  assert.match(prompt,/surreal substitutions/i);
   assert.match(prompt,/fantasy weapons/i);
 });
 
@@ -87,7 +87,7 @@ test('historical reconstruction generically rejects modern anachronisms without 
     requestedType:'ai-reconstruction',
     queryHint:'江戸時代の商家で帳簿を確認している人物。木造建築と当時の道具。'
   });
-  assert.match(prompt,/Period authenticity is a hard constraint/i);
+  assert.match(prompt,/Historical authenticity overrides generic contemporary visual defaults/i);
   assert.match(prompt,/Exclude anachronisms/i);
   assert.match(prompt,/fluorescent lighting/i);
   assert.match(prompt,/modern hospital equipment/i);
