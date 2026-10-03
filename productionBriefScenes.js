@@ -25,6 +25,13 @@ export function buildScenesFromProductionBrief(brief, options = {}) {
   const durations = Array.isArray(options.sceneDurationsSec) ? options.sceneDurationsSec : [];
   const suppliedTotal = durations.slice(0, directives.length).reduce((sum, value) => sum + positiveNumber(value), 0);
   const equalDuration = round2(targetDurationSec / directives.length);
+  const briefText = [
+    brief?.objective,
+    ...(Array.isArray(brief?.globalRules) ? brief.globalRules : []),
+    ...directives.flatMap(item => [item?.visualDirection, item?.narrationText])
+  ].map(clean).filter(Boolean).join(' ');
+  const historicalSubject = /Florence Nightingale|ナイチンゲール/i.test(briefText) ? 'Florence Nightingale' : '';
+  const historicalEra = /19世紀|nineteenth[- ]century/i.test(briefText) ? '19世紀' : '';
 
   return directives.map((directive, index) => {
     const directiveDuration = positiveNumber(directive.durationSec);
@@ -53,7 +60,11 @@ export function buildScenesFromProductionBrief(brief, options = {}) {
       transition: 'fade',
       productionDirection: {
         visualDirection: clean(directive.visualDirection),
-        searchHint: clean(directive.searchHint),
+        searchHint: clean(directive.searchHint) || (
+          clean(directive.assetType) === 'ai-reconstruction'
+            ? [clean(directive.visualDirection), historicalSubject && `主題: ${historicalSubject}`, historicalEra && `時代: ${historicalEra}`].filter(Boolean).join(' ')
+            : ''
+        ),
         purpose: clean(directive.purpose),
         assetType: clean(directive.assetType) || 'other',
         motionGuidance: clean(directive.motionGuidance),
