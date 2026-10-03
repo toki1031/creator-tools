@@ -126,3 +126,21 @@ test('historical prompt keeps the actual scene within the 2048 character budget'
   assert.match(prompt,/ANACHRONISMS TO AVOID/);
   assert.ok(Array.from(prompt).length<=FREE_IMAGE_PROMPT_MAX_CHARS);
 });
+
+
+test('historical reconstruction positively describes period-built environment before negative constraints',()=>{
+  const prompt=buildFreeImagePrompt({requestedType:'ai-reconstruction',queryHint:'18世紀の工房で職人が木製机の上の道具を確認している。'});
+  assert.match(prompt,/POSITIVE PERIOD ENVIRONMENT/i);
+  assert.match(prompt,/materials, construction methods, fixtures, furnishings, and illumination/i);
+  assert.match(prompt,/historically plausible ceilings, walls, floors, windows, doors, furniture/i);
+  assert.match(prompt,/architecture itself visibly historical/i);
+  assert.ok(prompt.indexOf('POSITIVE PERIOD ENVIRONMENT') < prompt.indexOf('ANACHRONISMS TO AVOID'));
+  assert.ok(Array.from(prompt).length<=FREE_IMAGE_PROMPT_MAX_CHARS);
+});
+
+test('positive historical environment guidance is not added to modern visual prompts',()=>{
+  const prompt=buildFreeImagePrompt({requestedType:'modern-visual',queryHint:'現代のオフィスで複数人が会議している。'});
+  assert.doesNotMatch(prompt,/POSITIVE PERIOD ENVIRONMENT/i);
+  assert.doesNotMatch(prompt,/architecture itself visibly historical/i);
+  assert.match(prompt,/photorealistic contemporary documentary/i);
+});
