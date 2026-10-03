@@ -36,7 +36,10 @@ export function buildFreeImagePrompt(requirement) {
   const typeGuidance = requestedType === 'ai-reconstruction'
     ? [
         'Style: photorealistic historical documentary reconstruction, not an archival photograph.',
-        'Use historically plausible clothing, architecture, furniture, documents, medical or work environment, lighting, and materials for the described era.',
+        'Period authenticity is a hard constraint: every visible object must be plausible for the era and place stated in the scene description.',
+        'Use historically plausible clothing, architecture, furniture, documents, medical or work environment, lighting, tools, materials, and technology for that era and place.',
+        'Exclude anachronisms: no modern electric or fluorescent lighting, LED fixtures, drop ceilings, modern hospital equipment, monitors, computers, plastic furniture, contemporary office equipment, modern signage, or other technology invented after the described era unless the scene explicitly requests it.',
+        'When the exact era is not stated, infer historical context only from the scene description; never silently modernize a historical reconstruction.',
         'Do not introduce fantasy, anime, cartoon styling, monsters, magical creatures, magic, science fiction, or fantasy weapons unless the scene explicitly requests them.'
       ]
     : [
