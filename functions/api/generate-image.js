@@ -3,6 +3,16 @@ const ALLOWED=new Set(['ai-reconstruction','modern-visual']);
 const MAX_PROMPT_CHARS=2048;
 const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json; charset=utf-8'}});
 const clipPrompt=value=>Array.from(String(value||'').trim()).slice(0,MAX_PROMPT_CHARS).join('');
+export async function onRequestGet({request,env}){
+  let host='';
+  try{host=new URL(request.url).host}catch{}
+  return json({
+    endpoint:'creator-os-generate-image',
+    diagnosticVersion:1,
+    aiBindingAvailable:Boolean(env?.AI),
+    host
+  });
+}
 export async function onRequestPost({request,env}){
   if(!env?.AI) return json({reason:'Cloudflare Workers AI binding が未設定です'},503);
   let body; try{body=await request.json();}catch{return json({reason:'生成リクエストが不正です'},400)}
