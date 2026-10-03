@@ -501,14 +501,24 @@ function isIOSDevice(userAgent = globalThis.navigator?.userAgent || '') { return
 export function resolveExportProfile(project, { userAgent = globalThis.navigator?.userAgent || '' } = {}) {
   const requestedWidth = Math.max(2, Number(project?.output?.width) || 720);
   const requestedHeight = Math.max(2, Number(project?.output?.height) || 1280);
+  const requestedPixels = requestedWidth * requestedHeight;
   const iosSafeMode = isIOSDevice(userAgent);
   const maxPixels = 720 * 1280;
-  if (!iosSafeMode || requestedWidth * requestedHeight <= maxPixels) {
-    return { requestedWidth, requestedHeight, width: requestedWidth, height: requestedHeight, iosSafeMode: false };
+  const compactHdMaxPixels = 1080 * 1920;
+  const compactProductionHd = iosSafeMode
+    && project?.__renderJob === true
+    && project?.autoProduction?.mode === 'production-request'
+    && requestedPixels > maxPixels
+    && requestedPixels <= compactHdMaxPixels;
+  if (compactProductionHd) {
+    return { requestedWidth, requestedHeight, width: requestedWidth, height: requestedHeight, iosSafeMode: true, iosHdMode: true };
   }
-  const scale = Math.sqrt(maxPixels / (requestedWidth * requestedHeight));
+  if (!iosSafeMode || requestedPixels <= maxPixels) {
+    return { requestedWidth, requestedHeight, width: requestedWidth, height: requestedHeight, iosSafeMode: false, iosHdMode: false };
+  }
+  const scale = Math.sqrt(maxPixels / requestedPixels);
   const even = value => Math.max(2, Math.round(value / 2) * 2);
-  return { requestedWidth, requestedHeight, width: even(requestedWidth * scale), height: even(requestedHeight * scale), iosSafeMode: true };
+  return { requestedWidth, requestedHeight, width: even(requestedWidth * scale), height: even(requestedHeight * scale), iosSafeMode: true, iosHdMode: false };
 }
 
 function bitrateFor(project, exportWidth, iosSafeMode = false) {
@@ -734,7 +744,9 @@ export async function exportProjectVideo(project, prepared, canvas, { durationLi
   const exportProfile = resolveExportProfile(project);
   const fps = clamp(Number(project.output?.fps) || 30, 1, exportProfile.iosSafeMode ? 30 : 60);
   canvas.width = exportProfile.width; canvas.height = exportProfile.height;
-  if (exportProfile.iosSafeMode) onStatus(`iPhone safe mode: ${exportProfile.width}x${exportProfile.height} / ${fps}fps`);
+  if (exportProfile.iosSafeMode) onStatus(exportProfile.iosHdMode
+    ? `iPhone compact HD mode: ${exportProfile.width}x${exportProfile.height} / ${fps}fps`
+    : `iPhone safe mode: ${exportProfile.width}x${exportProfile.height} / ${fps}fps`);
   await ensurePreparedImageWindow(project, prepared, 0, { onStatus });
   drawProjectFrame(project, prepared, canvas, 0);
   onStatus('音声と録画機能を準備しています…');
@@ -771,7 +783,7 @@ export async function exportProjectVideo(project, prepared, canvas, { durationLi
       if (!blob?.size) return reject(new Error('動画データを生成できませんでした。画面を開いたまま再試行してください。'));
       blob = ensureVideoBlobMime(blob, actualMime);
       const extension = actualMime.includes('mp4') ? 'mp4' : 'webm';
-      resolve({ blob, mimeType: actualMime, extension, durationSec: total, diagnostics: { requestedWidth: exportProfile.requestedWidth, requestedHeight: exportProfile.requestedHeight, canvasWidth: canvas.width, canvasHeight: canvas.height, captureWidth: Number(captureTrackSettings?.width) || null, captureHeight: Number(captureTrackSettings?.height) || null, captureFrameRate: Number(captureTrackSettings?.frameRate) || null, selectedMimeType: mimeType, actualMimeType: actualMime, hasAudio: Boolean(audio?.tracks?.length), iosSafeMode: exportProfile.iosSafeMode } });
+      resolve({ blob, mimeType: actualMime, extension, durationSec: total, diagnostics: { requestedWidth: exportProfile.requestedWidth, requestedHeight: exportProfile.requestedHeight, canvasWidth: canvas.width, canvasHeight: canvas.height, captureWidth: Number(captureTrackSettings?.width) || null, captureHeight: Number(captureTrackSettings?.height) || null, captureFrameRate: Number(captureTrackSettings?.frameRate) || null, selectedMimeType: mimeType, actualMimeType: actualMime, hasAudio: Boolean(audio?.tracks?.length), iosSafeMode: exportProfile.iosSafeMode, iosHdMode: Boolean(exportProfile.iosHdMode) } });
     };
     try { if (navigator.wakeLock?.request) wakeLock = await navigator.wakeLock.request('screen'); } catch {}
     onStatus(`動画を生成しています（実時間：約${Math.ceil(total)}秒）…`);
