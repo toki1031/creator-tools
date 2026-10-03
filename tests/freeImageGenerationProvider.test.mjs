@@ -80,3 +80,31 @@ test('generation request sends the structured prompt instead of raw queryHint',a
   assert.equal(r.status,'resolved');
   assert.equal(r.asset.requestedType,'modern-visual');
 });
+
+
+test('historical reconstruction generically rejects modern anachronisms without topic hardcoding',()=>{
+  const prompt=buildFreeImagePrompt({
+    requestedType:'ai-reconstruction',
+    queryHint:'江戸時代の商家で帳簿を確認している人物。木造建築と当時の道具。'
+  });
+  assert.match(prompt,/Period authenticity is a hard constraint/i);
+  assert.match(prompt,/Exclude anachronisms/i);
+  assert.match(prompt,/fluorescent lighting/i);
+  assert.match(prompt,/modern hospital equipment/i);
+  assert.match(prompt,/computers/i);
+  assert.match(prompt,/江戸時代/);
+  assert.doesNotMatch(prompt,/Florence Nightingale/i);
+  assert.doesNotMatch(prompt,/19th-century/i);
+  assert.ok(Array.from(prompt).length<=FREE_IMAGE_PROMPT_MAX_CHARS);
+});
+
+test('modern visual prompt does not inherit historical anachronism constraints',()=>{
+  const prompt=buildFreeImagePrompt({
+    requestedType:'modern-visual',
+    queryHint:'現代のオフィスでPCを使いながら会議している。'
+  });
+  assert.doesNotMatch(prompt,/Period authenticity is a hard constraint/i);
+  assert.doesNotMatch(prompt,/Exclude anachronisms/i);
+  assert.match(prompt,/present-day people/i);
+  assert.match(prompt,/PC/);
+});
