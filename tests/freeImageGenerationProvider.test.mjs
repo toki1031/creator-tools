@@ -90,7 +90,7 @@ test('historical reconstruction generically rejects modern anachronisms without 
   assert.match(prompt,/Historical authenticity overrides generic contemporary visual defaults/i);
   assert.match(prompt,/ANACHRONISMS TO AVOID/i);
   assert.match(prompt,/fluorescent or LED fixtures/i);
-  assert.match(prompt,/modern hospital equipment/i);
+  assert.match(prompt,/modern hospital, office, or medical equipment/i);
   assert.match(prompt,/computers/i);
   assert.match(prompt,/江戸時代/);
   assert.doesNotMatch(prompt,/Florence Nightingale/i);
