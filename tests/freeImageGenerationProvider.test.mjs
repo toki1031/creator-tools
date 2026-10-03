@@ -88,7 +88,7 @@ test('historical reconstruction generically rejects modern anachronisms without 
     queryHint:'江戸時代の商家で帳簿を確認している人物。木造建築と当時の道具。'
   });
   assert.match(prompt,/Historical authenticity overrides generic contemporary visual defaults/i);
-  assert.match(prompt,/Exclude anachronisms/i);
+  assert.match(prompt,/ANACHRONISMS TO AVOID/i);
   assert.match(prompt,/fluorescent lighting/i);
   assert.match(prompt,/modern hospital equipment/i);
   assert.match(prompt,/computers/i);
