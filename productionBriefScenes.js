@@ -20,7 +20,7 @@ function scopedVisualRules(rules = [], assetType = '') {
   const buckets = { shared: [], historical: [], modern: [], source: [] };
   for (const rule of list) {
     if (/^(?:歴史|AI歴史再現)/i.test(rule)) { scope = 'historical'; buckets.historical.push(rule); continue; }
-    if (/^(?:現代)/i.test(rule)) { scope = 'modern'; buckets.modern.push(rule); continue; }
+    if (/^(?:現代)/i.test(rule) || (scope === 'modern' && /歴史衣装/.test(rule))) { scope = 'modern'; buckets.modern.push(rule); continue; }
     if (/^(?:実物史料|史料)/i.test(rule)) { scope = 'source'; buckets.source.push(rule); continue; }
     buckets[scope].push(rule);
   }
