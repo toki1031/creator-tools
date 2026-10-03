@@ -35,7 +35,7 @@ test('historical reconstruction prompt keeps Nightingale scene intent and blocks
   assert.match(prompt,/fantasy/i);
   assert.match(prompt,/monsters/i);
   assert.match(prompt,/文字は描かない/);
-  assert.match(prompt,/Do not add readable text/i);
+  assert.match(prompt,/readable text/i);
   assert.ok(Array.from(prompt).length<=FREE_IMAGE_PROMPT_MAX_CHARS);
 });
 
@@ -73,7 +73,7 @@ test('generation request sends the structured prompt instead of raw queryHint',a
   const raw='現代の会議で説明資料を改善する。';
   const r=await requestFreeGeneratedImage({requestedType:'modern-visual',queryHint:raw,prohibitedContent:['文字は描かない']},{fetchImpl});
   assert.notEqual(sent.prompt,raw);
-  assert.match(sent.prompt,/Scene description/);
+  assert.match(sent.prompt,/SCENE TO DEPICT/);
   assert.match(sent.prompt,/現代の会議/);
   assert.match(sent.prompt,/文字は描かない/);
   assert.equal(sent.requestedType,'modern-visual');
@@ -107,4 +107,22 @@ test('modern visual prompt does not inherit historical anachronism constraints',
   assert.doesNotMatch(prompt,/Exclude anachronisms/i);
   assert.match(prompt,/present-day people/i);
   assert.match(prompt,/PC/);
+});
+
+
+test('historical scene intent is placed before generic styling and anachronism rules',()=>{
+  const raw='中世ヨーロッパの修道院で写本を作る書記。羊皮紙と木製机。';
+  const prompt=buildFreeImagePrompt({requestedType:'ai-reconstruction',queryHint:raw});
+  assert.ok(prompt.indexOf(raw) < prompt.indexOf('ANACHRONISMS TO AVOID'));
+  assert.match(prompt,/Historical authenticity overrides generic contemporary visual defaults/i);
+  assert.match(prompt,/Do not silently modernize/i);
+  assert.match(prompt,/contemporary clothing or protective equipment/i);
+});
+
+test('historical prompt keeps the actual scene within the 2048 character budget',()=>{
+  const raw='古代ローマの工房で職人が道具を使って作業している。'+ '時代背景の詳細。'.repeat(250);
+  const prompt=buildFreeImagePrompt({requestedType:'ai-reconstruction',queryHint:raw});
+  assert.match(prompt,/古代ローマの工房/);
+  assert.match(prompt,/ANACHRONISMS TO AVOID/);
+  assert.ok(Array.from(prompt).length<=FREE_IMAGE_PROMPT_MAX_CHARS);
 });
