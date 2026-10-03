@@ -84,3 +84,32 @@ test('AI reconstruction scenes inherit generic brief context without affecting m
   assert.match(scenes[0].productionDirection.searchHint,/アニメ調にしない/);
   assert.equal(scenes[1].productionDirection.searchHint,'');
 });
+
+
+test('visual rules are scoped to the scene asset type',()=>{
+  const brief={
+    objective:'歴史上の出来事を現代へつなげる',
+    tone:'documentary',
+    globalRules:[
+      '歴史Sceneは当時として自然にする',
+      '19世紀として自然な服装、建物、家具にする',
+      'アニメ調にしない',
+      '現代Sceneでは現代の実写写真風にする',
+      '現代の服装、会議室、PCを自然に使う',
+      '歴史衣装などにしない',
+      '各Sceneの画像は内容と一致させる'
+    ],
+    sceneDirectives:[
+      {sceneId:'scene-1',visualDirection:'歴史再現。',assetType:'ai-reconstruction',narrationText:'歴史。',rules:[]},
+      {sceneId:'scene-2',visualDirection:'現代の会議。',assetType:'modern-visual',narrationText:'現代。',rules:[]}
+    ]
+  };
+  const scenes=buildScenesFromProductionBrief(brief,{targetDurationSec:10});
+  const historical=scenes[0].productionDirection.searchHint;
+  assert.match(historical,/19世紀として自然/);
+  assert.match(historical,/アニメ調にしない/);
+  assert.doesNotMatch(historical,/現代の服装/);
+  assert.doesNotMatch(historical,/歴史衣装などにしない/);
+  assert.match(historical,/各Sceneの画像は内容と一致/);
+  assert.equal(scenes[1].productionDirection.searchHint,'');
+});
