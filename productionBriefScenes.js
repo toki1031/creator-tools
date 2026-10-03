@@ -16,12 +16,15 @@ function positiveNumber(value) { const number = Number(value); return Number.isF
 function scopedVisualRules(rules = [], assetType = '') {
   const list = Array.isArray(rules) ? rules.map(clean).filter(Boolean) : [];
   const type = clean(assetType);
-  let scope = 'shared';
   const buckets = { shared: [], historical: [], modern: [], source: [] };
+  let scope = 'shared';
   for (const rule of list) {
-    if (/^(?:歴史|AI歴史再現)/i.test(rule)) { scope = 'historical'; buckets.historical.push(rule); continue; }
-    if (/^(?:現代)/i.test(rule) || (scope === 'modern' && /歴史衣装/.test(rule))) { scope = 'modern'; buckets.modern.push(rule); continue; }
-    if (/^(?:実物史料|史料)/i.test(rule)) { scope = 'source'; buckets.source.push(rule); continue; }
+    const historicalHeader = /^(?:歴史Scene|AI歴史再現)/i.test(rule);
+    const modernHeader = /^現代Scene/i.test(rule);
+    const sourceHeader = /^(?:実物史料|史料)/i.test(rule);
+    if (historicalHeader) scope = 'historical';
+    else if (modernHeader) scope = 'modern';
+    else if (sourceHeader) scope = 'source';
     buckets[scope].push(rule);
   }
   if (type === 'ai-reconstruction') return [...buckets.shared, ...buckets.historical];
