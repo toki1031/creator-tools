@@ -25,6 +25,11 @@ export function buildScenesFromProductionBrief(brief, options = {}) {
   const durations = Array.isArray(options.sceneDurationsSec) ? options.sceneDurationsSec : [];
   const suppliedTotal = durations.slice(0, directives.length).reduce((sum, value) => sum + positiveNumber(value), 0);
   const equalDuration = round2(targetDurationSec / directives.length);
+  const sharedVisualContext = [
+    clean(brief?.objective),
+    clean(brief?.tone),
+    ...(Array.isArray(brief?.globalRules) ? brief.globalRules.map(clean) : [])
+  ].filter(Boolean).join(' ');
 
   return directives.map((directive, index) => {
     const directiveDuration = positiveNumber(directive.durationSec);
@@ -53,7 +58,11 @@ export function buildScenesFromProductionBrief(brief, options = {}) {
       transition: 'fade',
       productionDirection: {
         visualDirection: clean(directive.visualDirection),
-        searchHint: clean(directive.searchHint),
+        searchHint: clean(directive.searchHint) || (
+          clean(directive.assetType) === 'ai-reconstruction'
+            ? [clean(directive.visualDirection), sharedVisualContext].filter(Boolean).join(' ')
+            : ''
+        ),
         purpose: clean(directive.purpose),
         assetType: clean(directive.assetType) || 'other',
         motionGuidance: clean(directive.motionGuidance),

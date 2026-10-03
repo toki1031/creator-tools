@@ -253,3 +253,15 @@ test('actual Nightingale Scene 2 always has usable image intent',()=>{
   assert.match(s2.visualDirection,/ナイチンゲール|Nightingale/i);
   assert.equal(s2.assetType,'ai-reconstruction');
 });
+
+
+test('person names are never mistaken for prohibition markers in the actual Nightingale request',()=>{
+  const brief=parseProductionRequest(userNightingaleRequest);
+  const s1=brief.sceneDirectives[0];
+  const s2=brief.sceneDirectives[1];
+  assert.match(s1.visualDirection,/Florence Nightingale/);
+  assert.deepEqual(s1.rules,[]);
+  assert.match(s2.visualDirection,/病院内の状況や記録を確認/);
+  assert.match(s2.visualDirection,/Florence Nightingale/);
+  assert.deepEqual(s2.rules,[]);
+});

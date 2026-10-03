@@ -66,3 +66,21 @@ test('uses narration as subtitle text only when no explicit subtitle exists',()=
   assert.equal(scenes[1].subtitleText,'表示専用字幕');
   assert.equal(scenes[1].text,'表示専用字幕');
 });
+
+
+test('AI reconstruction scenes inherit generic brief context without affecting modern scenes',()=>{
+  const brief={
+    objective:'ある歴史人物の実践を現代へ伝える',
+    tone:'落ち着いた歴史ドキュメンタリー',
+    globalRules:['当時として自然な服装・建物・道具にする','アニメ調にしない'],
+    sceneDirectives:[
+      {sceneId:'scene-1',visualDirection:'机で資料を分析する場面。',assetType:'ai-reconstruction',narrationText:'資料を分析した。',rules:[]},
+      {sceneId:'scene-2',visualDirection:'現代の会議。',assetType:'modern-visual',narrationText:'今の仕事にもつながる。',rules:[]}
+    ]
+  };
+  const scenes=buildScenesFromProductionBrief(brief,{targetDurationSec:10});
+  assert.match(scenes[0].productionDirection.searchHint,/ある歴史人物の実践/);
+  assert.match(scenes[0].productionDirection.searchHint,/当時として自然な服装/);
+  assert.match(scenes[0].productionDirection.searchHint,/アニメ調にしない/);
+  assert.equal(scenes[1].productionDirection.searchHint,'');
+});
