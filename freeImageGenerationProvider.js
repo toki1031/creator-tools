@@ -5,6 +5,14 @@ export const FREE_IMAGE_PROMPT_MAX_CHARS = 2048;
 const clean = value => String(value ?? '').replace(/\s+/g,' ').trim();
 const clip = (value, max) => Array.from(clean(value)).slice(0,max).join('');
 
+function historicalEnvironmentGuidance() {
+  return [
+    'POSITIVE PERIOD ENVIRONMENT: depict a room and built environment made from materials, construction methods, fixtures, furnishings, and illumination that plausibly belong to the stated historical era and place.',
+    'Prefer period-plausible daylight, window light, candlelight, oil-lamp or gas-lamp ambience only when appropriate to the stated era and place; use historically plausible ceilings, walls, floors, windows, doors, furniture, textiles, tools, and containers.',
+    'When the scene is indoors, make the architecture itself visibly historical rather than placing historical clothing inside a contemporary room.'
+  ];
+}
+
 function sceneAnchors(value = '') {
   const text = clean(value);
   const anchors = [];
@@ -33,6 +41,7 @@ export function buildFreeImagePrompt(requirement) {
     'STRICT PERIOD RECONSTRUCTION. Historical authenticity overrides generic contemporary visual defaults.',
     `SCENE TO DEPICT: ${clip(sceneIntent, 900)}`,
     anchors.length ? `KEY VISUAL ANCHORS: ${anchors.join(', ')}.` : '',
+    ...historicalEnvironmentGuidance(),
     'Make the setting, clothing, architecture, furniture, lighting, tools, materials, documents, and technology coherent with the period and place described above.',
     'Every visible object must be plausible for that historical context. Do not silently modernize the room, building, people, equipment, or lighting.',
     'ANACHRONISMS TO AVOID: contemporary interiors; fluorescent or LED fixtures; suspended/drop ceilings; monitors or computers; modern hospital, office, or medical equipment; plastic furniture; modern signage; contemporary clothing or protective equipment, unless explicitly required by the scene.',
