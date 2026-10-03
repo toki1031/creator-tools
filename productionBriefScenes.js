@@ -22,7 +22,9 @@ function scopedVisualRules(rules = [], assetType = '') {
     const historicalHeader = /^(?:歴史Scene|AI歴史再現)/i.test(rule);
     const modernHeader = /^現代Scene/i.test(rule);
     const sourceHeader = /^(?:実物史料|史料)/i.test(rule);
-    if (historicalHeader) scope = 'historical';
+    const sharedHeader = /^(?:各Scene|全Scene|すべてのScene|全体)/i.test(rule);
+    if (sharedHeader) scope = 'shared';
+    else if (historicalHeader) scope = 'historical';
     else if (modernHeader) scope = 'modern';
     else if (sourceHeader) scope = 'source';
     buckets[scope].push(rule);
