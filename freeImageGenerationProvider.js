@@ -28,34 +28,28 @@ export function buildFreeImagePrompt(requirement) {
     ? requirement.prohibitedContent.map(clean).filter(Boolean)
     : [];
   const anchors = sceneAnchors(sceneIntent);
-  const common = [
-    'Create one realistic vertical 9:16 documentary scene image for a YouTube Short.',
-    'Follow the scene description literally and keep the main subject, place, era, objects, and action clearly visible.',
-    'Do not add readable text, captions, letters, logos, watermarks, signs, labels, interface elements, or decorative typography.'
+  const historical = requestedType === 'ai-reconstruction';
+  const parts = historical ? [
+    'STRICT PERIOD RECONSTRUCTION. Historical authenticity overrides generic contemporary visual defaults.',
+    `SCENE TO DEPICT: ${clip(sceneIntent, 900)}`,
+    anchors.length ? `KEY VISUAL ANCHORS: ${anchors.join(', ')}.` : '',
+    'Make the setting, clothing, architecture, furniture, lighting, tools, materials, documents, and technology coherent with the period and place described above.',
+    'Every visible object must be plausible for that historical context. Do not silently modernize the room, building, people, equipment, or lighting.',
+    'ANACHRONISMS TO AVOID: contemporary interiors; fluorescent or LED fixtures; suspended/drop ceilings; monitors or computers; modern hospital, office, or medical equipment; plastic furniture; modern signage; contemporary clothing or protective equipment, unless explicitly required by the scene.',
+    'Style: photorealistic historical documentary reconstruction, natural available or period-plausible lighting, believable people and materials; not an archival photograph.',
+    'No anime, cartoon, fantasy, monsters, magic, science fiction, fantasy weapons, surreal substitutions, readable text, captions, logos, watermarks, signs, labels, interface elements, or decorative typography.',
+    rules.length ? `SCENE-SPECIFIC MUST NOT: ${clip(rules.join(' / '), 300)}` : '',
+    'Vertical 9:16 composition for a YouTube Short.'
+  ] : [
+    `SCENE TO DEPICT: ${clip(sceneIntent, 1100)}`,
+    anchors.length ? `KEY VISUAL ANCHORS: ${anchors.join(', ')}.` : '',
+    'Style: photorealistic contemporary documentary or editorial photograph.',
+    'Use present-day people, clothing, furniture, workplace, meeting, documents, and technology when the scene describes them.',
+    'No anime, cartoon, fantasy, monsters, magical creatures, magic, science fiction, historical costumes, fantasy weapons, surreal substitutions, readable text, captions, logos, watermarks, signs, labels, interface elements, or decorative typography unless explicitly requested.',
+    rules.length ? `SCENE-SPECIFIC MUST NOT: ${clip(rules.join(' / '), 300)}` : '',
+    'Vertical 9:16 composition for a YouTube Short.'
   ];
-  const typeGuidance = requestedType === 'ai-reconstruction'
-    ? [
-        'Style: photorealistic historical documentary reconstruction, not an archival photograph.',
-        'Period authenticity is a hard constraint: every visible object must be plausible for the era and place stated in the scene description.',
-        'Use historically plausible clothing, architecture, furniture, documents, medical or work environment, lighting, tools, materials, and technology for that era and place.',
-        'Exclude anachronisms: no modern electric or fluorescent lighting, LED fixtures, drop ceilings, modern hospital equipment, monitors, computers, plastic furniture, contemporary office equipment, modern signage, or other technology invented after the described era unless the scene explicitly requests it.',
-        'When the exact era is not stated, infer historical context only from the scene description; never silently modernize a historical reconstruction.',
-        'Do not introduce fantasy, anime, cartoon styling, monsters, magical creatures, magic, science fiction, or fantasy weapons unless the scene explicitly requests them.'
-      ]
-    : [
-        'Style: photorealistic contemporary documentary or editorial photograph.',
-        'Use present-day people, clothing, furniture, workplace, meeting, documents, and technology when the scene describes them.',
-        'Do not introduce anime, cartoon styling, fantasy, monsters, magical creatures, magic, science fiction, historical costumes, or fantasy weapons unless the scene explicitly requests them.'
-      ];
-  const parts = [
-    ...common,
-    ...typeGuidance,
-    anchors.length ? `Important visual anchors: ${anchors.join(', ')}.` : '',
-    `Scene description (Japanese, preserve its meaning exactly): ${clip(sceneIntent, 1100)}`,
-    rules.length ? `Additional MUST NOT rules from the production request: ${clip(rules.join(' / '), 500)}` : '',
-    'Natural composition, believable people and objects, no surreal substitutions.'
-  ].filter(Boolean);
-  return clip(parts.join(' '), FREE_IMAGE_PROMPT_MAX_CHARS);
+  return clip(parts.filter(Boolean).join(' '), FREE_IMAGE_PROMPT_MAX_CHARS);
 }
 
 export function planFreeImageGeneration(requirement, { dailyQuotaAvailable = true } = {}) {
