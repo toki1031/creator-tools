@@ -68,17 +68,19 @@ test('uses narration as subtitle text only when no explicit subtitle exists',()=
 });
 
 
-test('historical reconstruction scenes inherit subject and era context without affecting modern scenes',()=>{
+test('AI reconstruction scenes inherit generic brief context without affecting modern scenes',()=>{
   const brief={
-    objective:'Florence Nightingaleの実践を伝える',
-    globalRules:['19世紀として自然な服装にする'],
+    objective:'ある歴史人物の実践を現代へ伝える',
+    tone:'落ち着いた歴史ドキュメンタリー',
+    globalRules:['当時として自然な服装・建物・道具にする','アニメ調にしない'],
     sceneDirectives:[
-      {sceneId:'scene-1',visualDirection:'机の上に統計資料を広げて分析する場面。',assetType:'ai-reconstruction',narrationText:'彼女は数字を集めた。',rules:[]},
-      {sceneId:'scene-2',visualDirection:'現代の会議。',assetType:'modern-visual',narrationText:'今の仕事でも同じ。',rules:[]}
+      {sceneId:'scene-1',visualDirection:'机で資料を分析する場面。',assetType:'ai-reconstruction',narrationText:'資料を分析した。',rules:[]},
+      {sceneId:'scene-2',visualDirection:'現代の会議。',assetType:'modern-visual',narrationText:'今の仕事にもつながる。',rules:[]}
     ]
   };
   const scenes=buildScenesFromProductionBrief(brief,{targetDurationSec:10});
-  assert.match(scenes[0].productionDirection.searchHint,/Florence Nightingale/);
-  assert.match(scenes[0].productionDirection.searchHint,/19世紀/);
+  assert.match(scenes[0].productionDirection.searchHint,/ある歴史人物の実践/);
+  assert.match(scenes[0].productionDirection.searchHint,/当時として自然な服装/);
+  assert.match(scenes[0].productionDirection.searchHint,/アニメ調にしない/);
   assert.equal(scenes[1].productionDirection.searchHint,'');
 });
