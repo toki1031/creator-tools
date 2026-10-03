@@ -113,3 +113,24 @@ test('visual rules are scoped to the scene asset type',()=>{
   assert.match(historical,/各Sceneの画像は内容と一致/);
   assert.equal(scenes[1].productionDirection.searchHint,'');
 });
+
+
+test('visual rule section scope continues until another explicit section header',()=>{
+  const brief={
+    globalRules:[
+      '歴史Sceneは当時として自然にする',
+      '歴史衣装を使う',
+      '現代Sceneでは現代の実写写真風にする',
+      '歴史衣装などにしない',
+      'PCを自然に使う'
+    ],
+    sceneDirectives:[
+      {sceneId:'scene-1',visualDirection:'historical',assetType:'ai-reconstruction',narrationText:'a'},
+      {sceneId:'scene-2',visualDirection:'modern',assetType:'modern-visual',narrationText:'b'}
+    ]
+  };
+  const scenes=buildScenesFromProductionBrief(brief,{targetDurationSec:10});
+  assert.match(scenes[0].productionDirection.searchHint,/歴史衣装を使う/);
+  assert.doesNotMatch(scenes[0].productionDirection.searchHint,/歴史衣装などにしない/);
+  assert.equal(scenes[1].productionDirection.searchHint,'');
+});
