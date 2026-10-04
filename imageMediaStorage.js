@@ -1,8 +1,8 @@
 import { putMedia } from './mediaStore.js';
 import { isImageDataUrl } from './mediaLibrary.js';
 
-export function dataUrlToBlob(dataUrl) {
-  if (!isImageDataUrl(dataUrl)) throw new Error('画像データが不正です。');
+export function imageDataUrlToBlob(dataUrl) {
+  if (!isImageDataUrl(dataUrl)) return null;
   const comma = dataUrl.indexOf(',');
   const header = dataUrl.slice(0, comma);
   const body = dataUrl.slice(comma + 1);
@@ -21,7 +21,7 @@ export async function storeImageAssetMedia(project, asset, { store = putMedia } 
     return { status: 'blocked', reason: '保存する画像素材がありません', asset };
   }
   let blob;
-  try { blob = dataUrlToBlob(asset.data); }
+  try { blob = imageDataUrlToBlob(asset.data); }
   catch (error) { return { status: 'error', reason: error.message, asset }; }
   const result = await store({ projectId: project.id, mediaId: 'image-' + asset.id, kind: 'image', blob });
   if (result?.status !== 'stored' || !result.mediaRef) return { ...result, asset };
