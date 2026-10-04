@@ -1,23 +1,8 @@
 import { putMedia } from './mediaStore.js';
 import { applyAssetAdoptionPlan } from './assetAdoptionApply.js';
+import { imageDataUrlToBlob } from './imageMediaStorage.js';
 
 function clean(value = '') { return String(value ?? '').trim(); }
-
-export function dataUrlToBlob(dataUrl) {
-  const value = clean(dataUrl);
-  const match = /^data:([^;,]+);base64,(.+)$/i.exec(value);
-  if (!match) return null;
-  try {
-    const binary = typeof atob === 'function'
-      ? atob(match[2])
-      : Buffer.from(match[2], 'base64').toString('binary');
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-    return new Blob([bytes], { type: match[1] });
-  } catch {
-    return null;
-  }
-}
 
 export async function storeAndApplyAutoImage(project, plan, resolvedAsset, {
   storeMedia = putMedia,
@@ -28,7 +13,7 @@ export async function storeAndApplyAutoImage(project, plan, resolvedAsset, {
   const projectId = clean(project.id);
   if (!projectId) return { status: 'blocked', project, reason: 'プロジェクトIDがありません' };
 
-  const blob = dataUrlToBlob(resolvedAsset?.data);
+  const blob = imageDataUrlToBlob(resolvedAsset?.data);
   if (!blob) return { status: 'blocked', project, reason: '保存できる画像データがありません' };
 
   const mediaId = clean(resolvedAsset?.id) || `auto-${clean(plan.sceneId)}`;
