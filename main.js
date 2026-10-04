@@ -1143,7 +1143,7 @@ async function renderOutput(id) {
   <section class="editor-card final-review-card">
     <div class="section-head"><div><h2>最終確認・微修正</h2><p>自動制作後の最後の調整だけを、動画を作り直さずに修正します。</p></div><span id="finalReviewSaveState">保存済み</span></div>
     <div class="tool-row"><button id="finalReviewUndo" disabled>↶ 元に戻す</button><button id="finalReviewRedo" disabled>↷ やり直す</button></div>
-    <div id="finalReviewScenes"></div>
+    <div id="finalReviewScenes"></div><dialog id="finalReviewImageDialog" class="media-library-dialog"><div class="section-head"><div><h2>Scene画像を差し替え</h2><p id="finalReviewImageTarget">素材ライブラリから選びます。</p></div></div><div id="finalReviewImageGrid" class="media-library-grid"></div><div class="dialog-actions"><button type="button" id="closeFinalReviewImage">閉じる</button></div></dialog>
     <div class="form-grid"><label>字幕位置<select id="finalReviewSubtitlePosition"><option value="top">上</option><option value="center">中央</option><option value="bottom">下</option></select></label><label>BGM音量<input id="finalReviewBgmVolume" type="range" min="0" max="1" step="0.01"></label></div>
     <p class="notice">画像差し替えは次の段階で素材ライブラリ選択UIを接続します。ここでは字幕・尺・順序・字幕位置・BGM音量を安全に調整できます。</p>
   </section>
@@ -1169,13 +1169,30 @@ async function renderOutput(id) {
   const syncFinalReviewProject=value=>{Object.keys(project).forEach(key=>delete project[key]);Object.assign(project,value);};
   const renderFinalReview=()=>{
     const holder=root.querySelector('#finalReviewScenes');if(!holder)return;
-    holder.innerHTML=(project.scenes||[]).map((scene,index)=>`<article class="final-review-scene" data-scene-id="${escapeHtml(scene.id)}"><div class="section-head"><strong>Scene ${index+1}</strong><div class="tool-row"><button type="button" data-move="-1" ${index===0?'disabled':''}>↑</button><button type="button" data-move="1" ${index===(project.scenes||[]).length-1?'disabled':''}>↓</button></div></div><label>字幕<textarea data-subtitle rows="3">${escapeHtml(scene.subtitleText||'')}</textarea></label><label>Scene尺（秒）<input data-duration type="number" min="0.5" max="60" step="0.1" value="${Number(scene.durationSec||0)}"></label></article>`).join('');
+    holder.innerHTML=(project.scenes||[]).map((scene,index)=>`<article class="final-review-scene" data-scene-id="${escapeHtml(scene.id)}"><div class="section-head"><strong>Scene ${index+1}</strong><div class="tool-row"><button type="button" data-move="-1" ${index===0?'disabled':''}>↑</button><button type="button" data-move="1" ${index===(project.scenes||[]).length-1?'disabled':''}>↓</button></div></div><div class="tool-row"><button type="button" data-replace-image>画像を素材から差し替え</button></div><label>字幕<textarea data-subtitle rows="3">${escapeHtml(scene.subtitleText||'')}</textarea></label><label>Scene尺（秒）<input data-duration type="number" min="0.5" max="60" step="0.1" value="${Number(scene.durationSec||0)}"></label></article>`).join('');
     root.querySelector('#finalReviewSubtitlePosition').value=project.subtitleStyle?.position||'bottom';
     root.querySelector('#finalReviewBgmVolume').value=String(Number(project.bgm?.volume??0.08));
     root.querySelector('#finalReviewUndo').disabled=!finalReviewHistory.canUndo();
     root.querySelector('#finalReviewRedo').disabled=!finalReviewHistory.canRedo();
   };
   const applyFinalReview=command=>{const result=finalReviewHistory.apply(command);if(!result.changed)return;syncFinalReviewProject(result.project);finalReviewSave.schedule(project);renderFinalReview();};
+  let finalReviewImageSceneId=null;
+  let finalReviewImageCleanups=[];
+  const clearFinalReviewImageUrls=()=>{finalReviewImageCleanups.forEach(cleanup=>cleanup?.());finalReviewImageCleanups=[];};
+  const imageDialog=root.querySelector('#finalReviewImageDialog');
+  const openFinalReviewImagePicker=async sceneId=>{
+    finalReviewImageSceneId=sceneId;clearFinalReviewImageUrls();
+    const sceneIndex=(project.scenes||[]).findIndex(scene=>scene.id===sceneId);
+    root.querySelector('#finalReviewImageTarget').textContent='Scene '+(sceneIndex+1)+' で使う画像を選びます。';
+    const library=ensureMediaLibrary(project);const grid=root.querySelector('#finalReviewImageGrid');
+    grid.innerHTML=library.length?library.map(asset=>'<article class="media-asset-card"><img data-final-review-asset-image="'+escapeHtml(asset.id)+'" hidden alt=""><div class="media-asset-info"><b>'+escapeHtml(asset.fileName||'画像素材')+'</b><small>'+(assetUsageCount(project,asset.id)?'使用中':'未使用')+'</small></div><div class="media-asset-actions"><button type="button" data-final-review-use-asset="'+escapeHtml(asset.id)+'">この画像に変更</button></div></article>').join(''):'<div class="dictionary-empty">画像素材がありません。シーン編集画面で画像を追加してください。</div>';
+    imageDialog.showModal();const nodes=[...grid.querySelectorAll('[data-final-review-asset-image]')];
+    await Promise.all(nodes.map(async el=>{const resolved=await resolveSceneImageForDisplay(project,{imageAssetId:el.dataset.finalReviewAssetImage});if(!el.isConnected)return resolved.cleanup?.();if(resolved.status==='resolved'){el.src=resolved.url;el.hidden=false;finalReviewImageCleanups.push(resolved.cleanup);}}));
+  };
+  root.querySelector('#finalReviewScenes').addEventListener('click',event=>{const button=event.target.closest('[data-replace-image]');if(!button)return;const card=button.closest('[data-scene-id]');void openFinalReviewImagePicker(card.dataset.sceneId);});
+  root.querySelector('#finalReviewImageGrid').addEventListener('click',event=>{const button=event.target.closest('[data-final-review-use-asset]');if(!button||!finalReviewImageSceneId)return;applyFinalReview({type:'replace-scene-image',sceneId:finalReviewImageSceneId,assetId:button.dataset.finalReviewUseAsset});clearFinalReviewImageUrls();imageDialog.close();});
+  root.querySelector('#closeFinalReviewImage').onclick=()=>{clearFinalReviewImageUrls();imageDialog.close();};
+  imageDialog.addEventListener('close',clearFinalReviewImageUrls);
   root.querySelector('#finalReviewScenes').addEventListener('change',event=>{const card=event.target.closest('[data-scene-id]');if(!card)return;const sceneId=card.dataset.sceneId;if(event.target.matches('[data-subtitle]'))applyFinalReview({type:'set-subtitle-text',sceneId,text:event.target.value});if(event.target.matches('[data-duration]'))applyFinalReview({type:'set-scene-duration',sceneId,durationSec:Number(event.target.value)});});
   root.querySelector('#finalReviewScenes').addEventListener('click',event=>{const button=event.target.closest('[data-move]');if(!button)return;const card=button.closest('[data-scene-id]');const from=(project.scenes||[]).findIndex(scene=>scene.id===card.dataset.sceneId);applyFinalReview({type:'move-scene',sceneId:card.dataset.sceneId,toIndex:from+Number(button.dataset.move)});});
   root.querySelector('#finalReviewSubtitlePosition').onchange=event=>applyFinalReview({type:'set-subtitle-position',position:event.target.value});
