@@ -1,5 +1,6 @@
 import { readRoute, goHome, goStudio, goProject, goScenes, goBgm, goOutput, goPublish, goAi } from "./router.js";
 import { createProject } from "./projectFactory.js";
+import { createFinalReviewHistory, createFinalReviewSaveController } from "./finalReviewHistory.js";
 import { deleteProject, getProject, listProjects, saveProject } from "./db.js";
 import { downloadJson, downloadText } from "./download.js";
 import { getVideoCapabilities, getProjectDuration, validateVideoProject, prepareVideoProject, runVisualPreview, exportProjectVideo, drawProjectFrame } from "./videoRenderer.js";
@@ -1139,6 +1140,14 @@ async function renderOutput(id) {
   <section class="editor-card"><div class="section-head"><div><h2>動画出力設定</h2><p>完成動画の形式を設定します。</p></div><span id="saveState">保存済み</span></div><div class="form-grid"><label>解像度<select id="resolution"><option value="1080x1920">1080×1920（高画質）</option><option value="720x1280">720×1280（iPhone推奨・軽量）</option></select></label><label>フレームレート<select id="fps"><option value="30">30fps（推奨）</option><option value="60">60fps（高負荷）</option></select></label><label>品質<select id="quality"><option value="standard">標準</option><option value="high">高品質</option></select></label><label class="check"><input id="subtitles" type="checkbox" ${o.subtitles?'checked':''}>字幕を表示</label><label>字幕位置<select id="subtitlePosition"><option value="top">上</option><option value="center">中央</option><option value="bottom">下</option></select></label><label class="check"><input id="bgmEnabled" type="checkbox" ${o.bgmEnabled?'checked':''}>BGMを使用</label></div></section>
   <section class="editor-card"><div class="section-head"><div><h2>生成前チェック</h2><p>動画生成に必要な素材の不足だけを軽量に確認します。</p></div><span class="status-chip ${capabilities.supported?'':'status-warn'}">${formatLabel}</span></div><div class="check-list"><p class="${project.displayScript?'ok':'warn'}">${project.displayScript?'✓':'!'} 台本：${project.displayScript.length}文字</p><p class="${scenes.length?'ok':'warn'}">${scenes.length?'✓':'!'} シーン：${scenes.length}件</p><p class="${hasImages===scenes.length&&scenes.length?'ok':'warn'}">${hasImages===scenes.length&&scenes.length?'✓':'!'} 画像：${hasImages}/${scenes.length}件</p><p class="${subtitleReady?'ok':'warn'}">${subtitleReady?'✓':'!'} 字幕：${subtitleReady}/${scenes.length}件${subtitleWarnings?`（長文警告${subtitleWarnings}件）`:''}</p><p class="${validation.bgmInvalid?'warn':(project.bgm?.audioData||isProceduralBgm(project.bgm))&&o.bgmEnabled?'ok':'muted'}">${validation.bgmInvalid?'!':(project.bgm?.audioData||isProceduralBgm(project.bgm))&&o.bgmEnabled?'✓':'−'} BGM音源：${escapeHtml(project.bgm?.fileName||project.bgm?.title||'なし')}${isProceduralBgm(project.bgm)?'（Creator OS内生成）':''}${validation.bgmInvalid?'（動画ファイルのため要再登録）':''}</p><p class="${validation.narrationInvalid?'warn':validation.sceneNarrationCount===scenes.length&&scenes.length?'ok':project.narration?.audioData?'ok':'muted'}">${validation.narrationInvalid?'!':validation.sceneNarrationCount===scenes.length&&scenes.length?'✓':project.narration?.audioData?'✓':'−'} ナレーション：${validation.sceneNarrationCount?`シーン別 ${validation.sceneNarrationCount}/${scenes.length}件`:escapeHtml(project.narration?.fileName||'未登録')}${validation.narrationInvalid?'（動画ファイルのため要再登録）':''}</p><p>予定尺：${total.toFixed(1)}秒</p>${mvpValidation.applicable?`<p class="${mvpValidation.pass?'ok':'warn'}">${mvpValidation.pass?'✓':'!'} MVP Shorts：1080×1920 / 30fps / MP4 / 60秒以内${mvpValidation.pass?'':'（'+mvpValidation.errors.map(escapeHtml).join('／')+'）'}</p>`:''}</div>${validation.warnings.length?`<div class="render-warnings">${validation.warnings.map(item=>`<p>⚠ ${escapeHtml(item)}</p>`).join('')}</div>`:''}</section>
 
+  <section class="editor-card final-review-card">
+    <div class="section-head"><div><h2>最終確認・微修正</h2><p>自動制作後の最後の調整だけを、動画を作り直さずに修正します。</p></div><span id="finalReviewSaveState">保存済み</span></div>
+    <div class="tool-row"><button id="finalReviewUndo" disabled>↶ 元に戻す</button><button id="finalReviewRedo" disabled>↷ やり直す</button></div>
+    <div id="finalReviewScenes"></div>
+    <div class="form-grid"><label>字幕位置<select id="finalReviewSubtitlePosition"><option value="top">上</option><option value="center">中央</option><option value="bottom">下</option></select></label><label>BGM音量<input id="finalReviewBgmVolume" type="range" min="0" max="1" step="0.01"></label></div>
+    <p class="notice">画像差し替えは次の段階で素材ライブラリ選択UIを接続します。ここでは字幕・尺・順序・字幕位置・BGM音量を安全に調整できます。</p>
+  </section>
+
   <section class="editor-card video-render-card">
     <div class="section-head"><div><h2>動画プレビュー・生成</h2><p>画像、動き、字幕、BGMをブラウザ内で合成します。</p></div><span id="renderStatus">操作時に素材を準備します</span></div><div id="assetDiagnostics" class="asset-diagnostics">1フレーム確認または動画生成時に素材を読み込みます。</div>
     <div class="video-canvas-wrap"><canvas id="renderCanvas" width="${o.width}" height="${o.height}"></canvas></div>
@@ -1154,6 +1163,26 @@ async function renderOutput(id) {
 
   root.querySelector('#resolution').value=`${o.width}x${o.height}`;root.querySelector('#fps').value=String(o.fps);root.querySelector('#quality').value=o.quality;root.querySelector('#subtitlePosition').value=o.subtitlePosition||st.position;
   root.querySelector('#publish').onclick=root.querySelector('#publish2').onclick=()=>goPublish(id);attachProjectMenu(project,root.querySelector('#menu'),()=>goStudio(studioForGenre(project.genre)));
+
+  const finalReviewHistory=createFinalReviewHistory(project);
+  const finalReviewSave=createFinalReviewSaveController({delay:450,persist:async value=>{value.updatedAt=new Date().toISOString();await saveProject(value);},setStatus:text=>{const el=root.querySelector('#finalReviewSaveState');if(el)el.textContent=text;}});
+  const syncFinalReviewProject=value=>{Object.keys(project).forEach(key=>delete project[key]);Object.assign(project,value);};
+  const renderFinalReview=()=>{
+    const holder=root.querySelector('#finalReviewScenes');if(!holder)return;
+    holder.innerHTML=(project.scenes||[]).map((scene,index)=>`<article class="final-review-scene" data-scene-id="${escapeHtml(scene.id)}"><div class="section-head"><strong>Scene ${index+1}</strong><div class="tool-row"><button type="button" data-move="-1" ${index===0?'disabled':''}>↑</button><button type="button" data-move="1" ${index===(project.scenes||[]).length-1?'disabled':''}>↓</button></div></div><label>字幕<textarea data-subtitle rows="3">${escapeHtml(scene.subtitleText||'')}</textarea></label><label>Scene尺（秒）<input data-duration type="number" min="0.5" max="60" step="0.1" value="${Number(scene.durationSec||0)}"></label></article>`).join('');
+    root.querySelector('#finalReviewSubtitlePosition').value=project.subtitleStyle?.position||'bottom';
+    root.querySelector('#finalReviewBgmVolume').value=String(Number(project.bgm?.volume??0.08));
+    root.querySelector('#finalReviewUndo').disabled=!finalReviewHistory.canUndo();
+    root.querySelector('#finalReviewRedo').disabled=!finalReviewHistory.canRedo();
+  };
+  const applyFinalReview=command=>{const result=finalReviewHistory.apply(command);if(!result.changed)return;syncFinalReviewProject(result.project);finalReviewSave.schedule(project);renderFinalReview();};
+  root.querySelector('#finalReviewScenes').addEventListener('change',event=>{const card=event.target.closest('[data-scene-id]');if(!card)return;const sceneId=card.dataset.sceneId;if(event.target.matches('[data-subtitle]'))applyFinalReview({type:'set-subtitle-text',sceneId,text:event.target.value});if(event.target.matches('[data-duration]'))applyFinalReview({type:'set-scene-duration',sceneId,durationSec:Number(event.target.value)});});
+  root.querySelector('#finalReviewScenes').addEventListener('click',event=>{const button=event.target.closest('[data-move]');if(!button)return;const card=button.closest('[data-scene-id]');const from=(project.scenes||[]).findIndex(scene=>scene.id===card.dataset.sceneId);applyFinalReview({type:'move-scene',sceneId:card.dataset.sceneId,toIndex:from+Number(button.dataset.move)});});
+  root.querySelector('#finalReviewSubtitlePosition').onchange=event=>applyFinalReview({type:'set-subtitle-position',position:event.target.value});
+  root.querySelector('#finalReviewBgmVolume').onchange=event=>applyFinalReview({type:'set-bgm-volume',volume:Number(event.target.value)});
+  root.querySelector('#finalReviewUndo').onclick=()=>{const result=finalReviewHistory.undo();if(!result.changed)return;syncFinalReviewProject(result.project);finalReviewSave.schedule(project);renderFinalReview();};
+  root.querySelector('#finalReviewRedo').onclick=()=>{const result=finalReviewHistory.redo();if(!result.changed)return;syncFinalReviewProject(result.project);finalReviewSave.schedule(project);renderFinalReview();};
+  renderFinalReview();
 
   const canvas=root.querySelector('#renderCanvas');
   const renderStatus=root.querySelector('#renderStatus');
