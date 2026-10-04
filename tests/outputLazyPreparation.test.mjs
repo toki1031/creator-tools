@@ -13,9 +13,10 @@ test('output route does not eagerly prepare heavy video media', () => {
   assert.match(source, /let assets=await ensurePreparedAssets\(\);/);
 });
 
-test('output route omits duplicate final-review image grid', () => {
-  assert.doesNotMatch(source, /final-review-card/);
+test('output route keeps final review lightweight and does not eagerly render an image grid', () => {
+  assert.match(source, /final-review-card/);
   assert.doesNotMatch(source, /approveFinalReview/);
+  assert.doesNotMatch(source, /finalReviewScenes[^\n]*<img/);
   assert.match(source, /<h2>生成前チェック<\/h2>/);
 });
 
