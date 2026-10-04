@@ -7,6 +7,7 @@ import { getVideoCapabilities, getProjectDuration, validateVideoProject, prepare
 import { createProjectBackupPayload, createRestoredProject, LARGE_BACKUP_WARNING_BYTES, mergePronunciationDictionaries, normalizeImportedProject, parseProjectBackup, summarizeProjectBackup } from "./projectBackup.js";
 import { addImageAsset, assetUsageCount, assetUsageScenes, ensureMediaLibrary, estimateAssetBytes, isImageDataUrl, promoteLegacySceneImage, removeAllUnusedAssets, removeUnusedAsset, renameMediaAsset, resolveSceneImageSource, summarizeMediaLibrary } from "./mediaLibrary.js";
 import { resolveSceneImageForDisplay } from "./sceneImageDisplay.js";
+import { storeImageAssetMedia } from "./imageMediaStorage.js";
 import { runMultiSceneAssetPipeline } from "./multiSceneAssetPipeline.js";
 import { evaluateAssetToVoiceHandoff } from "./assetToVoiceHandoff.js";
 import { evaluateBgmToOutputHandoff } from "./bgmToOutputHandoff.js";
@@ -568,7 +569,7 @@ async function renderScenes(id) {
       recordSceneTransitionChange(project,{sceneId:scene.id,beforeTransition:before,afterTransition:after,sceneIndex:index});
       save();
     });
-    root.querySelectorAll("[data-image]").forEach(el=>el.onchange=async()=>{const file=el.files?.[0];if(!file)return;if(file.size>3_000_000&&!confirm("画像が大きいため保存容量を圧迫する可能性があります。続けますか？"))return;const scene=project.scenes[Number(el.dataset.image)];pendingAsset=fileToDataUrl(file).then(data=>{promoteLegacySceneImage(project,scene,{fileName:`シーン ${Number(el.dataset.image)+1} の旧画像`});const asset=addImageAsset(project,{data,fileName:file.name});scene.imageAssetId=asset.id;delete scene.imageData;});save();await pendingAsset;renderList();});
+    root.querySelectorAll("[data-image]").forEach(el=>el.onchange=async()=>{const file=el.files?.[0];if(!file)return;if(file.size>3_000_000&&!confirm("画像が大きいため保存容量を圧迫する可能性があります。続けますか？"))return;const scene=project.scenes[Number(el.dataset.image)];pendingAsset=fileToDataUrl(file).then(data=>{promoteLegacySceneImage(project,scene,{fileName:`シーン ${Number(el.dataset.image)+1} の旧画像`});const asset=addImageAsset(project,{data,fileName:file.name});scene.imageAssetId=asset.id;delete scene.imageData;return storeImageAssetMedia(project,asset).then(result=>{if(result.status!=="stored")console.warn("画像の分離保存に失敗したため埋め込み形式を維持します",result.reason||result.status);});});save();await pendingAsset;renderList();});
     root.querySelectorAll("[data-library]").forEach(el=>el.onclick=()=>openMediaLibrary(Number(el.dataset.library)));
     root.querySelectorAll("[data-remove]").forEach(el=>el.onclick=()=>{if(!confirm("このシーンを削除しますか？ 削除後も「1つ前に戻す」で復元できます。"))return;const index=Number(el.dataset.remove);promoteLegacySceneImage(project,project.scenes[index],{fileName:`シーン ${index+1} の旧画像`});snapshotScenes();project.scenes.splice(index,1);save();renderList();});
     root.querySelectorAll("[data-up]").forEach(el=>el.onclick=()=>{const record=moveSceneWithDecision(project,Number(el.dataset.up),"up");if(!record)return;save();renderList();});
