@@ -1,13 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { dataUrlToBlob, storeAndApplyAutoImage } from '../autoImageMediaStorage.js';
+import { storeAndApplyAutoImage } from '../autoImageMediaStorage.js';
+import { imageDataUrlToBlob } from '../imageMediaStorage.js';
 
 const project = { id:'p1', scenes:[{id:'s1'}], mediaLibrary:[] };
 const plan = { status:'ready', sceneId:'s1', candidate:{ title:'Historic image', previewUrl:'https://example.org/a.jpg' } };
 const resolved = { id:'img1', data:'data:image/jpeg;base64,YWJj', provenance:{ provider:'library-of-congress', sourceUrl:'https://www.loc.gov/item/x/' } };
 
 test('converts fetched Data URL to Blob before storage', async () => {
-  const blob = dataUrlToBlob(resolved.data);
+  const blob = imageDataUrlToBlob(resolved.data);
   assert.equal(blob.type, 'image/jpeg');
   assert.equal(blob.size, 3);
 });
