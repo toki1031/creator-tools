@@ -1,3 +1,4 @@
+import { getStudioProfile } from './studioProfiles.js';
 const FREE_GENERATION_TYPES = new Set(['ai-reconstruction','modern-visual']);
 export const FREE_IMAGE_MODEL = '@cf/black-forest-labs/flux-1-schnell';
 export const FREE_IMAGE_PROMPT_MAX_CHARS = 2048;
@@ -28,8 +29,9 @@ function sceneAnchors(value = '') {
   return anchors;
 }
 
-export function buildFreeImagePrompt(requirement) {
+export function buildFreeImagePrompt(requirement, { studioProfile } = {}) {
   const requestedType = clean(requirement?.requestedType);
+  const profile = studioProfile || getStudioProfile(requirement?.studioProfileId || 'sns');
   const sceneIntent = clean(requirement?.queryHint || requirement?.query || requirement?.prompt);
   if (!sceneIntent) return '';
   const rules = Array.isArray(requirement?.prohibitedContent)
@@ -40,6 +42,7 @@ export function buildFreeImagePrompt(requirement) {
   const parts = historical ? [
     'STRICT PERIOD RECONSTRUCTION. Historical authenticity overrides generic contemporary visual defaults.',
     `SCENE TO DEPICT: ${clip(sceneIntent, 900)}`,
+    `STUDIO VISUAL DIRECTION: ${profile.visualDirection}.`,
     anchors.length ? `KEY VISUAL ANCHORS: ${anchors.join(', ')}.` : '',
     ...historicalEnvironmentGuidance(),
     'Make the setting, clothing, architecture, furniture, lighting, tools, materials, documents, and technology coherent with the period and place described above.',
@@ -51,6 +54,7 @@ export function buildFreeImagePrompt(requirement) {
     'Vertical 9:16 composition for a YouTube Short.'
   ] : [
     `SCENE TO DEPICT: ${clip(sceneIntent, 1100)}`,
+    `STUDIO VISUAL DIRECTION: ${profile.visualDirection}.`,
     anchors.length ? `KEY VISUAL ANCHORS: ${anchors.join(', ')}.` : '',
     'Style: photorealistic contemporary documentary or editorial photograph.',
     'Use present-day people, clothing, furniture, workplace, meeting, documents, and technology when the scene describes them.',
@@ -72,7 +76,7 @@ export function planFreeImageGeneration(requirement, { dailyQuotaAvailable = tru
 export async function requestFreeGeneratedImage(requirement, { fetchImpl = fetch, endpoint = '/api/generate-image' } = {}) {
   const plan = planFreeImageGeneration(requirement);
   if (plan.status !== 'ready') return plan;
-  const prompt = buildFreeImagePrompt(requirement);
+  const prompt = buildFreeImagePrompt(requirement, { studioProfile:getStudioProfile(requirement?.studioProfileId || 'sns') });
   if (!prompt) return {...plan,status:'error',reason:'画像生成プロンプトがありません'};
   let response;
   try { response = await fetchImpl(endpoint,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({requestedType:plan.requestedType,prompt})}); }
