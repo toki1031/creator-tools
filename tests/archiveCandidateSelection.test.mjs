@@ -25,7 +25,7 @@ test('keeps needs-selection behavior when top resolution is tied',()=>{
   const result=selectEquivalentArchiveCandidate([a,b],requirement);
   assert.equal(result.selected,false);
   assert.equal(result.entries.length,2);
-  assert.equal(result.reason,'resolution-tie-or-missing');
+  assert.equal(result.reason,'relevance-resolution-tie');
 });
 
 test('never selects a review-required candidate just because it is larger',()=>{
@@ -41,15 +41,16 @@ test('does not use resolution when candidate fails explicit archive intent',()=>
   const relevant=entry({id:'diagram',width:1200,height:800});
   const portrait=entry({id:'portrait',width:9000,height:9000,description:'Portrait photograph',date:'1858',contributors:['Florence Nightingale']});
   const result=selectEquivalentArchiveCandidate([relevant,portrait],requirement);
-  assert.equal(result.selected,false);
-  assert.equal(result.entries.length,2);
-  assert.equal(result.reason,'not-multiple-equivalent-images');
+  assert.equal(result.selected,true);
+  assert.equal(result.entries.length,1);
+  assert.equal(result.entries[0].candidate.title,'diagram.jpg');
+  assert.equal(result.reason,'unique-best-metadata-match');
 });
 
-test('requires sufficiently explicit intent before automatic equivalence selection',()=>{
+test('generic low-specificity intent can use a unique resolution only among equally eligible evidence',()=>{
   const result=selectEquivalentArchiveCandidate([entry({id:'a',width:1200,height:800}),entry({id:'b',width:2000,height:1200})],{requestedType:'historical-source',queryHint:'古い史料'});
-  assert.equal(result.selected,false);
-  assert.equal(result.reason,'insufficient-explicit-intent');
+  assert.equal(result.selected,true);
+  assert.equal(result.entries[0].candidate.title,'b.jpg');
 });
 
 
