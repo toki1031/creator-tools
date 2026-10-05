@@ -8,7 +8,7 @@ import { createProjectBackupPayload, createRestoredProject, LARGE_BACKUP_WARNING
 import { addImageAsset, assetUsageCount, assetUsageScenes, ensureMediaLibrary, estimateAssetBytes, isImageDataUrl, promoteLegacySceneImage, removeAllUnusedAssets, removeUnusedAsset, renameMediaAsset, resolveSceneImageSource, summarizeMediaLibrary } from "./mediaLibrary.js";
 import { resolveSceneImageForDisplay } from "./sceneImageDisplay.js";
 import { storeImageAssetMedia } from "./imageMediaStorage.js";
-import { putMedia } from "./mediaStore.js";
+import { getMedia, putMedia } from "./mediaStore.js";
 import { runMultiSceneAssetPipeline } from "./multiSceneAssetPipeline.js";
 import { fetchAssetImage } from "./assetImageFetch.js";
 import { storeAndApplyAutoImage } from "./autoImageMediaStorage.js";
@@ -805,6 +805,8 @@ async function renderBgm(id) {
   attachProjectMenu(project,root.querySelector('#menu'),()=>goStudio(studioForGenre(project.genre)));
 
   const saveState=root.querySelector('#saveState'); let pendingAsset=Promise.resolve();
+  let bgmPreviewObjectUrl='';
+  if(!b.audioData && b.mediaRef?.id){const resolved=await getMedia({projectId:project.id,mediaId:b.mediaRef.id});if(resolved?.status==='resolved'&&resolved.blob){bgmPreviewObjectUrl=URL.createObjectURL(resolved.blob);root.querySelector('#audioPreview').src=bgmPreviewObjectUrl;}}
   const readGlobalSettings=()=>Object.assign(st,{
     enabled:root.querySelector('#subtitleEnabled').checked,preset:root.querySelector('#subtitlePreset').value,
     position:root.querySelector('#subtitlePosition').value,positionOffsetPercent:normalizeSubtitleOffset(root.querySelector('#positionOffset').value),fontSize:Number(root.querySelector('#fontSize').value),
@@ -1108,7 +1110,7 @@ fontSizeEl.onblur=()=>commitSubtitleFontSizeDecision(fontSizeEl);
     root.querySelector('#source').value='upload';
     const beforeAudioAssetId=b.audioAssetId;const hadBgmBefore=Boolean(b.audioData||b.mediaRef?.id);
     pendingAsset=(async()=>{const audioAssetId=await createAudioAssetIdFromFile(file);const stored=await putMedia({projectId:project.id,mediaId:'bgm-'+audioAssetId,kind:'audio',blob:file});if(stored?.status!=='stored'||!stored.mediaRef?.id)throw new Error(stored?.reason||'BGMをメディア保存できませんでした');b.audioData='';b.mediaRef=stored.mediaRef;b.mimeType=file.type||stored.mediaRef.mimeType||'';b.fileName=file.name;b.source='upload';b.audioAssetId=audioAssetId;recordBgmSelectionChange(project,{beforeAudioAssetId,afterAudioAssetId:audioAssetId,selectionMethod:'upload',hadBgmBefore,bgmCategory:root.querySelector('#category').value,ducking:root.querySelector('#ducking').checked,loop:root.querySelector('#loop').checked});})();
-    save();await pendingAsset;root.querySelector('#fileName').textContent=file.name;root.querySelector('#audioPreview').src=b.audioData;
+    save();await pendingAsset;root.querySelector('#fileName').textContent=file.name;if(bgmPreviewObjectUrl)URL.revokeObjectURL(bgmPreviewObjectUrl);bgmPreviewObjectUrl=URL.createObjectURL(file);root.querySelector('#audioPreview').src=bgmPreviewObjectUrl;
   };
 
   function renderSubtitlePreview(){
