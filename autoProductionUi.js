@@ -4,6 +4,11 @@ import { createAutoProductionProject } from './autoProductionProject.js';
 
 const BUTTON_ID = 'openAutoProduction';
 const DIALOG_ID = 'autoProductionDialog';
+const AUTO_PRODUCTION_STUDIOS = {
+  'great-person': { genre:'great-person', platform:'youtube-shorts', label:'偉人Studio' },
+  education: { genre:'education', platform:'instagram-reels', label:'知育Studio' }
+};
+let activeStudioKey = 'great-person';
 
 function ensureStyles() {
   if (document.getElementById('autoProductionStyles')) return;
@@ -32,8 +37,8 @@ function buildDialog() {
   dialog.innerHTML = `
     <form method="dialog" data-auto-production-form>
       <div>
-        <h2>制作依頼から作る</h2>
-        <p class="auto-production-note">制作依頼をそのまま貼り付けます。内容はこの端末内で処理し、外部AI/APIには送信しません。</p>
+        <h2 data-auto-production-title>制作依頼から作る</h2>
+        <p class="auto-production-note" data-auto-production-note>制作依頼をそのまま貼り付けます。内容はこの端末内でScene設計へ変換し、画像生成時は選択中のStudio方針を使います。</p>
       </div>
       <label>プロジェクト名（任意）
         <input name="title" placeholder="未入力なら「無題のプロジェクト」">
@@ -72,11 +77,12 @@ function buildDialog() {
     submit.disabled = true;
     status.textContent = '制作依頼をScene設計へ変換しています…';
     try {
+      const studio = AUTO_PRODUCTION_STUDIOS[activeStudioKey] || AUTO_PRODUCTION_STUDIOS['great-person'];
       const result = createAutoProductionProject({
         requestText,
         title: String(data.get('title') ?? ''),
-        genre: 'great-person',
-        platform: 'youtube-shorts',
+        genre: studio.genre,
+        platform: studio.platform,
         targetDurationSec: 60
       });
       if (!result.ok) {
@@ -101,7 +107,7 @@ function buildDialog() {
 
 function attachAutoProductionEntry() {
   const route = readRoute();
-  if (route.page !== 'studio' || route.studio !== 'great-person') return;
+  if (route.page !== 'studio' || !AUTO_PRODUCTION_STUDIOS[route.studio]) return;
   const createButton = document.getElementById('openCreate');
   const buttons = createButton?.closest('.hero-buttons');
   if (!createButton || !buttons || document.getElementById(BUTTON_ID)) return;
@@ -113,7 +119,11 @@ function attachAutoProductionEntry() {
   button.textContent = '✨ 制作依頼から作る';
   createButton.insertAdjacentElement('afterend', button);
   button.addEventListener('click', () => {
+    activeStudioKey = route.studio;
     const dialog = buildDialog();
+    const studio = AUTO_PRODUCTION_STUDIOS[activeStudioKey];
+    const title = dialog.querySelector('[data-auto-production-title]');
+    if (title) title.textContent = `${studio.label}｜制作依頼から作る`;
     const status = dialog.querySelector('[data-auto-production-status]');
     if (status) status.textContent = '';
     dialog.showModal();
