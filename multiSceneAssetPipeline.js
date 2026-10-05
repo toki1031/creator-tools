@@ -42,7 +42,7 @@ export async function runMultiSceneAssetPipeline(project, {
 
   for (const originalScene of scenes) {
     const scene = currentProject.scenes.find(item => item?.id === originalScene?.id) || originalScene;
-    const requirement = buildAssetRequirement(scene);
+    const requirement = { ...buildAssetRequirement(scene), studioProfileId: currentProject.studioProfileId || currentProject.genre || 'sns' };
     if (!ARCHIVE_SUPPORTED_TYPES.has(requirement?.requestedType)) {
       if (autoProductionEnabled && (requirement?.requestedType === 'ai-reconstruction' || requirement?.requestedType === 'modern-visual')) {
         eligibleCount += 1;
