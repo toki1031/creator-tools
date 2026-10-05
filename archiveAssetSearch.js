@@ -30,7 +30,10 @@ export function filterArchiveCandidatesForIntent(candidates,plan){
   const best=Math.max(0,...scored.map(item=>item.score));
   // Search providers already used the full query. Metadata matching is a conservative relevance
   // refinement only; never discard every provider result merely because metadata is sparse.
-  return best>0?scored.filter(item=>item.score>0).map(item=>item.candidate):list;
+  if(best<=0)return list;
+  // Keep only the strongest metadata matches. Generic date-only overlap must not keep an
+  // otherwise unrelated candidate when another result matches more of the requested intent.
+  return scored.filter(item=>item.score===best).map(item=>item.candidate);
 }
 
 export async function searchArchiveCandidates(plan,{
