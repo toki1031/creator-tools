@@ -287,7 +287,11 @@ export function parseProductionRequest(input) {
     if (!id || seen.has(id)) return false;
     seen.add(id);
     directive.visualDirection = stripDecorativePrefix(directive.visualDirection);
-    directive.searchHint = stripDecorativePrefix(directive.searchHint);
+    if (Object.hasOwn(directive, "searchHint")) {
+      const searchHint = stripDecorativePrefix(directive.searchHint);
+      if (searchHint) directive.searchHint = searchHint;
+      else delete directive.searchHint;
+    }
     directive.narrationText = stripEmbeddedVisualIntent(directive.narrationText);
     directive.subtitleText = stripEmbeddedVisualIntent(directive.subtitleText);
     return true;
