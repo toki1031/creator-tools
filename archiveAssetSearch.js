@@ -2,21 +2,35 @@ import { searchLocCandidates } from './locAssetSearch.js';
 import { searchCommonsCandidates } from './commonsAssetSearch.js';
 
 function resultCandidates(result){ return Array.isArray(result?.candidates)?result.candidates:[]; }
+function clean(value=''){return String(value??'').trim().toLowerCase();}
+const STOPWORDS=new Set(['scene','image','visual','photo','picture','the','and','for','with','from','this','that','する','した','して','その','この','もの','こと','場面','映像','画像','実物','史料','資料']);
+function intentTerms(value=''){
+  const normalized=clean(value).normalize('NFKC');
+  const latin=normalized.match(/[a-z][a-z0-9'-]{2,}/g)||[];
+  const years=normalized.match(/\b(?:17|18|19|20)\d{2}\b/g)||[];
+  const japanese=normalized.match(/[一-龠々ぁ-んァ-ヶー]{2,}/g)||[];
+  return [...new Set([...years,...latin,...japanese].map(clean).filter(term=>term&&!STOPWORDS.has(term)))];
+}
 function candidateText(candidate={}){
   return [candidate.title,candidate.description,candidate.date,...(Array.isArray(candidate.contributors)?candidate.contributors:[])]
-    .map(value=>String(value??'').trim()).filter(Boolean).join(' ').toLowerCase();
+    .map(clean).filter(Boolean).join(' ');
+}
+export function archiveIntentMatchScore(candidate,query=''){
+  const terms=intentTerms(query);
+  if(!terms.length)return 0;
+  const haystack=candidateText(candidate);
+  return terms.reduce((score,term)=>score+(haystack.includes(term)?1:0),0);
 }
 export function filterArchiveCandidatesForIntent(candidates,plan){
-  const query=String(plan?.queries?.[0]??'').toLowerCase();
-  const requireNightingale=/ナイチンゲール|florence\s+nightingale/.test(query);
-  const requireDiagram=/統計図|統計グラフ|図表|diagram|chart|coxcomb|polar\s+area/.test(query);
-  if(!requireNightingale&&!requireDiagram)return resultCandidates({candidates});
-  return resultCandidates({candidates}).filter(candidate=>{
-    const haystack=candidateText(candidate);
-    if(requireNightingale&&!/nightingale|ナイチンゲール/.test(haystack))return false;
-    if(requireDiagram&&!/diagram|chart|coxcomb|mortality|statistical|統計/.test(haystack))return false;
-    return true;
-  });
+  const list=resultCandidates({candidates});
+  const query=String(plan?.queries?.[0]??'');
+  const terms=intentTerms(query);
+  if(!terms.length)return list;
+  const scored=list.map(candidate=>({candidate,score:archiveIntentMatchScore(candidate,query)}));
+  const best=Math.max(0,...scored.map(item=>item.score));
+  // Search providers already used the full query. Metadata matching is a conservative relevance
+  // refinement only; never discard every provider result merely because metadata is sparse.
+  return best>0?scored.filter(item=>item.score>0).map(item=>item.candidate):list;
 }
 
 export async function searchArchiveCandidates(plan,{
@@ -35,16 +49,8 @@ export async function searchArchiveCandidates(plan,{
   const combined=[...locCandidates,...commonsCandidates];
   if(combined.length){
     const providers=[...new Set(combined.map(candidate=>candidate?.provider).filter(Boolean))];
-    return {
-      status:'ok',
-      candidates:combined,
-      provider:providers.length===1?providers[0]:'archive-combined',
-      attempts,
-      reason:''
-    };
+    return {status:'ok',candidates:combined,provider:providers.length===1?providers[0]:'archive-combined',attempts,reason:''};
   }
-  if(loc?.status==='ok'||commons?.status==='ok'){
-    return {status:'ok',candidates:[],reason:'アーカイブ素材候補が見つかりません',provider:'archive-fallback',attempts};
-  }
+  if(loc?.status==='ok'||commons?.status==='ok')return {status:'ok',candidates:[],reason:'アーカイブ素材候補が見つかりません',provider:'archive-fallback',attempts};
   return {status:'error',candidates:[],reason:commons?.reason||loc?.reason||'アーカイブ検索を継続できません',provider:'archive-fallback',attempts};
 }
