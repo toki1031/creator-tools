@@ -37,7 +37,7 @@ export function getProjectDuration(project) {
 }
 
 function bgmDataMime(project) {
-  return String(project?.bgm?.audioData || '').match(/^data:([^;,]+)/)?.[1]?.toLowerCase() || '';
+  return String(project?.bgm?.audioData || '').match(/^data:([^;,]+)/)?.[1]?.toLowerCase() || String(project?.bgm?.mediaRef?.mimeType || project?.bgm?.mimeType || '').toLowerCase();
 }
 
 function bgmLooksLikeVideo(project) {
@@ -69,8 +69,8 @@ export function validateVideoProject(project) {
   const imageCount = scenes.filter(scene => hasVideoSceneImageReference(project, scene)).length;
   if (imageCount < scenes.length) warnings.push(`画像未登録のシーンが${scenes.length - imageCount}件あります。背景色で代用します。`);
   if (getProjectDuration(project) <= 0) errors.push('動画の長さが0秒です。');
-  if (project.output?.bgmEnabled && project.bgm?.source !== 'none' && !project.bgm?.audioData && !isProceduralBgm(project.bgm)) warnings.push('BGM設定はありますが、音源ファイルが登録されていません。');
-  const bgmInvalid = Boolean(project.output?.bgmEnabled && project.bgm?.audioData && bgmLooksLikeVideo(project));
+  if (project.output?.bgmEnabled && project.bgm?.source !== 'none' && !project.bgm?.audioData && !project.bgm?.mediaRef?.id && !isProceduralBgm(project.bgm)) warnings.push('BGM設定はありますが、音源ファイルが登録されていません。');
+  const bgmInvalid = Boolean(project.output?.bgmEnabled && (project.bgm?.audioData || project.bgm?.mediaRef?.id) && bgmLooksLikeVideo(project));
   if (bgmInvalid) errors.push('現在のBGMはMOV / MP4などの動画ファイルです。BGM・字幕画面でMP3・M4A・AAC・WAVなどの音声ファイルを再登録してください。');
   const sceneNarrationCount = scenes.filter(scene => scene?.narration?.audioData || scene?.narration?.mediaRef?.id).length;
   const narrationInvalid = Boolean(project.narration?.audioData && narrationLooksLikeVideo(project));
@@ -81,7 +81,7 @@ export function validateVideoProject(project) {
     const missingNarrations = scenes.flatMap((scene, index) => (scene?.narration?.audioData || scene?.narration?.mediaRef?.id) ? [] : [index + 1]);
     if (missingImages.length) errors.push(`自動制作を完成できません。画像未登録：シーン${missingImages.join('・')}`);
     if (missingNarrations.length) errors.push(`自動制作を完成できません。ナレーション未生成：シーン${missingNarrations.join('・')}`);
-    if (project.output?.bgmEnabled && !project.bgm?.audioData && !isProceduralBgm(project.bgm)) errors.push('自動制作を完成できません。BGMを使用する設定ですが音源が未登録です。');
+    if (project.output?.bgmEnabled && !project.bgm?.audioData && !project.bgm?.mediaRef?.id && !isProceduralBgm(project.bgm)) errors.push('自動制作を完成できません。BGMを使用する設定ですが音源が未登録です。');
   }
   return { errors, warnings, imageCount, sceneCount: scenes.length, durationSec: getProjectDuration(project), bgmInvalid, narrationInvalid, sceneNarrationCount };
 }
@@ -249,17 +249,24 @@ export async function prepareVideoProject(project, { onStatus = () => {}, loadMe
   let audioMimeType = bgmDataMime(project);
   let audioFetchError = '';
   let audioInvalid = false;
-  if (project.output?.bgmEnabled && project.bgm?.audioData) {
+  if (project.output?.bgmEnabled && (project.bgm?.audioData || project.bgm?.mediaRef?.id)) {
     onStatus('BGMファイルを確認しています…');
     if (bgmLooksLikeVideo(project)) {
       audioInvalid = true;
       onStatus('BGMが動画ファイルです。音声ファイルを再登録してください。');
     } else {
       try {
-        const response = await fetch(project.bgm.audioData);
-        if (!response.ok) throw new Error(`BGM取得エラー (${response.status})`);
-        audioArrayBuffer = await response.arrayBuffer();
-        audioMimeType = response.headers.get('content-type') || audioMimeType || '';
+        if (project.bgm?.mediaRef?.id) {
+          const resolved = await loadMedia({ projectId:String(project.id || ''), mediaId:project.bgm.mediaRef.id });
+          if (resolved?.status !== 'resolved' || !resolved.blob) throw new Error(resolved?.reason || '保存済みBGMを読み出せませんでした');
+          audioArrayBuffer = await resolved.blob.arrayBuffer();
+          audioMimeType = resolved.blob.type || project.bgm.mediaRef.mimeType || audioMimeType || '';
+        } else {
+          const response = await fetch(project.bgm.audioData);
+          if (!response.ok) throw new Error(`BGM取得エラー (${response.status})`);
+          audioArrayBuffer = await response.arrayBuffer();
+          audioMimeType = response.headers.get('content-type') || audioMimeType || '';
+        }
       } catch (error) {
         audioFetchError = error instanceof Error ? error.message : String(error);
         console.warn('BGM load failed', error);
@@ -521,7 +528,7 @@ function bitrateFor(project, exportWidth, iosSafeMode = false) {
 
 export function validatePreparedAudioForExport(project, prepared) {
   const errors = [];
-  if (project?.output?.bgmEnabled && project?.bgm?.audioData && !prepared?.audioArrayBuffer) errors.push(`BGMを読み込めませんでした${prepared?.audioFetchError ? `（${prepared.audioFetchError}）` : ''}`);
+  if (project?.output?.bgmEnabled && (project?.bgm?.audioData || project?.bgm?.mediaRef?.id) && !prepared?.audioArrayBuffer) errors.push(`BGMを読み込めませんでした${prepared?.audioFetchError ? `（${prepared.audioFetchError}）` : ''}`);
   const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
   const expectedSceneNarration = scenes.reduce((count, scene) => count + ((scene?.narration?.audioData || scene?.narration?.mediaRef?.id) ? 1 : 0), 0);
   if (expectedSceneNarration) {

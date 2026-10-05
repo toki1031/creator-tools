@@ -54,6 +54,7 @@ function pickBgm(bgm) {
   return {
     source: bgm.source,
     audioData: bgm.audioData || '',
+    mediaRef: copyMediaRef(bgm.mediaRef),
     fileName: bgm.fileName || '',
     mimeType: bgm.mimeType || '',
     volume: bgm.volume,

@@ -8,6 +8,7 @@ import { createProjectBackupPayload, createRestoredProject, LARGE_BACKUP_WARNING
 import { addImageAsset, assetUsageCount, assetUsageScenes, ensureMediaLibrary, estimateAssetBytes, isImageDataUrl, promoteLegacySceneImage, removeAllUnusedAssets, removeUnusedAsset, renameMediaAsset, resolveSceneImageSource, summarizeMediaLibrary } from "./mediaLibrary.js";
 import { resolveSceneImageForDisplay } from "./sceneImageDisplay.js";
 import { storeImageAssetMedia } from "./imageMediaStorage.js";
+import { getMedia, putMedia } from "./mediaStore.js";
 import { runMultiSceneAssetPipeline } from "./multiSceneAssetPipeline.js";
 import { fetchAssetImage } from "./assetImageFetch.js";
 import { storeAndApplyAutoImage } from "./autoImageMediaStorage.js";
@@ -804,6 +805,8 @@ async function renderBgm(id) {
   attachProjectMenu(project,root.querySelector('#menu'),()=>goStudio(studioForGenre(project.genre)));
 
   const saveState=root.querySelector('#saveState'); let pendingAsset=Promise.resolve();
+  let bgmPreviewObjectUrl='';
+  if(!b.audioData && b.mediaRef?.id){const resolved=await getMedia({projectId:project.id,mediaId:b.mediaRef.id});if(resolved?.status==='resolved'&&resolved.blob){bgmPreviewObjectUrl=URL.createObjectURL(resolved.blob);root.querySelector('#audioPreview').src=bgmPreviewObjectUrl;}}
   const readGlobalSettings=()=>Object.assign(st,{
     enabled:root.querySelector('#subtitleEnabled').checked,preset:root.querySelector('#subtitlePreset').value,
     position:root.querySelector('#subtitlePosition').value,positionOffsetPercent:normalizeSubtitleOffset(root.querySelector('#positionOffset').value),fontSize:Number(root.querySelector('#fontSize').value),
@@ -896,7 +899,7 @@ async function renderBgm(id) {
   const bgmFadeInBeforeByElement=new WeakMap();
 const fadeInEl=root.querySelector('#fadeIn');
 const rememberBgmFadeInBefore=el=>{if(bgmFadeInBeforeByElement.has(el))return;bgmFadeInBeforeByElement.set(el,snapshotBgmFadeIn(el.value));};
-const commitBgmFadeInDecision=el=>{if(!bgmFadeInBeforeByElement.has(el))return;const before=bgmFadeInBeforeByElement.get(el);bgmFadeInBeforeByElement.delete(el);const after=snapshotBgmFadeIn(el.value);const record=recordBgmFadeInChange(project,{beforeState:before,afterState:after,bgmSource:root.querySelector('#source').value,bgmCategory:root.querySelector('#category').value,bgmVolume:root.querySelector('#volume').value,fadeOutSec:root.querySelector('#fadeOut').value,ducking:root.querySelector('#ducking').checked,loop:root.querySelector('#loop').checked,hasBgm:Boolean(b.audioData||isProceduralBgm(b))});if(record)save();};
+const commitBgmFadeInDecision=el=>{if(!bgmFadeInBeforeByElement.has(el))return;const before=bgmFadeInBeforeByElement.get(el);bgmFadeInBeforeByElement.delete(el);const after=snapshotBgmFadeIn(el.value);const record=recordBgmFadeInChange(project,{beforeState:before,afterState:after,bgmSource:root.querySelector('#source').value,bgmCategory:root.querySelector('#category').value,bgmVolume:root.querySelector('#volume').value,fadeOutSec:root.querySelector('#fadeOut').value,ducking:root.querySelector('#ducking').checked,loop:root.querySelector('#loop').checked,hasBgm:Boolean(b.audioData||b.mediaRef?.id||isProceduralBgm(b))});if(record)save();};
 fadeInEl.onpointerdown=()=>rememberBgmFadeInBefore(fadeInEl);
 fadeInEl.onfocus=()=>rememberBgmFadeInBefore(fadeInEl);
 fadeInEl.onkeydown=()=>rememberBgmFadeInBefore(fadeInEl);
@@ -908,7 +911,7 @@ fadeInEl.onblur=()=>commitBgmFadeInDecision(fadeInEl);
   const bgmFadeOutBeforeByElement=new WeakMap();
 const fadeOutEl=root.querySelector('#fadeOut');
 const rememberBgmFadeOutBefore=el=>{if(bgmFadeOutBeforeByElement.has(el))return;bgmFadeOutBeforeByElement.set(el,snapshotBgmFadeOut(el.value));};
-const commitBgmFadeOutDecision=el=>{if(!bgmFadeOutBeforeByElement.has(el))return;const before=bgmFadeOutBeforeByElement.get(el);bgmFadeOutBeforeByElement.delete(el);const after=snapshotBgmFadeOut(el.value);const record=recordBgmFadeOutChange(project,{beforeState:before,afterState:after,bgmSource:root.querySelector('#source').value,bgmCategory:root.querySelector('#category').value,bgmVolume:root.querySelector('#volume').value,fadeInSec:root.querySelector('#fadeIn').value,ducking:root.querySelector('#ducking').checked,loop:root.querySelector('#loop').checked,hasBgm:Boolean(b.audioData||isProceduralBgm(b))});if(record)save();};
+const commitBgmFadeOutDecision=el=>{if(!bgmFadeOutBeforeByElement.has(el))return;const before=bgmFadeOutBeforeByElement.get(el);bgmFadeOutBeforeByElement.delete(el);const after=snapshotBgmFadeOut(el.value);const record=recordBgmFadeOutChange(project,{beforeState:before,afterState:after,bgmSource:root.querySelector('#source').value,bgmCategory:root.querySelector('#category').value,bgmVolume:root.querySelector('#volume').value,fadeInSec:root.querySelector('#fadeIn').value,ducking:root.querySelector('#ducking').checked,loop:root.querySelector('#loop').checked,hasBgm:Boolean(b.audioData||b.mediaRef?.id||isProceduralBgm(b))});if(record)save();};
 fadeOutEl.onpointerdown=()=>rememberBgmFadeOutBefore(fadeOutEl);
 fadeOutEl.onfocus=()=>rememberBgmFadeOutBefore(fadeOutEl);
 fadeOutEl.onkeydown=()=>rememberBgmFadeOutBefore(fadeOutEl);
@@ -920,7 +923,7 @@ fadeOutEl.onblur=()=>commitBgmFadeOutDecision(fadeOutEl);
   const bgmDuckingBeforeByElement=new WeakMap();
 const duckingEl=root.querySelector('#ducking');
 const rememberBgmDuckingBefore=el=>{if(bgmDuckingBeforeByElement.has(el))return;bgmDuckingBeforeByElement.set(el,Boolean(el.checked));};
-const commitBgmDuckingDecision=el=>{if(!bgmDuckingBeforeByElement.has(el))return;const before=bgmDuckingBeforeByElement.get(el);bgmDuckingBeforeByElement.delete(el);const record=recordBgmDuckingChange(project,{beforeDucking:before,afterDucking:Boolean(el.checked),bgmSource:root.querySelector('#source').value,bgmCategory:root.querySelector('#category').value,bgmVolume:root.querySelector('#volume').value,loop:root.querySelector('#loop').checked,hasBgm:Boolean(b.audioData||isProceduralBgm(b))});if(record)save();};
+const commitBgmDuckingDecision=el=>{if(!bgmDuckingBeforeByElement.has(el))return;const before=bgmDuckingBeforeByElement.get(el);bgmDuckingBeforeByElement.delete(el);const record=recordBgmDuckingChange(project,{beforeDucking:before,afterDucking:Boolean(el.checked),bgmSource:root.querySelector('#source').value,bgmCategory:root.querySelector('#category').value,bgmVolume:root.querySelector('#volume').value,loop:root.querySelector('#loop').checked,hasBgm:Boolean(b.audioData||b.mediaRef?.id||isProceduralBgm(b))});if(record)save();};
 duckingEl.onpointerdown=()=>rememberBgmDuckingBefore(duckingEl);
 duckingEl.onfocus=()=>rememberBgmDuckingBefore(duckingEl);
 duckingEl.onkeydown=()=>rememberBgmDuckingBefore(duckingEl);
@@ -931,7 +934,7 @@ duckingEl.onblur=()=>commitBgmDuckingDecision(duckingEl);
 const bgmLoopBeforeByElement=new WeakMap();
 const loopEl=root.querySelector('#loop');
 const rememberBgmLoopBefore=el=>{if(bgmLoopBeforeByElement.has(el))return;bgmLoopBeforeByElement.set(el,Boolean(el.checked));};
-const commitBgmLoopDecision=el=>{if(!bgmLoopBeforeByElement.has(el))return;const before=bgmLoopBeforeByElement.get(el);bgmLoopBeforeByElement.delete(el);const record=recordBgmLoopChange(project,{beforeLoop:before,afterLoop:Boolean(el.checked),bgmSource:root.querySelector('#source').value,bgmCategory:root.querySelector('#category').value,bgmVolume:root.querySelector('#volume').value,ducking:root.querySelector('#ducking').checked,hasBgm:Boolean(b.audioData||isProceduralBgm(b))});if(record)save();};
+const commitBgmLoopDecision=el=>{if(!bgmLoopBeforeByElement.has(el))return;const before=bgmLoopBeforeByElement.get(el);bgmLoopBeforeByElement.delete(el);const record=recordBgmLoopChange(project,{beforeLoop:before,afterLoop:Boolean(el.checked),bgmSource:root.querySelector('#source').value,bgmCategory:root.querySelector('#category').value,bgmVolume:root.querySelector('#volume').value,ducking:root.querySelector('#ducking').checked,hasBgm:Boolean(b.audioData||b.mediaRef?.id||isProceduralBgm(b))});if(record)save();};
 loopEl.onpointerdown=()=>rememberBgmLoopBefore(loopEl);
 loopEl.onfocus=()=>rememberBgmLoopBefore(loopEl);
 loopEl.onkeydown=()=>rememberBgmLoopBefore(loopEl);
@@ -1105,9 +1108,9 @@ fontSizeEl.onblur=()=>commitSubtitleFontSizeDecision(fontSizeEl);
     }
     if(file.size>12_000_000&&!confirm('音源が大きいため端末保存容量を圧迫します。続けますか？')){e.target.value='';return;}
     root.querySelector('#source').value='upload';
-    const beforeAudioAssetId=b.audioAssetId;const hadBgmBefore=Boolean(b.audioData);
-    pendingAsset=(async()=>{const audioAssetId=await createAudioAssetIdFromFile(file);const data=await fileToDataUrl(file);b.audioData=data;b.fileName=file.name;b.source='upload';b.audioAssetId=audioAssetId;recordBgmSelectionChange(project,{beforeAudioAssetId,afterAudioAssetId:audioAssetId,selectionMethod:'upload',hadBgmBefore,bgmCategory:root.querySelector('#category').value,ducking:root.querySelector('#ducking').checked,loop:root.querySelector('#loop').checked});})();
-    save();await pendingAsset;root.querySelector('#fileName').textContent=file.name;root.querySelector('#audioPreview').src=b.audioData;
+    const beforeAudioAssetId=b.audioAssetId;const hadBgmBefore=Boolean(b.audioData||b.mediaRef?.id);
+    pendingAsset=(async()=>{const audioAssetId=await createAudioAssetIdFromFile(file);const stored=await putMedia({projectId:project.id,mediaId:'bgm-'+audioAssetId,kind:'audio',blob:file});if(stored?.status!=='stored'||!stored.mediaRef?.id)throw new Error(stored?.reason||'BGMをメディア保存できませんでした');b.audioData='';b.mediaRef=stored.mediaRef;b.mimeType=file.type||stored.mediaRef.mimeType||'';b.fileName=file.name;b.source='upload';b.audioAssetId=audioAssetId;recordBgmSelectionChange(project,{beforeAudioAssetId,afterAudioAssetId:audioAssetId,selectionMethod:'upload',hadBgmBefore,bgmCategory:root.querySelector('#category').value,ducking:root.querySelector('#ducking').checked,loop:root.querySelector('#loop').checked});})();
+    save();await pendingAsset;root.querySelector('#fileName').textContent=file.name;if(bgmPreviewObjectUrl)URL.revokeObjectURL(bgmPreviewObjectUrl);bgmPreviewObjectUrl=URL.createObjectURL(file);root.querySelector('#audioPreview').src=bgmPreviewObjectUrl;
   };
 
   function renderSubtitlePreview(){
