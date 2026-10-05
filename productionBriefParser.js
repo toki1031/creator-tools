@@ -4,6 +4,24 @@ const emptyBrief = () => ({ objective: "", tone: "", globalRules: [], subtitleGu
 const clean = (value = "") => String(value).trim();
 const linesOf = (value = "") => String(value).replace(/\r\n?/g, "\n").split("\n");
 const bulletValue = (line) => clean(line).replace(/^[-*・]\s*/, "").replace(/^\d+[.)]\s*/, "");
+const stripDecorativePrefix = (value = "") => clean(value).replace(/^[|｜]\s*/, "");
+const META_SECTION_RE = /^(?:制作進行|制作方針|制作ルール|最終目的|最終目標|出力条件|尺|史実・素材に関する重要ルール|重要ルール|注意事項)$/i;
+function detectGenericMetaSection(line) {
+  const text = clean(line).replace(/^#{1,6}\s*/, "");
+  const match = text.match(/^【\s*([^】]+?)\s*】\s*(.*)$/);
+  if (!match || !META_SECTION_RE.test(clean(match[1]))) return null;
+  return { name: /ルール|注意事項/i.test(match[1]) ? "globalRules" : "qaCriteria", inline: clean(match[2]) };
+}
+function stripEmbeddedVisualIntent(value = "") {
+  const lines = linesOf(value); const narration = [];
+  for (const raw of lines) {
+    const line = clean(raw);
+    if (/^(?:映像意図|映像指示|画面意図|visual\s*(?:intent|direction))\s*[:：]?/i.test(line)) break;
+    if (/^【\s*[^】]+\s*】/.test(line)) break;
+    narration.push(raw);
+  }
+  return clean(narration.join("\n"));
+}
 const round2 = (value) => Math.round(Number(value) * 100) / 100;
 
 const SECTION_ALIASES = [
@@ -232,6 +250,13 @@ export function parseProductionRequest(input) {
     if (sceneMatch) { flushScene(); section = null; currentScene = `scene-${Number(sceneMatch[1])}`; if (clean(sceneMatch[2])) sceneLines.push(sceneMatch[2]); continue; }
     const extendedGlobal = /^■/.test(line) ? detectExtendedGlobalSection(line) : null;
     if (extendedGlobal) { if (currentScene) flushScene(); section=extendedGlobal.name; if(extendedGlobal.inline) brief[section].push(extendedGlobal.inline); continue; }
+    const genericMeta = /^【/.test(line) ? detectGenericMetaSection(line) : null;
+    if (genericMeta) {
+      if (currentScene) flushScene();
+      section = genericMeta.name;
+      if (genericMeta.inline) brief[section].push(genericMeta.inline);
+      continue;
+    }
     const bracketGlobal = /^【/.test(line) ? detectSceneEndingGlobalSection(line) : null;
     if (bracketGlobal) {
       if (currentScene) flushScene();
@@ -254,5 +279,18 @@ export function parseProductionRequest(input) {
     if (!section) continue; const value = bulletValue(line); if (!value) continue;
     if (section === "objective" || section === "tone") brief[section] = brief[section] ? `${brief[section]}\n${value}` : value; else brief[section].push(value);
   }
-  flushScene(); applyTargetedSceneGuidance(brief, extracted.targeted); return brief;
+  flushScene();
+  applyTargetedSceneGuidance(brief, extracted.targeted);
+  const seen = new Set();
+  brief.sceneDirectives = brief.sceneDirectives.filter((directive) => {
+    const id = clean(directive?.sceneId);
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    directive.visualDirection = stripDecorativePrefix(directive.visualDirection);
+    directive.searchHint = stripDecorativePrefix(directive.searchHint);
+    directive.narrationText = stripEmbeddedVisualIntent(directive.narrationText);
+    directive.subtitleText = stripEmbeddedVisualIntent(directive.subtitleText);
+    return true;
+  });
+  return brief;
 }
