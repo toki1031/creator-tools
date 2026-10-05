@@ -57,3 +57,16 @@ test('rejects an irrelevant Nightingale portrait when the Scene explicitly asks 
   assert.match(result.candidates[0].title,/mortality/);
   assert.equal(result.attempts[0].matchedCount,0);
 });
+
+
+test('generic archive filtering works for an unrelated person and year without named hardcoding',async()=>{
+  const generic={...plan,queries:['Marie Curie laboratory 1911']};
+  const result=await searchArchiveCandidates(generic,{
+    searchLoc:async()=>({status:'ok',candidates:[
+      {id:'curie',title:'Marie Curie in laboratory',date:'1911',description:'Laboratory photograph'},
+      {id:'other',title:'Street scene',date:'1911',description:'City photograph'}
+    ]}),
+    searchCommons:async()=>({status:'ok',candidates:[]})
+  });
+  assert.deepEqual(result.candidates.map(x=>x.id),['curie']);
+});
