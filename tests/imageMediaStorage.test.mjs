@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { dataUrlToBlob, storeImageAssetMedia } from '../imageMediaStorage.js';
+import { imageDataUrlToBlob, storeImageAssetMedia } from '../imageMediaStorage.js';
 
-test('dataUrlToBlob converts image data URL without changing mime type',()=>{
-  const blob=dataUrlToBlob('data:image/png;base64,aGVsbG8=');
+test('imageDataUrlToBlob converts image data URL without changing mime type',()=>{
+  const blob=imageDataUrlToBlob('data:image/png;base64,aGVsbG8=');
   assert.equal(blob.type,'image/png');
   assert.equal(blob.size,5);
 });
