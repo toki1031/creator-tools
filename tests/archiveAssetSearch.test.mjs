@@ -55,7 +55,9 @@ test('rejects an irrelevant Nightingale portrait when the Scene explicitly asks 
   assert.equal(result.provider,'wikimedia-commons');
   assert.equal(result.candidates.length,1);
   assert.match(result.candidates[0].title,/mortality/);
-  assert.equal(result.attempts[0].matchedCount,0);
+  // Provider-local diagnostics may retain a partial metadata match (for example the year).
+  // Final cross-provider ranking is authoritative and must exclude it from returned candidates.
+  assert.equal(result.attempts[0].matchedCount,1);
 });
 
 
