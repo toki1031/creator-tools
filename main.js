@@ -306,6 +306,16 @@ async function renderProject(id) {
   ensureProjectSettings(project);
   try {
     const migration = await migrateLegacyProjectMedia(project);
+    if (migration.migrated > 0) {
+      project.updatedAt = new Date().toISOString();
+      await saveProject(project);
+    }
+    if (migration.failed > 0) console.warn('一部の旧メディアは安全のため元データを保持しました。', migration);
+  } catch (error) {
+    console.warn('旧メディアの移行を見送りました。元データは保持されています。', error);
+  }
+  try {
+    const migration = await migrateLegacyProjectMedia(project);
     if (migration.migrated > 0) await saveProject(project);
   } catch (error) {
     console.warn('Legacy media migration skipped:', error);
