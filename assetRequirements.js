@@ -18,14 +18,18 @@ export function buildAssetRequirement(scene) {
   if (!scene || typeof scene !== 'object') return null;
   const direction = scene.productionDirection ?? {};
   const rawType = clean(direction.assetType);
-  const requestedType = KNOWN_TYPES.has(rawType) ? rawType : 'other';
+  let requestedType = KNOWN_TYPES.has(rawType) ? rawType : 'other';
   const visualDirection = clean(direction.visualDirection);
   const searchHint = clean(direction.searchHint);
   const purpose = clean(direction.purpose);
   const prohibitedContent = cleanRules(direction.rules);
   const queryHint = searchHint || visualDirection || purpose;
+  // A scene with an explicit visual intent but no archival/generated type can safely use a
+  // neutral generated visual. This is generic and never applies to explicit historical-source/document.
+  const inferredGeneratedVisual = requestedType === 'other' && Boolean(queryHint);
+  if (inferredGeneratedVisual) requestedType = 'modern-visual';
 
-  const ambiguousType = !rawType || requestedType === 'other';
+  const ambiguousType = !rawType ? !inferredGeneratedVisual : (rawType === 'other' && !inferredGeneratedVisual);
   const missingIntent = !queryHint;
   const needsReview = ambiguousType || missingIntent;
   const reasons = [];
@@ -40,7 +44,8 @@ export function buildAssetRequirement(scene) {
     sourceRequirement: sourceRequirement(requestedType),
     rightsRequirement: requestedType === 'ai-reconstruction' ? 'commercial-use-safe' : 'verify-before-use',
     historicalAccuracyRequired: requestedType === 'historical-source' || requestedType === 'ai-reconstruction',
-    generatedContentDisclosureRequired: requestedType === 'ai-reconstruction',
+    generatedContentDisclosureRequired: requestedType === 'ai-reconstruction' || inferredGeneratedVisual,
+    inferredGeneratedVisual,
     prohibitedContent,
     status: needsReview ? 'needs-review' : 'planned',
     stopReason: reasons.join(' / ')
