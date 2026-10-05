@@ -95,3 +95,41 @@ test("preserves QA order and accepts empty or partial input", () => {
   });
   assert.equal(parseProductionRequest("目的: テスト").objective, "テスト");
 });
+
+
+test('generic parser stops scenes at bracketed production meta sections and keeps scene ids unique', () => {
+  const input = `Scene 1
+ナレーション：
+本文A
+映像意図：
+歴史的な室内を示す
+
+Scene 2
+ナレーション：
+本文B
+映像意図：
+現代の生活へ接続する
+
+【制作進行】
+上記のScene 1〜Scene 2を認識してください。
+【最終目的】
+Scene 1
+↓
+Scene 2
+という流れにしてください。
+【尺】
+固定しません。`;
+  const brief = parseProductionRequest(input);
+  assert.deepEqual(brief.sceneDirectives.map(scene => scene.sceneId), ['scene-1', 'scene-2']);
+  assert.equal(brief.sceneDirectives[0].narrationText, '本文A');
+  assert.equal(brief.sceneDirectives[1].narrationText, '本文B');
+  assert.equal(brief.sceneDirectives[0].narrationText.includes('映像意図'), false);
+});
+
+test('generic parser removes decorative pipe prefix without topic-specific rules', () => {
+  const brief = parseProductionRequest(`Scene 1
+｜導入イメージ
+ナレーション：
+任意の人物やテーマの本文`);
+  assert.equal(brief.sceneDirectives[0].visualDirection, '導入イメージ');
+});
