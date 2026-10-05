@@ -6,6 +6,7 @@ export function createProject(title, genre, platform) {
     id,
     title: title.trim() || "無題のプロジェクト",
     genre,
+    studioProfileId: genre === "great-person" || genre === "education" || genre === "fortune" ? genre : "sns",
     platform,
     aspectRatio: "9:16",
     targetDurationSec: 60,
