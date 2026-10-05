@@ -49,7 +49,8 @@ export async function searchArchiveCandidates(plan,{
   try{commons=await searchCommons(plan);}catch(error){commons={status:'error',candidates:[],reason:String(error?.message||'Commons検索に失敗しました')};}
   const commonsCandidates=filterArchiveCandidatesForIntent(resultCandidates(commons),plan).map(candidate=>({...candidate,provider:candidate?.provider||'wikimedia-commons'}));
   attempts.push({provider:'wikimedia-commons',status:commons?.status||'error',count:resultCandidates(commons).length,matchedCount:commonsCandidates.length,reason:commons?.reason||''});
-  const combined=[...locCandidates,...commonsCandidates];
+  const combinedRaw=[...locCandidates,...commonsCandidates];
+  const combined=filterArchiveCandidatesForIntent(combinedRaw,plan);
   if(combined.length){
     const providers=[...new Set(combined.map(candidate=>candidate?.provider).filter(Boolean))];
     return {status:'ok',candidates:combined,provider:providers.length===1?providers[0]:'archive-combined',attempts,reason:''};
