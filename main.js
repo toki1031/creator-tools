@@ -8,6 +8,7 @@ import { createProjectBackupPayload, createRestoredProject, LARGE_BACKUP_WARNING
 import { addImageAsset, assetUsageCount, assetUsageScenes, ensureMediaLibrary, estimateAssetBytes, isImageDataUrl, promoteLegacySceneImage, removeAllUnusedAssets, removeUnusedAsset, renameMediaAsset, resolveSceneImageSource, summarizeMediaLibrary } from "./mediaLibrary.js";
 import { resolveSceneImageForDisplay } from "./sceneImageDisplay.js";
 import { storeImageAssetMedia } from "./imageMediaStorage.js";
+import { migrateLegacyProjectMedia } from "./legacyMediaMigration.js";
 import { getMedia, putMedia } from "./mediaStore.js";
 import { runMultiSceneAssetPipeline } from "./multiSceneAssetPipeline.js";
 import { fetchAssetImage } from "./assetImageFetch.js";
@@ -303,6 +304,12 @@ async function renderProject(id) {
   const project = await getProject(id);
   if (!project) { goHome(); return; }
   ensureProjectSettings(project);
+  try {
+    const migration = await migrateLegacyProjectMedia(project);
+    if (migration.migrated > 0) await saveProject(project);
+  } catch (error) {
+    console.warn('Legacy media migration skipped:', error);
+  }
   root.innerHTML = `
     <main class="shell editor-shell">
       <header class="editor-head"><button id="back">←</button><div><span>${labelPlatform(project.platform)}</span><h1>${escapeHtml(project.title)}</h1></div><button id="menu">•••</button></header>
