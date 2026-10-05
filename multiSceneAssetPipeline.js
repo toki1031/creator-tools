@@ -71,7 +71,7 @@ export async function runMultiSceneAssetPipeline(project, {
       fetchOptions,
       enrichmentOptions: { waitForExternalSlot }
     });
-    results.push({ sceneId: scene?.id || '', order: Number(scene?.order) || 0, status: result.status, stage: result.stage, reason: result.reason || '' });
+    results.push({ sceneId: scene?.id || '', order: Number(scene?.order) || 0, status: result.status, stage: result.stage, reason: result.reason || '', candidates: Array.isArray(result.candidates) ? result.candidates : [] });
     if (result.status === 'applied' && result.project) currentProject = result.project;
     else if (stopOnRisk) {
       return {
@@ -82,7 +82,8 @@ export async function runMultiSceneAssetPipeline(project, {
         eligibleCount,
         skippedCount,
         stoppedSceneId: scene?.id || '',
-        reason: result.reason || ''
+        reason: result.reason || '',
+        candidates: Array.isArray(result.candidates) ? result.candidates : []
       };
     }
   }

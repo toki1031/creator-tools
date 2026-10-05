@@ -25,7 +25,7 @@ test('keeps needs-selection behavior when top resolution is tied',()=>{
   const result=selectEquivalentArchiveCandidate([a,b],requirement);
   assert.equal(result.selected,false);
   assert.equal(result.entries.length,2);
-  assert.equal(result.reason,'resolution-tie-or-missing');
+  assert.equal(result.reason,'relevance-resolution-tie');
 });
 
 test('never selects a review-required candidate just because it is larger',()=>{
@@ -41,13 +41,34 @@ test('does not use resolution when candidate fails explicit archive intent',()=>
   const relevant=entry({id:'diagram',width:1200,height:800});
   const portrait=entry({id:'portrait',width:9000,height:9000,description:'Portrait photograph',date:'1858',contributors:['Florence Nightingale']});
   const result=selectEquivalentArchiveCandidate([relevant,portrait],requirement);
-  assert.equal(result.selected,false);
-  assert.equal(result.entries.length,2);
-  assert.equal(result.reason,'not-multiple-equivalent-images');
+  assert.equal(result.selected,true);
+  assert.equal(result.entries.length,1);
+  assert.equal(result.entries[0].candidate.title,'diagram.jpg');
+  assert.equal(result.reason,'unique-best-metadata-match');
 });
 
-test('requires sufficiently explicit intent before automatic equivalence selection',()=>{
+test('generic low-specificity intent can use a unique resolution only among equally eligible evidence',()=>{
   const result=selectEquivalentArchiveCandidate([entry({id:'a',width:1200,height:800}),entry({id:'b',width:2000,height:1200})],{requestedType:'historical-source',queryHint:'古い史料'});
+  assert.equal(result.selected,true);
+  assert.equal(result.entries[0].candidate.title,'b.jpg');
+});
+
+
+test('generic selector prefers the candidate whose metadata best matches an unrelated historical query',()=>{
+  const req={requestedType:'historical-source',queryHint:'Apollo 11 lunar module 1969'};
+  const moon=entry({id:'moon',width:1600,height:1000,description:'Apollo 11 lunar module on the Moon',date:'1969',contributors:['NASA']});
+  const portrait=entry({id:'portrait',width:5000,height:4000,description:'Unrelated portrait photograph',date:'1969',contributors:['Archive']});
+  const result=selectEquivalentArchiveCandidate([moon,portrait],req);
+  assert.equal(result.selected,true);
+  assert.equal(result.entries[0].candidate.title,'moon.jpg');
+  assert.equal(result.reason,'unique-best-metadata-match');
+});
+
+test('generic selector still stops when relevance and resolution are genuinely tied',()=>{
+  const req={requestedType:'historical-source',queryHint:'Roman forum archaeological photograph'};
+  const a=entry({id:'a',width:2000,height:1000,description:'Roman forum archaeological photograph',date:'1900',contributors:['Archive']});
+  const b=entry({id:'b',width:2000,height:1000,description:'Roman forum archaeological photograph',date:'1900',contributors:['Archive']});
+  const result=selectEquivalentArchiveCandidate([a,b],req);
   assert.equal(result.selected,false);
-  assert.equal(result.reason,'insufficient-explicit-intent');
+  assert.equal(result.reason,'relevance-resolution-tie');
 });

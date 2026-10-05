@@ -44,7 +44,7 @@ export async function runSceneAssetPipeline(project, scene, {
   const providerSelection = selectArchiveProviderByRights(evaluatedCandidates, requirement);
   const candidateSelection = selectEquivalentArchiveCandidate(providerSelection.entries, requirement);
   const adoptionPlan = buildAssetAdoptionPlan(scene, candidateSelection.entries);
-  if (adoptionPlan.status !== 'ready') return stop('adoption', adoptionPlan.status, adoptionPlan.reason, { requirement, searchPlan, enrichedCandidates, evaluatedCandidates, providerSelection, candidateSelection, adoptionPlan });
+  if (adoptionPlan.status !== 'ready') return stop('adoption', adoptionPlan.status, adoptionPlan.reason, { requirement, searchPlan, enrichedCandidates, evaluatedCandidates, providerSelection, candidateSelection, adoptionPlan, candidates: adoptionPlan.candidates || [] });
   if (adoptionPlan.autoApply !== true) return stop('adoption', 'needs-review', '素材の自動採用条件を満たしていません', { requirement, searchPlan, enrichedCandidates, evaluatedCandidates, providerSelection, candidateSelection, adoptionPlan });
 
   const fetchResult = await fetchImage(adoptionPlan, fetchOptions);

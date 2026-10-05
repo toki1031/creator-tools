@@ -52,3 +52,17 @@ test('batch planner is pure and does not mutate scenes', () => {
 });
 
 test('explicit Scene searchHint takes priority over generic visual direction',()=>{const item=scene(5,'historical-source','統計を見える形にする。');item.productionDirection.searchHint='ナイチンゲール 統計図 1858';const requirement=buildAssetRequirement(item);assert.equal(requirement.queryHint,'ナイチンゲール 統計図 1858')});
+
+
+test('other scene with explicit visual intent gets a generic generated visual fallback',()=>{
+  const requirement=buildAssetRequirement(scene(4,'other','抽象的な問いを現代の生活場面で示す'));
+  assert.equal(requirement.requestedType,'modern-visual');
+  assert.equal(requirement.inferredGeneratedVisual,true);
+  assert.equal(requirement.status,'planned');
+});
+
+test('other scene without visual intent still stops safely',()=>{
+  const requirement=buildAssetRequirement(scene(4,'other',''));
+  assert.equal(requirement.requestedType,'other');
+  assert.equal(requirement.status,'needs-review');
+});
