@@ -43,6 +43,16 @@ export async function migrateLegacyProjectMedia(project, { store = putMedia, yie
     }
   }
   for (const [index, scene] of (Array.isArray(project.scenes) ? project.scenes : []).entries()) {
+    if (typeof scene?.imageData === 'string' && scene.imageData.startsWith('data:image/') && !scene.imageAssetId) {
+      const assetId = 'asset-legacy-scene-' + String(scene.id || index + 1);
+      const asset = { id:assetId, type:'image', fileName:'旧シーン画像', createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() };
+      if (!Array.isArray(project.mediaLibrary)) project.mediaLibrary = [];
+      project.mediaLibrary.push(asset);
+      const ok = await storeThenReplace({ projectId:project.id, mediaId:'image-' + assetId, kind:'image', data:scene.imageData, target:asset, field:'data', store });
+      if (ok) { scene.imageAssetId = assetId; delete scene.imageData; migrated += 1; }
+      else { project.mediaLibrary = project.mediaLibrary.filter(item => item !== asset); failed += 1; }
+      await yieldControl();
+    }
     if (typeof scene?.narration?.audioData === 'string' && scene.narration.audioData.startsWith('data:audio/') && !scene.narration.mediaRef?.id) {
       tasks.push({ mediaId:'narration-' + (scene.id || index + 1), kind:'audio', data:scene.narration.audioData, target:scene.narration, field:'audioData' });
     }
