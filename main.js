@@ -314,12 +314,6 @@ async function renderProject(id) {
   } catch (error) {
     console.warn('旧メディアの移行を見送りました。元データは保持されています。', error);
   }
-  try {
-    const migration = await migrateLegacyProjectMedia(project);
-    if (migration.migrated > 0) await saveProject(project);
-  } catch (error) {
-    console.warn('Legacy media migration skipped:', error);
-  }
   root.innerHTML = `
     <main class="shell editor-shell">
       <header class="editor-head"><button id="back">←</button><div><span>${labelPlatform(project.platform)}</span><h1>${escapeHtml(project.title)}</h1></div><button id="menu">•••</button></header>
