@@ -9,6 +9,8 @@ import { addImageAsset, assetUsageCount, assetUsageScenes, ensureMediaLibrary, e
 import { resolveSceneImageForDisplay } from "./sceneImageDisplay.js";
 import { storeImageAssetMedia } from "./imageMediaStorage.js";
 import { runMultiSceneAssetPipeline } from "./multiSceneAssetPipeline.js";
+import { fetchAssetImage } from "./assetImageFetch.js";
+import { storeAndApplyAutoImage } from "./autoImageMediaStorage.js";
 import { evaluateAssetToVoiceHandoff } from "./assetToVoiceHandoff.js";
 import { evaluateBgmToOutputHandoff } from "./bgmToOutputHandoff.js";
 import { normalizeLegacyAutoProductionProject } from "./autoProductionCompatibility.js";
@@ -424,6 +426,11 @@ async function renderScenes(id) {
       <nav class="steps"><button id="stepAi">0 AIスタッフ</button><button id="stepScript">1 台本</button><button class="active">2 シーン・ナレーション</button><button id="stepBgm">3 字幕・BGM</button><button id="stepOutput">4 出力</button></nav>
       <section class="editor-card"><div class="section-head"><div><h2>シーン編集</h2><p>台本を場面に分け、画像・表示秒数・演出を設定します。</p></div><span id="sceneCount">${project.scenes.length}シーン</span></div><div class="tool-row"><button class="primary" id="autoSplit">台本から自動分割</button><button id="addScene">＋ 空のシーン</button><button id="manageMediaLibrary">画像素材ライブラリ</button><button id="undoScenes" disabled>↶ 1つ前に戻す</button>${project.autoProduction?.mode==="production-request"?'<button type="button" id="autoAcquireAssets">▶ 素材取得 → ナレーションへ</button>':""}</div>${project.autoProduction?.mode==="production-request"?'<p class="muted">実物史料・文書はLibrary of Congressを優先評価し、安全に自動採用できない場合はWikimedia Commonsの候補も評価します。AI再現・現代ビジュアルは無料のWorkers AIで自動取得します。権利不明・候補が複数・生成失敗・既存画像あり等では安全のため停止します。</p><p id="autoAssetStatus" class="muted" aria-live="polite"></p>':""}<p class="muted">再分割時は既存の画像・動画をできるだけ保持します。文章が変わったシーンのナレーションは誤読防止のため再生成対象になります。</p></section>
       <section id="sceneList" class="scene-list"></section>
+      <dialog id="autoAssetChoiceDialog" class="media-library-dialog">
+        <div class="section-head"><div><h2>素材を選択</h2><p id="autoAssetChoiceTarget">Creator OSで1つに決められなかった候補です。</p></div></div>
+        <div id="autoAssetChoiceGrid" class="media-library-grid"></div>
+        <div class="dialog-actions"><button type="button" id="closeAutoAssetChoice">閉じる</button></div>
+      </dialog>
       <dialog id="mediaLibraryDialog" class="media-library-dialog">
         <div class="section-head"><div><h2>画像素材ライブラリ</h2><p id="mediaLibraryTarget">このシーンで使う画像を選びます。</p></div></div>
         <div id="mediaLibrarySummary" class="media-library-summary"></div>
@@ -576,6 +583,37 @@ async function renderScenes(id) {
     root.querySelectorAll("[data-down]").forEach(el=>el.onclick=()=>{const record=moveSceneWithDecision(project,Number(el.dataset.down),"down");if(!record)return;save();renderList();});
     void hydrateSceneImages();
   };
+  const autoAssetChoiceDialog=root.querySelector("#autoAssetChoiceDialog");
+  const openAutoAssetChoice=async(result)=>{
+    const candidates=Array.isArray(result?.candidates)?result.candidates:[];
+    if(!autoAssetChoiceDialog||!candidates.length)return false;
+    const sceneId=String(result.stoppedSceneId||"");
+    const scene=project.scenes.find(item=>item?.id===sceneId);
+    if(!scene)return false;
+    root.querySelector("#autoAssetChoiceTarget").textContent=`シーン ${scene.order||sceneId} は候補が同等でした。使う実物素材を選んでください。`;
+    const grid=root.querySelector("#autoAssetChoiceGrid");
+    grid.innerHTML=candidates.map((candidate,index)=>`<article class="media-asset-card"><img src="${escapeHtml(candidate.previewUrl||"")}" alt="" loading="lazy"><div><b>${escapeHtml(candidate.title||`候補 ${index+1}`)}</b><p class="muted">${escapeHtml(candidate.provider||"")} ${escapeHtml(candidate.date||"")}</p><p class="muted">${escapeHtml(candidate.rights||candidate.license||candidate.rightsStatus||"権利確認済み候補")}</p><button type="button" data-auto-asset-choice="${index}">これを使う</button></div></article>`).join("");
+    root.querySelector("#closeAutoAssetChoice").onclick=()=>autoAssetChoiceDialog.close();
+    grid.querySelectorAll("[data-auto-asset-choice]").forEach(button=>button.onclick=async()=>{
+      const candidate=candidates[Number(button.dataset.autoAssetChoice)];
+      if(!candidate)return;
+      button.disabled=true;
+      try{
+        const plan={status:"ready",sceneId,order:Number(scene.order)||0,candidate};
+        const fetched=await fetchAssetImage(plan);
+        if(fetched.status!=="resolved"||!fetched.asset)throw new Error(fetched.reason||"画像を取得できません");
+        const applied=await storeAndApplyAutoImage(project,plan,fetched.asset,{allowApply:true});
+        if(applied.status!=="applied"||!applied.project)throw new Error(applied.reason||"素材を適用できません");
+        const next=applied.project;Object.keys(project).forEach(key=>delete project[key]);Object.assign(project,next);
+        recordSceneImageSelection(project,{sceneId,beforeAssetId:scene.imageAssetId||"",afterAssetId:project.scenes.find(item=>item.id===sceneId)?.imageAssetId||"",sceneIndex:Math.max(0,project.scenes.findIndex(item=>item.id===sceneId))});
+        project.updatedAt=new Date().toISOString();await saveProject(project);
+        autoAssetChoiceDialog.close();renderList();
+        if(autoAssetStatus)autoAssetStatus.textContent=`✓ シーン ${scene.order||sceneId} の素材を採用しました。もう一度「素材取得 → ナレーションへ」を押すと続きから確認します。`;
+      }catch(error){console.error(error);if(autoAssetStatus)autoAssetStatus.textContent=`素材の採用に失敗しました：${error?.message||"不明なエラー"}`;}
+      finally{button.disabled=false;}
+    });
+    autoAssetChoiceDialog.showModal();return true;
+  };
   const autoAcquireButton=root.querySelector("#autoAcquireAssets");
   if(autoAcquireButton){
     const autoAssetStatus=root.querySelector("#autoAssetStatus");
@@ -594,6 +632,10 @@ async function renderScenes(id) {
           project.updatedAt=new Date().toISOString();
           await saveProject(project);
           renderList();
+        }
+        if(result?.status==="needs-selection"&&Array.isArray(result.candidates)&&result.candidates.length){
+          const opened=await openAutoAssetChoice(result);
+          if(opened){if(autoAssetStatus)autoAssetStatus.textContent=`シーン ${result.stoppedSceneId||"不明"} は候補を1つに決められませんでした。候補から選択してください。`;return;}
         }
         const handoff=evaluateAssetToVoiceHandoff(project,result);
         if(autoAssetStatus){
