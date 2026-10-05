@@ -76,7 +76,6 @@ else returnLink.textContent='← Creator OSへ戻る';
 
 function setLog(id,msg,cls=''){const e=$(id);if(!e)return;e.textContent=msg;e.className=cls;}
 const sceneText=scene=>String(scene?.speechText||scene?.subtitleText||scene?.text||'').trim();
-const blobToDataUrl=blob=>new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result));r.onerror=()=>reject(r.error||new Error('WAVのData URL変換に失敗しました'));r.readAsDataURL(blob);});
 
 async function updateResumeSummary(projectOverride=null){
   if(projectId==='default')return;
@@ -205,15 +204,12 @@ $('#generateScenes').onclick=async()=>{
       scene.speechText=text;
       if(!String(scene.subtitleText||'').trim())scene.subtitleText=scene.text||text;
       scene.subtitleStartSec=0;scene.subtitleEndSec=sceneDuration;scene.durationSec=sceneDuration;
-      if(project.autoProduction?.mode==='production-request'){
-        const mediaId=await createAudioAssetIdFromArrayBuffer(await blob.arrayBuffer());
-        const stored=await putMedia({projectId:project.id,mediaId,kind:'audio',blob});
-        if(stored.status!=='stored'||!stored.mediaRef)throw new Error(stored.reason||`シーン${i+1}の音声を保存できませんでした。`);
-        scene.narration={mediaRef:stored.mediaRef,fileName:`Kokoro_${voice}_scene_${i+1}.wav`,mimeType:blob.type||'audio/wav',source:'kokoro-js-jp',voiceId:voice,durationSec:duration,fingerprint:createNarrationFingerprint({text,voiceId:voice})};
-      }else{
-        const audioData=await blobToDataUrl(blob);
-        scene.narration={audioData,fileName:`Kokoro_${voice}_scene_${i+1}.wav`,mimeType:blob.type||'audio/wav',source:'kokoro-js-jp',voiceId:voice,durationSec:duration,fingerprint:createNarrationFingerprint({text,voiceId:voice})};
-      }
+      // New narration is always stored outside project JSON. Legacy audioData remains readable elsewhere,
+      // but newly generated WAV must not make project size grow with media bytes.
+      const mediaId=await createAudioAssetIdFromArrayBuffer(await blob.arrayBuffer());
+      const stored=await putMedia({projectId:project.id,mediaId,kind:'audio',blob});
+      if(stored.status!=='stored'||!stored.mediaRef)throw new Error(stored.reason||`シーン${i+1}の音声を保存できませんでした。`);
+      scene.narration={mediaRef:stored.mediaRef,fileName:`Kokoro_${voice}_scene_${i+1}.wav`,mimeType:blob.type||'audio/wav',source:'kokoro-js-jp',voiceId:voice,durationSec:duration,fingerprint:createNarrationFingerprint({text,voiceId:voice})};
       total+=sceneDuration;generated++;results.push(`シーン${i+1}: 音声 ${duration.toFixed(2)}秒 → シーン ${sceneDuration.toFixed(2)}秒`);
       $('#sceneProg').value=Math.round(((i+1)/scenes.length)*100);
       project.updatedAt=new Date().toISOString();
