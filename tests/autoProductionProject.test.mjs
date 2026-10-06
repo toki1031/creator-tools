@@ -158,3 +158,30 @@ Scene 1
   assert.equal(result.project.bgm.source,'none');
   assert.equal(result.project.bgm.volume,0);
 });
+
+
+test('creates an Education Studio production-request project through the shared pipeline',()=>{
+  const request=`# 目的
+保護者が親子遊びのポイントを理解できるようにする。
+# トーン
+やさしい教育
+Scene 1
+ナレーション: 親子遊びは、短い時間でも十分楽しめます。
+映像: 明るい室内で保護者と幼児が床に座って遊ぶ自然な場面。
+Scene 2
+ナレーション: 子どもの様子を見ながら、無理なく終えましょう。
+映像: 子どもの反応を見守る保護者。安全で片付いた室内。
+# 最終QA
+危険な遊び方を勧めない`;
+  const result=createAutoProductionProject({requestText:request,title:'親子遊び',genre:'education',platform:'instagram-reels',targetDurationSec:60});
+  assert.equal(result.ok,true);
+  assert.equal(result.project.genre,'education');
+  assert.equal(result.project.studioProfileId,'education');
+  assert.equal(result.project.platform,'instagram-reels');
+  assert.equal(result.project.autoProduction.mode,'production-request');
+  assert.equal(result.project.scenes.length,2);
+  assert.equal(result.project.scenes[0].productionDirection.assetType,'other');
+  assert.match(result.project.scenes[0].productionDirection.visualDirection,/保護者と幼児/);
+  assert.equal(result.project.bgm.source,'procedural');
+  assert.equal(result.project.bgm.procedural.preset,'gentle-learning');
+});
