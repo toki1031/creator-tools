@@ -115,3 +115,18 @@ test('Cloud narration reuse fingerprints include the cloud source',()=>{
   assert.match(html,/canReuseNarration\(scene,text,voice\)/);
   assert.match(html,/fingerprint:narrationFingerprintFor\(text,voice\)/);
 });
+
+
+test('MeloTTS endpoint normalizes documented base64 Audio responses',async()=>{
+  const source=await readFile(new URL('../functions/api/generate-narration.js',import.meta.url),'utf8');
+  assert.match(source,/typeof result\.audio==='string'/);
+  assert.match(source,/atob\(result\.audio\)/);
+  assert.match(source,/new Uint8Array/);
+});
+
+test('Cloud MP3 duration uses browser metadata instead of Web Audio decoding',()=>{
+  assert.match(html,/blob\?\.type==='audio\/mpeg'/);
+  assert.match(html,/new Audio\(\)/);
+  assert.match(html,/onloadedmetadata/);
+  assert.match(html,/audioDurationFromBlob\(blob,audioBuffer\)/);
+});
