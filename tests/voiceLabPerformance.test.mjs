@@ -31,3 +31,14 @@ test('再開状態計算とScene生成は読み込み済みprojectを再利用�
   assert.match(html, /const project=currentProject\|\|await loadProject\(\);/);
   assert.match(html, /updateResumeSummary\(currentProject\)/);
 });
+
+
+test('Voice Lab reports first-run preparation and Scene generation timing without parallelizing TTS',()=>{
+  assert.match(html,/const prepareStarted=performance\.now\(\)/);
+  assert.match(html,/lastPrepareMs=Math\.max/);
+  assert.match(html,/const sceneStarted=performance\.now\(\)/);
+  assert.match(html,/sceneTimings\.push/);
+  assert.match(html,/処理時間：準備/);
+  assert.match(html,/新規1Scene平均/);
+  assert.doesNotMatch(html,/Promise\.all\([^)]*tts\.speak/);
+});
