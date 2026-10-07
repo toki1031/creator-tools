@@ -5,11 +5,11 @@ import { distributeGlobalNarration } from './autoNarrationScenes.js';
 import { createProceduralBgmSettings } from './proceduralBgm.js';
 import { isExplicitNoBgm } from './standardBgmLibrary.js';
 
-export function createAutoProductionProject({ requestText, title = '', genre = 'great-person', platform = 'youtube-shorts', targetDurationSec = 60 } = {}) {
+export function createAutoProductionProject({ requestText, title = '', genre = 'great-person', platform = 'youtube-shorts', targetDurationSec = 60, productionBrief = null, source = 'local-parser', model = '' } = {}) {
   const request = String(requestText ?? '').trim();
   if (!request) return { ok: false, reason: 'empty-request', project: null, brief: null };
 
-  const brief = parseProductionRequest(request);
+  const brief = productionBrief && typeof productionBrief === 'object' ? structuredClone(productionBrief) : parseProductionRequest(request);
   if (!Array.isArray(brief.sceneDirectives) || !brief.sceneDirectives.length) {
     return { ok: false, reason: 'no-scenes', project: null, brief };
   }
@@ -27,7 +27,8 @@ export function createAutoProductionProject({ requestText, title = '', genre = '
   if (autoBgm) built.bgm = autoBgm;
   built.autoProduction = {
     mode: 'production-request',
-    source: 'local-parser',
+    source,
+    ...(model ? { model } : {}),
     createdAt: new Date().toISOString()
   };
   built.updatedAt = new Date().toISOString();

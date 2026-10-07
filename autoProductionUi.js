@@ -1,6 +1,7 @@
 import { saveProject } from './db.js';
 import { goScenes, readRoute } from './router.js';
 import { createAutoProductionProject } from './autoProductionProject.js';
+import { planProductionRequest } from './productionPlanner.js';
 
 const BUTTON_ID = 'openAutoProduction';
 const DIALOG_ID = 'autoProductionDialog';
@@ -38,7 +39,7 @@ function buildDialog() {
     <form method="dialog" data-auto-production-form>
       <div>
         <h2 data-auto-production-title>制作依頼から作る</h2>
-        <p class="auto-production-note" data-auto-production-note>制作依頼をそのまま貼り付けます。内容はこの端末内でScene設計へ変換し、画像生成時は選択中のStudio方針を使います。</p>
+        <p class="auto-production-note" data-auto-production-note>Scene付きの詳しい依頼は端末内で解析します。短い依頼はCloudflare Workers AIがStudio方針に沿って構成・台本・Scene案を作ります。</p>
       </div>
       <label>プロジェクト名（任意）
         <input name="title" placeholder="未入力なら「無題のプロジェクト」">
@@ -78,13 +79,27 @@ function buildDialog() {
     status.textContent = '制作依頼をScene設計へ変換しています…';
     try {
       const studio = AUTO_PRODUCTION_STUDIOS[activeStudioKey] || AUTO_PRODUCTION_STUDIOS['great-person'];
-      const result = createAutoProductionProject({
+      let result = createAutoProductionProject({
         requestText,
         title: String(data.get('title') ?? ''),
         genre: studio.genre,
         platform: studio.platform,
         targetDurationSec: 60
       });
+      if (!result.ok && result.reason === 'no-scenes') {
+        status.textContent = 'AIが依頼内容から構成・台本・Sceneを作っています…';
+        const planned = await planProductionRequest(requestText, studio.genre);
+        result = createAutoProductionProject({
+          requestText,
+          title: String(data.get('title') ?? ''),
+          genre: studio.genre,
+          platform: studio.platform,
+          targetDurationSec: 60,
+          productionBrief: planned.brief,
+          source: planned.source,
+          model: planned.model
+        });
+      }
       if (!result.ok) {
         submit.disabled = false;
         status.textContent = result.reason === 'no-scenes'
