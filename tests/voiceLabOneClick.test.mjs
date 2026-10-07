@@ -80,3 +80,13 @@ test('one-click sync checks reusable narration before starting the heavy TTS eng
   assert.ok(reuseCheck>=0&&prepareCall>reuseCheck);
   assert.match(handler,/if\(allReusable\)[\s\S]*location\.href=[\s\S]*return;/);
 });
+
+
+test('Voice Lab fast narration skips Kokoro preparation and limits cloud concurrency',()=>{
+  assert.match(html,/cloud_melotts_ja/);
+  assert.match(html,/generateCloudNarration/);
+  assert.match(html,/generateCloudBatch\(cloudItems,3\)/);
+  assert.match(html,/!isCloudVoice\(voice\)&&!tts/);
+  assert.match(html,/cloudflare-workers-ai-melotts/);
+  assert.match(html,/audio\/mpeg/);
+});
