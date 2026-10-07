@@ -33,7 +33,7 @@ const SECTION_ALIASES = [
 const SCENE_FIELD_ALIASES = [
   ["narrationText", /^(?:ナレーション|セリフ|読み上げ|narration|speech)(?:\s*[:：]\s*(.*)|\s*)$/i],
   ["subtitleText", /^(?:字幕|subtitle)(?:\s*[:：]\s*(.*)|\s*)$/i],
-  ["visualDirection", /^(?:映像|画|ビジュアル|visual(?:\s*direction)?)(?:\s*[:：]\s*(.*)|\s*)$/i],
+  ["visualDirection", /^(?:映像(?:意図|指示)?|画面意図|画|ビジュアル|visual(?:\s*(?:intent|direction))?)(?:\s*[:：]\s*(.*)|\s*)$/i],
 ];
 
 function detectSection(line) { const text = clean(line).replace(/^#{1,6}\s*/, ""); for (const [name, pattern] of SECTION_ALIASES) { const match = text.match(pattern); if (match) return { name, inline: clean(match[1]) }; } return null; }
