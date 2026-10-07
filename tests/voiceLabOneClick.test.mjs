@@ -100,3 +100,10 @@ test('Voice Lab retries cloud narration and propagates Scene sync failures to on
   assert.match(html,/if\(syncResult\?\.ok===false\)throw syncResult\.error/);
   assert.match(html,/return \{ok:false,error:e\}/);
 });
+
+
+test('Cloudflare MeloTTS uses the provider Japanese language code',async()=>{
+  const source=await readFile(new URL('../functions/api/generate-narration.js',import.meta.url),'utf8');
+  assert.match(source,/lang:'jp'/);
+  assert.doesNotMatch(source,/lang:'ja'/);
+});
