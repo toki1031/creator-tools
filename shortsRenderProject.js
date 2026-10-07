@@ -30,6 +30,7 @@ export function createShortsRenderProject(project, draftId) {
       ...sourceNarration,
       // Whole-project narration cannot be time-shifted safely for an extracted segment.
       audioData: '',
+      mediaRef: null,
       fileName: '',
       mimeType: '',
       shortsSceneNarrationOnly: hasSceneNarration
@@ -46,7 +47,7 @@ export function createShortsRenderProject(project, draftId) {
       draftId: String(draftId || ''),
       sourceSceneIds: workspace.scenes.map(item => item.sceneId),
       missingSceneIds: [...workspace.missingSceneIds],
-      suppressedWholeNarration: Boolean(sourceNarration.audioData)
+      suppressedWholeNarration: Boolean(sourceNarration.audioData || sourceNarration.mediaRef?.id)
     }
   };
 }
