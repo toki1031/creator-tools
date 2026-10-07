@@ -50,3 +50,19 @@ test('manual Scene narration sync keeps the existing review links and does not a
   assert.match(handler,/afterSceneSync/);
   assert.match(handler,/次へ：字幕・BGM/);
 });
+
+
+test('Voice Lab recovers transient Safari BFCache controls without auto-loading TTS',()=>{
+  assert.match(html,/function recoverVoiceLabAfterReturn/);
+  assert.match(html,/autoButton\.disabled=false/);
+  assert.match(html,/generateButton\.disabled=!tts/);
+  assert.match(html,/currentProject=null/);
+  assert.match(html,/const latest=await loadProject\(\)/);
+  assert.match(html,/addEventListener\('pageshow'/);
+  assert.match(html,/visibilityState==='visible'/);
+  const start=html.indexOf('async function recoverVoiceLabAfterReturn');
+  const end=html.indexOf("\n\n$('#voice').onchange",start);
+  const recovery=html.slice(start,end);
+  assert.doesNotMatch(recovery,/KokoroJP\.load/);
+  assert.doesNotMatch(recovery,/tts\.speak/);
+});
