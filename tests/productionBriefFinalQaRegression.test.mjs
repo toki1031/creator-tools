@@ -265,3 +265,34 @@ test('person names are never mistaken for prohibition markers in the actual Nigh
   assert.match(s2.visualDirection,/Florence Nightingale/);
   assert.deepEqual(s2.rules,[]);
 });
+
+
+const visualIntentLabelRegressionRequest=`
+Scene 4｜英雄物語にしない
+ナレーション：
+もちろん、
+ナイチンゲール一人が病院を立て直し、
+すべての兵士を救ったわけではありません。
+衛生状態の改善には、
+政府が派遣した衛生委員会をはじめ、
+多くの人たちが関わっています。
+ここを「一人の英雄の物語」にしてしまうと、
+ナイチンゲールの本当の面白さを見失います。
+映像意図：
+人物を神格化しない。
+ナイチンゲール以外にも、
+組織・専門家・行政など複数の主体が存在したことを示す。
+史実確認できない会議や活動を創作しない。
+`;
+
+test('映像意図 switches from narration to Scene visual direction without leaking narration',()=>{
+  const brief=parseProductionRequest(visualIntentLabelRegressionRequest);
+  const scene=brief.sceneDirectives[0];
+  assert.equal(scene.sceneId,'scene-4');
+  assert.match(scene.narrationText,/ナイチンゲール一人が病院を立て直し/);
+  assert.doesNotMatch(scene.narrationText,/映像意図|人物を神格化/);
+  assert.match(scene.visualDirection,/組織・専門家・行政/);
+  assert.doesNotMatch(scene.visualDirection,/ナイチンゲール一人が病院を立て直し/);
+  assert.ok(scene.rules.some(rule=>/人物を神格化しない/.test(rule)));
+  assert.ok(scene.rules.some(rule=>/史実確認できない会議や活動を創作しない/.test(rule)));
+});
