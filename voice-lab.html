@@ -105,14 +105,20 @@ async function generateCloudNarration(text,{attempts=3}={}){
   }
   throw lastError||new Error('高速AI音声の生成に失敗しました。');
 }
-async function generateCloudBatch(items,concurrency=2){
+async function generateCloudBatch(items,concurrency=2,{onSuccess=async()=>{}}={}){
   const results=new Map();
   for(let start=0;start<items.length;start+=concurrency){
     const batch=items.slice(start,start+concurrency);
-    const settled=await Promise.allSettled(batch.map(async item=>[item.index,await generateCloudNarration(item.text)]));
-    const failed=settled.find(result=>result.status==='rejected');
-    for(const result of settled)if(result.status==='fulfilled')results.set(result.value[0],result.value[1]);
-    if(failed)throw failed.reason;
+    const settled=await Promise.allSettled(batch.map(async item=>[item,await generateCloudNarration(item.text)]));
+    let firstError=null;
+    for(const result of settled){
+      if(result.status==='rejected'){firstError ||= result.reason;continue;}
+      const [item,blob]=result.value;
+      results.set(item.index,blob);
+      try{await onSuccess(item,blob);}
+      catch(error){firstError ||= error;}
+    }
+    if(firstError)throw firstError;
     await yieldToBrowser();
   }
   return results;
@@ -289,7 +295,23 @@ $('#generateScenes').onclick=async()=>{
     const results=[];
     const cloudItems=isCloudVoice(voice)?scenes.map((scene,index)=>({scene,index,text:sceneText(scene)})).filter(({scene,text})=>text&&!canReuseNarration(scene,text,voice)):[];
     if(cloudItems.length)setLog('#sceneResult',`高速AI音声を生成中… 0/${cloudItems.length}`,'warn');
-    const cloudAudio=cloudItems.length?await generateCloudBatch(cloudItems,2):new Map();
+    const cloudAudio=cloudItems.length?await generateCloudBatch(cloudItems,2,{onSuccess:async(item,blob)=>{
+      const audioBuffer=await blob.arrayBuffer();
+      const duration=await audioDurationFromBlob(blob,audioBuffer);
+      if(!(duration>0))throw new Error(`シーン${item.index+1}の音声尺を取得できませんでした。`);
+      const sceneDuration=Math.max(0.5,Math.round((duration+0.15)*100)/100);
+      const scene=item.scene;
+      scene.speechText=item.text;
+      if(!String(scene.subtitleText||'').trim())scene.subtitleText=scene.text||item.text;
+      scene.subtitleStartSec=0;scene.subtitleEndSec=sceneDuration;scene.durationSec=sceneDuration;
+      const mediaId=await createAudioAssetIdFromArrayBuffer(audioBuffer);
+      const stored=await putMedia({projectId:project.id,mediaId,kind:'audio',blob});
+      if(stored.status!=='stored'||!stored.mediaRef)throw new Error(stored.reason||`シーン${item.index+1}の音声を保存できませんでした。`);
+      scene.narration={mediaRef:stored.mediaRef,fileName:`MeloTTS_scene_${item.index+1}.mp3`,mimeType:blob.type||'audio/mpeg',source:'cloudflare-workers-ai-melotts',voiceId:voice,durationSec:duration,fingerprint:narrationFingerprintFor(item.text,voice)};
+      project.updatedAt=new Date().toISOString();
+      await saveProject(project);
+      setLog('#sceneResult',`高速AI音声を生成・保存中… シーン${item.index+1} 保存済み`,'warn');
+    }}):new Map();
 
     for(let i=0;i<scenes.length;i++){
       const scene=scenes[i];
@@ -304,9 +326,16 @@ $('#generateScenes').onclick=async()=>{
       }
 
       setLog('#sceneResult',`生成中… ${i+1}/${scenes.length}\n再利用 ${reused} / 新規生成 ${generated}`,'warn');
+      if(isCloudVoice(voice)&&canReuseNarration(scene,text,voice)){
+        const duration=Number(scene.narration?.durationSec)||Math.max(0.5,Number(scene.durationSec)||0.5);
+        const sceneDuration=Math.max(0.5,Number(scene.durationSec)||Math.round((duration+0.15)*100)/100);
+        total+=sceneDuration;generated++;results.push(`シーン${i+1}: 高速AI音声を生成・保存済み ${duration.toFixed(2)}秒`);
+        $('#sceneProg').value=Math.round(((i+1)/scenes.length)*100);
+        continue;
+      }
       const blob=isCloudVoice(voice)?cloudAudio.get(i):(await tts.speak(text,voice)).toBlob();
       if(!blob)throw new Error(`シーン${i+1}の音声を取得できませんでした。`);
-      // Read the WAV bytes once and reuse them for duration analysis and stable MediaRef identity.
+      // Read the audio bytes once and reuse them for duration analysis and stable MediaRef identity.
       const audioBuffer=await blob.arrayBuffer();
       const duration=await audioDurationFromBlob(blob,audioBuffer);
       if(!(duration>0))throw new Error(`シーン${i+1}の音声尺を取得できませんでした。`);
