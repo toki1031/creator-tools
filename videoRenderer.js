@@ -613,7 +613,12 @@ async function createAudio(project, prepared, providedContext = null) {
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           encoded = await response.arrayBuffer();
         }
-        const buffer = await context.decodeAudioData(encoded);
+        let buffer;
+        try { buffer = await context.decodeAudioData(encoded); }
+        catch (error) {
+          const mime=String(meta.mimeType||'').toLowerCase();
+          throw new Error(`シーン${index+1}のナレーションを動画用にデコードできませんでした${mime?`（${mime}）`:''}。音声を再生成してください。`);
+        }
         const source = context.createBufferSource(); source.buffer = buffer; source.loop = false;
         const gain = context.createGain(); gain.gain.value = clamp(Number(project.narration?.volume ?? 1), 0, 1.5); source.connect(gain); gain.connect(destination);
         const entry = { index, source, gain, duration: buffer.duration || meta.durationSec || Math.max(0, Number(scenes[index]?.durationSec) || 0), scheduled: false };
