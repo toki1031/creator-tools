@@ -147,15 +147,25 @@ $('#autoSyncScenes').onclick=async()=>{
   btn.disabled=true;
   try{
     if(projectId==='default')throw new Error('Creator OSのプロジェクトからVoice Labを開いてください。');
-    setLog('#autoSyncStatus','[1/2] 音声エンジンを準備しています…','warn');
+    setLog('#autoSyncStatus','[1/3] 保存済みSceneを確認しています…','warn');
+    const project=currentProject||await loadProject();
+    if(!project)throw new Error(`対象プロジェクトが見つかりません: ${projectId}`);
+    const scenes=Array.isArray(project?.scenes)?project.scenes:[];
+    if(!scenes.length)throw new Error('シーンがありません。');
+    const voice=$('#voice').value;
+    const allReusable=scenes.every(scene=>canReuseSceneNarration(scene,{text:sceneText(scene),voiceId:voice}));
+    if(allReusable){
+      setLog('#autoSyncStatus',`保存済み音声を全Sceneで再利用できます ✓  ${scenes.length}/${scenes.length} Scene\n音声エンジンの準備を省略して字幕・BGMへ移動します…`,'ok');
+      location.href=`./index.html?autoContinue=output#/project/${encodeURIComponent(projectId)}/bgm`;
+      return;
+    }
+    setLog('#autoSyncStatus','[2/3] 変更Sceneがあるため音声エンジンを準備しています…','warn');
     if(!tts){
       await $('#prepare').onclick();
       if(!tts)throw new Error('音声エンジンの準備に失敗しました。上の準備ログを確認してください。');
     }
-    setLog('#autoSyncStatus','[2/2] 未生成・変更Sceneだけ同期しています…','warn');
+    setLog('#autoSyncStatus','[3/3] 未生成・変更Sceneだけ同期しています…','warn');
     await $('#generateScenes').onclick();
-    const project=currentProject||await loadProject();
-    const scenes=Array.isArray(project?.scenes)?project.scenes:[];
     const ready=scenes.filter(scene=>Boolean(scene?.narration?.audioData||scene?.narration?.mediaRef?.id)).length;
     if(!scenes.length)throw new Error('シーンがありません。');
     if(ready<scenes.length)throw new Error(`ナレーション同期が完了していません：${ready}/${scenes.length} Scene`);
