@@ -18,7 +18,7 @@ test('dedicated production-request Render Job may honor 1080x1920 on iPhone',()=
     output:{width:1080,height:1920}
   },{userAgent:iphone});
   assert.deepEqual([profile.width,profile.height],[1080,1920]);
-  assert.equal(profile.iosSafeMode,false);
+  assert.equal(profile.iosSafeMode,true);
 });
 
 test('manual compact Render Job remains 720-class on iPhone',()=>{
@@ -34,6 +34,16 @@ test('oversized production request remains capped by iPhone safe profile',()=>{
     output:{width:2160,height:3840}
   },{userAgent:iphone});
   assert.ok(profile.width*profile.height <= 720*1280+4);
+  assert.equal(profile.iosSafeMode,true);
+});
+
+test('production-request 1080p keeps iPhone encoding safety enabled',()=>{
+  const profile=resolveExportProfile({
+    __renderJob:true,
+    autoProduction:{mode:'production-request'},
+    output:{width:1080,height:1920,fps:60}
+  },{userAgent:iphone});
+  assert.deepEqual([profile.width,profile.height],[1080,1920]);
   assert.equal(profile.iosSafeMode,true);
 });
 
