@@ -7,7 +7,7 @@ export async function onRequestPost({request,env}){
   const prompt=Array.from(String(body?.text||'').trim()).slice(0,MAX_TEXT_CHARS).join('');
   if(!prompt)return json({reason:'ナレーション文章がありません'},400);
   try{
-    const result=await env.AI.run(MODEL,{prompt,lang:'ja'});
+    const result=await env.AI.run(MODEL,{prompt,lang:'jp'});
     return new Response(result,{headers:{'content-type':'audio/mpeg','cache-control':'no-store','x-creator-os-model':MODEL}});
   }catch(error){
     const message=String(error?.message||'');
