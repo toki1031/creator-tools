@@ -112,7 +112,35 @@ async function loadProject(){
   return project;
 }
 
+async function recoverVoiceLabAfterReturn(){
+  // Safari BFCache can restore the exact disabled DOM state captured during navigation.
+  // Reset transient controls only; do not reload the large TTS model or regenerate audio.
+  const autoButton=$('#autoSyncScenes');
+  const prepareButton=$('#prepare');
+  if(autoButton)autoButton.disabled=false;
+  if(prepareButton)prepareButton.disabled=Boolean(tts);
+  const generateButton=$('#generateScenes');
+  if(generateButton)generateButton.disabled=!tts;
+  if(projectId==='default')return;
+  try{
+    currentProject=null;
+    const latest=await loadProject();
+    if(latest){
+      await updateResumeSummary(latest);
+      setLog('#autoSyncStatus',tts
+        ? '画面へ戻りました。音声エンジンは準備済みです。必要なら全Scene同期を再開できます。'
+        : '画面へ戻りました。保存済み状態を復元しました。ボタンを押すと必要なSceneだけ同期します。');
+    }
+  }catch(e){
+    setLog('#autoSyncStatus','保存状態の再確認に失敗しました。もう一度操作してください。\n'+(e?.message||e),'bad');
+  }
+}
+
 $('#voice').onchange=()=>{void updateResumeSummary(currentProject);};
+addEventListener('pageshow',()=>{void recoverVoiceLabAfterReturn();});
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible')void recoverVoiceLabAfterReturn();
+});
 
 $('#autoSyncScenes').onclick=async()=>{
   const btn=$('#autoSyncScenes');
