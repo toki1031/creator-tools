@@ -461,9 +461,10 @@ async function renderScenes(id) {
     </main>`;
   attachProjectMenu(project, root.querySelector("#menu"), () => goStudio(studioForGenre(project.genre)));
   const saveState=root.querySelector("#saveState"); let pendingAsset=Promise.resolve();
-  let sceneDisplayCleanups=[];
-  const clearSceneDisplayUrls=()=>{sceneDisplayCleanups.forEach(cleanup=>cleanup());sceneDisplayCleanups=[];};
-  const hydrateSceneImages=async()=>{clearSceneDisplayUrls();const cards=[...root.querySelectorAll("[data-scene-image]")];await Promise.all(cards.map(async el=>{const index=Number(el.dataset.sceneImage),scene=project.scenes[index];if(!scene)return;const resolved=await resolveSceneImageForDisplay(project,scene);if(!el.isConnected)return resolved.cleanup?.();if(resolved.status==="resolved"){el.innerHTML=`<img src="${escapeHtml(resolved.url)}" alt="">`;sceneDisplayCleanups.push(resolved.cleanup);}else el.innerHTML="<span>画像未登録</span>";}));};
+  let sceneDisplayCleanups=[],sceneImageObserver=null;
+  const clearSceneDisplayUrls=()=>{sceneImageObserver?.disconnect();sceneImageObserver=null;sceneDisplayCleanups.forEach(cleanup=>cleanup());sceneDisplayCleanups=[];};
+  const hydrateOneSceneImage=async el=>{if(!el?.isConnected||el.dataset.imageHydrated==="1")return;el.dataset.imageHydrated="1";const index=Number(el.dataset.sceneImage),scene=project.scenes[index];if(!scene)return;const resolved=await resolveSceneImageForDisplay(project,scene);if(!el.isConnected)return resolved.cleanup?.();if(resolved.status==="resolved"){el.innerHTML=`<img src="${escapeHtml(resolved.url)}" alt="" loading="lazy" decoding="async">`;sceneDisplayCleanups.push(resolved.cleanup);}else el.innerHTML="<span>画像未登録</span>";};
+  const hydrateSceneImages=async()=>{clearSceneDisplayUrls();const cards=[...root.querySelectorAll("[data-scene-image]")];if(!('IntersectionObserver' in globalThis)){for(const el of cards){await hydrateOneSceneImage(el);await new Promise(resolve=>setTimeout(resolve,0));}return;}sceneImageObserver=new IntersectionObserver(entries=>{for(const entry of entries){if(!entry.isIntersecting)continue;sceneImageObserver?.unobserve(entry.target);void hydrateOneSceneImage(entry.target);}},{rootMargin:"600px 0px"});cards.forEach(el=>sceneImageObserver.observe(el));};
   const persist=async()=>{await pendingAsset;project.scenes.forEach((s,i)=>s.order=i+1);project.updatedAt=new Date().toISOString();await saveProject(project);};
   const {scheduleSave:save,flushSave}=createSaveController({delay:400,persist,setStatus:text=>saveState.textContent=text});
   bindSavedNavigation(root.querySelector("#back"),flushSave,()=>goStudio(studioForGenre(project.genre)));
