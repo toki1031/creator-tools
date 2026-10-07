@@ -247,7 +247,8 @@ $('#prepare').onclick=async()=>{
 };
 
 async function audioDurationFromBlob(blob,arrayBuffer){
-  if(blob?.type==='audio/mpeg'){
+  const mime=String(blob?.type||'').split(';',1)[0].trim().toLowerCase();
+  if(mime==='audio/mpeg'||mime==='audio/mp3'||mime==='audio/x-mp3'){
     const url=URL.createObjectURL(blob);
     try{
       const duration=await new Promise((resolve,reject)=>{
