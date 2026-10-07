@@ -6,7 +6,10 @@ const html = await readFile(new URL('../voice-lab.html', import.meta.url), 'utf8
 
 test('Voice Lab初期表示では大容量projectや旧音声Blobを自動読込しない', () => {
   assert.doesNotMatch(html, /loadRegistered\(\);/);
-  assert.doesNotMatch(html, /await loadProject\(\);\s*\n.*voice.*onchange/s);
+  const bootEnd=html.indexOf("function setLog");
+  const boot=html.slice(0,bootEnd);
+  assert.doesNotMatch(boot, /await loadProject\(\)/);
+  assert.match(html, /addEventListener\('pageshow'/);
   assert.match(html, /画面を開いただけでは大容量のプロジェクト音声を読み込みません/);
 });
 
