@@ -78,6 +78,9 @@ else returnLink.textContent='← Creator OSへ戻る';
 function setLog(id,msg,cls=''){const e=$(id);if(!e)return;e.textContent=msg;e.className=cls;}
 const sceneText=scene=>String(scene?.speechText||scene?.subtitleText||scene?.text||'').trim();
 const isCloudVoice=voice=>voice==='cloud_melotts_ja';
+const narrationSourceForVoice=voice=>isCloudVoice(voice)?'cloudflare-workers-ai-melotts':'kokoro-js-jp';
+const narrationFingerprintFor=(text,voice)=>createNarrationFingerprint({text,voiceId:voice,source:narrationSourceForVoice(voice)});
+const canReuseNarration=(scene,text,voice)=>canReuseSceneNarration(scene,{text,voiceId:voice,source:narrationSourceForVoice(voice)});
 async function generateCloudNarration(text,{attempts=3}={}){
   let lastError=null;
   for(let attempt=1;attempt<=attempts;attempt++){
@@ -190,7 +193,7 @@ $('#autoSyncScenes').onclick=async()=>{
     const scenes=Array.isArray(project?.scenes)?project.scenes:[];
     if(!scenes.length)throw new Error('シーンがありません。');
     const voice=$('#voice').value;
-    const allReusable=scenes.every(scene=>canReuseSceneNarration(scene,{text:sceneText(scene),voiceId:voice}));
+    const allReusable=scenes.every(scene=>canReuseNarration(scene,sceneText(scene),voice));
     if(allReusable){
       setLog('#autoSyncStatus',`保存済み音声を全Sceneで再利用できます ✓  ${scenes.length}/${scenes.length} Scene\n音声エンジンの準備を省略して字幕・BGMへ移動します…`,'ok');
       location.href=`./index.html?autoContinue=output#/project/${encodeURIComponent(projectId)}/bgm`;
@@ -268,7 +271,7 @@ $('#generateScenes').onclick=async()=>{
     const voice=$('#voice').value;
     let total=0,generated=0,reused=0;
     const results=[];
-    const cloudItems=isCloudVoice(voice)?scenes.map((scene,index)=>({scene,index,text:sceneText(scene)})).filter(({scene,text})=>text&&!canReuseSceneNarration(scene,{text,voiceId:voice})):[];
+    const cloudItems=isCloudVoice(voice)?scenes.map((scene,index)=>({scene,index,text:sceneText(scene)})).filter(({scene,text})=>text&&!canReuseNarration(scene,text,voice)):[];
     if(cloudItems.length)setLog('#sceneResult',`高速AI音声を生成中… 0/${cloudItems.length}`,'warn');
     const cloudAudio=cloudItems.length?await generateCloudBatch(cloudItems,2):new Map();
 
@@ -276,7 +279,7 @@ $('#generateScenes').onclick=async()=>{
       const scene=scenes[i];
       const text=sceneText(scene);
       if(!text)throw new Error(`シーン${i+1}の文章が空です。`);
-      if(canReuseSceneNarration(scene,{text,voiceId:voice})){
+      if(canReuseNarration(scene,text,voice)){
         const sceneDuration=Math.max(0.5,Number(scene.durationSec)||Number(scene.narration?.durationSec)||0.5);
         total+=sceneDuration;reused++;results.push(`シーン${i+1}: 保存済み音声を再利用`);
         $('#sceneProg').value=Math.round(((i+1)/scenes.length)*100);
@@ -300,7 +303,7 @@ $('#generateScenes').onclick=async()=>{
       const mediaId=await createAudioAssetIdFromArrayBuffer(audioBuffer);
       const stored=await putMedia({projectId:project.id,mediaId,kind:'audio',blob});
       if(stored.status!=='stored'||!stored.mediaRef)throw new Error(stored.reason||`シーン${i+1}の音声を保存できませんでした。`);
-      scene.narration={mediaRef:stored.mediaRef,fileName:isCloudVoice(voice)?`MeloTTS_scene_${i+1}.mp3`:`Kokoro_${voice}_scene_${i+1}.wav`,mimeType:blob.type||(isCloudVoice(voice)?'audio/mpeg':'audio/wav'),source:isCloudVoice(voice)?'cloudflare-workers-ai-melotts':'kokoro-js-jp',voiceId:voice,durationSec:duration,fingerprint:createNarrationFingerprint({text,voiceId:voice})};
+      scene.narration={mediaRef:stored.mediaRef,fileName:isCloudVoice(voice)?`MeloTTS_scene_${i+1}.mp3`:`Kokoro_${voice}_scene_${i+1}.wav`,mimeType:blob.type||(isCloudVoice(voice)?'audio/mpeg':'audio/wav'),source:isCloudVoice(voice)?'cloudflare-workers-ai-melotts':'kokoro-js-jp',voiceId:voice,durationSec:duration,fingerprint:narrationFingerprintFor(text,voice)};
       total+=sceneDuration;generated++;results.push(`シーン${i+1}: 音声 ${duration.toFixed(2)}秒 → シーン ${sceneDuration.toFixed(2)}秒`);
       $('#sceneProg').value=Math.round(((i+1)/scenes.length)*100);
       project.updatedAt=new Date().toISOString();
