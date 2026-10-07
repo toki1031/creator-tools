@@ -67,7 +67,7 @@ import { createAudioAssetIdFromArrayBuffer } from "./audioAssetIdentity.js";
 import { normalizeLegacyAutoProductionProject } from "./autoProductionCompatibility.js";
 const $=s=>document.querySelector(s);
 document.documentElement.dataset.voiceLabBoot='js-started';
-let tts=null,currentProject=null,sharedAudioContext=null;
+let tts=null,currentProject=null,sharedAudioContext=null,lastPrepareMs=0;
 const yieldToBrowser=()=>new Promise(resolve=>setTimeout(resolve,0));
 const params=new URLSearchParams(location.search);
 const projectId=params.get('project')||'default';
@@ -180,6 +180,7 @@ $('#autoSyncScenes').onclick=async()=>{
 
 $('#prepare').onclick=async()=>{
   const btn=$('#prepare');btn.disabled=true;$('#prog').value=5;
+  const prepareStarted=performance.now();
   try{
     setLog('#engineLog','プロジェクト情報を読み込み中…','warn');
     await loadProject();
@@ -189,6 +190,7 @@ $('#prepare').onclick=async()=>{
     if(!mod.KokoroJP)throw new Error('KokoroJP exportがありません');
     setLog('#engineLog','モデルを準備中… 初回のみ時間がかかります。','warn');
     tts=await mod.KokoroJP.load();
+    lastPrepareMs=Math.max(0,performance.now()-prepareStarted);
     $('#prog').value=100;
     setLog('#engineLog','準備完了 ✓ シーン別ナレーションを生成できます。','ok');
     $('#generateScenes').disabled=false;
@@ -221,6 +223,8 @@ $('#generateScenes').onclick=async()=>{
     const voice=$('#voice').value;
     let total=0,generated=0,reused=0;
     const results=[];
+    const syncStarted=performance.now();
+    const sceneTimings=[];
 
     for(let i=0;i<scenes.length;i++){
       const scene=scenes[i];
@@ -235,6 +239,7 @@ $('#generateScenes').onclick=async()=>{
       }
 
       setLog('#sceneResult',`生成中… ${i+1}/${scenes.length}\n再利用 ${reused} / 新規生成 ${generated}`,'warn');
+      const sceneStarted=performance.now();
       const out=await tts.speak(text,voice);
       const blob=out.toBlob();
       // Read the WAV bytes once and reuse them for duration analysis and stable MediaRef identity.
@@ -255,6 +260,7 @@ $('#generateScenes').onclick=async()=>{
       $('#sceneProg').value=Math.round(((i+1)/scenes.length)*100);
       project.updatedAt=new Date().toISOString();
       await saveProject(project);
+      sceneTimings.push(Math.max(0,performance.now()-sceneStarted));
       // Give iPhone Safari a scheduling point between CPU/memory-heavy TTS scenes.
       await yieldToBrowser();
     }
@@ -267,7 +273,9 @@ $('#generateScenes').onclick=async()=>{
     project.updatedAt=new Date().toISOString();
     await saveProject(project);currentProject=project;
     setLog('#registered',`シーン別ナレーション ${scenes.filter(s=>s.narration?.audioData||s.narration?.mediaRef?.id).length}/${scenes.length}件 保存済み ✓`,'ok');
-    setLog('#sceneResult',`シーン同期完了 ✓\n${results.join('\n')}\n\n再利用 ${reused}件 / 新規生成 ${generated}件\n合計 ${total.toFixed(2)}秒`,'ok');
+    const syncMs=Math.max(0,performance.now()-syncStarted);
+    const avgSceneMs=sceneTimings.length?sceneTimings.reduce((a,b)=>a+b,0)/sceneTimings.length:0;
+    setLog('#sceneResult',`シーン同期完了 ✓\n${results.join('\n')}\n\n再利用 ${reused}件 / 新規生成 ${generated}件\n音声合計 ${total.toFixed(2)}秒\n処理時間：準備 ${(lastPrepareMs/1000).toFixed(1)}秒 / Scene同期 ${(syncMs/1000).toFixed(1)}秒${sceneTimings.length?` / 新規1Scene平均 ${(avgSceneMs/1000).toFixed(1)}秒`:''}`,'ok');
     if(!document.querySelector('#afterSceneSync')){
       const box=document.createElement('div');box.id='afterSceneSync';
       box.innerHTML=`<a class="btn" href="./index.html#/project/${encodeURIComponent(projectId)}/scenes">← シーン編集で確認</a><a class="btn" href="./index.html#/project/${encodeURIComponent(projectId)}/bgm">次へ：字幕・BGM →</a>`;
