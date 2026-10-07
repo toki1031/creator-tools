@@ -8,9 +8,17 @@ export async function onRequestPost({request,env}){
   if(!prompt)return json({reason:'ナレーション文章がありません'},400);
   try{
     const result=await env.AI.run(MODEL,{prompt,lang:'jp'});
-    const response=new Response(result,{headers:{'content-type':'audio/mpeg','cache-control':'no-store','x-creator-os-model':MODEL}});
-    if(!response.body)return json({reason:'高速AI音声が空でした'},502);
-    return response;
+    let audio=result;
+    if(result&&typeof result==='object'&&typeof result.audio==='string'){
+      const binary=atob(result.audio);
+      const bytes=new Uint8Array(binary.length);
+      for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+      audio=bytes;
+    }
+    if(!(typeof audio==='string'||audio instanceof ArrayBuffer||ArrayBuffer.isView(audio)||audio instanceof ReadableStream)){
+      return json({reason:'高速AI音声の応答形式を認識できません'},502);
+    }
+    return new Response(audio,{headers:{'content-type':'audio/mpeg','cache-control':'no-store','x-creator-os-model':MODEL}});
   }catch(error){
     const message=String(error?.message||'');
     const quota=/quota|limit|neurons|429/i.test(message);
