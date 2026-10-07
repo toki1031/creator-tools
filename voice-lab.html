@@ -30,14 +30,14 @@ pre{white-space:pre-wrap;word-break:break-word;background:#0e1320;padding:12px;b
 <div class="card">
 <h2>1. 音声を選んで準備</h2>
 <label>声</label>
-<select id="voice">
+<select id="voice">\n<option value="cloud_melotts_ja">高速AI音声（日本語・推奨）</option>
 <option value="jf_alpha">jf_alpha（女性）</option>
 <option value="jf_gongitsune">jf_gongitsune（女性）</option>
 <option value="jf_nezumi">jf_nezumi（女性）</option>
 <option value="jf_tebukuro">jf_tebukuro（女性）</option>
 <option value="jm_kumo">jm_kumo（男性）</option>
 </select>
-<p class="muted"><b>Kokoro 日本語TTS</b> ／ ブラウザ内 ／ API料金なし ／ WAV生成</p>
+<p class="muted"><b>高速AI音声</b>はCloudflare側で生成するためiPhoneの重いモデル準備が不要です。従来のKokoro音声も選べます。</p>
 <button id="prepare">音声エンジンを準備</button>
 <progress id="prog" max="100" value="0"></progress>
 <pre id="engineLog">未準備。画面を開いただけでは大容量のプロジェクト音声を読み込みません。</pre>
@@ -77,6 +77,28 @@ else returnLink.textContent='← Creator OSへ戻る';
 
 function setLog(id,msg,cls=''){const e=$(id);if(!e)return;e.textContent=msg;e.className=cls;}
 const sceneText=scene=>String(scene?.speechText||scene?.subtitleText||scene?.text||'').trim();
+const isCloudVoice=voice=>voice==='cloud_melotts_ja';
+async function generateCloudNarration(text){
+  const response=await fetch('./api/generate-narration',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text})});
+  if(!response.ok){
+    let reason='高速AI音声の生成に失敗しました。';
+    try{const data=await response.json();reason=data?.reason||reason}catch{}
+    throw new Error(reason);
+  }
+  const blob=await response.blob();
+  if(!blob.size)throw new Error('高速AI音声が空でした。');
+  return blob.type?blob:new Blob([blob],{type:'audio/mpeg'});
+}
+async function generateCloudBatch(items,concurrency=3){
+  const results=new Map();
+  for(let start=0;start<items.length;start+=concurrency){
+    const batch=items.slice(start,start+concurrency);
+    const generated=await Promise.all(batch.map(async item=>[item.index,await generateCloudNarration(item.text)]));
+    for(const [index,blob] of generated)results.set(index,blob);
+    await yieldToBrowser();
+  }
+  return results;
+}
 
 async function updateResumeSummary(projectOverride=null){
   if(projectId==='default')return;
@@ -159,8 +181,12 @@ $('#autoSyncScenes').onclick=async()=>{
       location.href=`./index.html?autoContinue=output#/project/${encodeURIComponent(projectId)}/bgm`;
       return;
     }
-    setLog('#autoSyncStatus','[2/3] 変更Sceneがあるため音声エンジンを準備しています…','warn');
-    if(!tts){
+    if(isCloudVoice(voice)){
+      setLog('#autoSyncStatus','[2/3] 高速AI音声を使用します。端末内モデル準備は省略します…','warn');
+    }else{
+      setLog('#autoSyncStatus','[2/3] 変更Sceneがあるため音声エンジンを準備しています…','warn');
+    }
+    if(!isCloudVoice(voice)&&!tts){
       await $('#prepare').onclick();
       if(!tts)throw new Error('音声エンジンの準備に失敗しました。上の準備ログを確認してください。');
     }
@@ -181,6 +207,10 @@ $('#autoSyncScenes').onclick=async()=>{
 $('#prepare').onclick=async()=>{
   const btn=$('#prepare');btn.disabled=true;$('#prog').value=5;
   try{
+    if(isCloudVoice($('#voice').value)){
+      await loadProject();$('#prog').value=100;$('#generateScenes').disabled=false;
+      setLog('#engineLog','高速AI音声は準備不要です ✓ すぐ生成できます。','ok');return;
+    }
     setLog('#engineLog','プロジェクト情報を読み込み中…','warn');
     await loadProject();
     setLog('#engineLog','Kokoro日本語TTSを読み込み中…','warn');
@@ -208,7 +238,8 @@ async function wavDurationFromBuffer(arrayBuffer){
 $('#generateScenes').onclick=async()=>{
   const btn=$('#generateScenes');btn.disabled=true;
   try{
-    if(!tts)throw new Error('先に音声エンジンを準備してください。');
+    const selectedVoice=$('#voice').value;
+    if(!tts&&!isCloudVoice(selectedVoice))throw new Error('先に音声エンジンを準備してください。');
     if(projectId==='default')throw new Error('Creator OSのプロジェクトからVoice Labを開いてください。');
     const project=currentProject||await loadProject();
     if(!project)throw new Error(`対象プロジェクトが見つかりません: ${projectId}`);
@@ -221,6 +252,9 @@ $('#generateScenes').onclick=async()=>{
     const voice=$('#voice').value;
     let total=0,generated=0,reused=0;
     const results=[];
+    const cloudItems=isCloudVoice(voice)?scenes.map((scene,index)=>({scene,index,text:sceneText(scene)})).filter(({scene,text})=>text&&!canReuseSceneNarration(scene,{text,voiceId:voice})):[];
+    if(cloudItems.length)setLog('#sceneResult',`高速AI音声を生成中… 0/${cloudItems.length}`,'warn');
+    const cloudAudio=cloudItems.length?await generateCloudBatch(cloudItems,3):new Map();
 
     for(let i=0;i<scenes.length;i++){
       const scene=scenes[i];
@@ -235,8 +269,8 @@ $('#generateScenes').onclick=async()=>{
       }
 
       setLog('#sceneResult',`生成中… ${i+1}/${scenes.length}\n再利用 ${reused} / 新規生成 ${generated}`,'warn');
-      const out=await tts.speak(text,voice);
-      const blob=out.toBlob();
+      const blob=isCloudVoice(voice)?cloudAudio.get(i):(await tts.speak(text,voice)).toBlob();
+      if(!blob)throw new Error(`シーン${i+1}の音声を取得できませんでした。`);
       // Read the WAV bytes once and reuse them for duration analysis and stable MediaRef identity.
       const audioBuffer=await blob.arrayBuffer();
       const duration=await wavDurationFromBuffer(audioBuffer);
@@ -250,7 +284,7 @@ $('#generateScenes').onclick=async()=>{
       const mediaId=await createAudioAssetIdFromArrayBuffer(audioBuffer);
       const stored=await putMedia({projectId:project.id,mediaId,kind:'audio',blob});
       if(stored.status!=='stored'||!stored.mediaRef)throw new Error(stored.reason||`シーン${i+1}の音声を保存できませんでした。`);
-      scene.narration={mediaRef:stored.mediaRef,fileName:`Kokoro_${voice}_scene_${i+1}.wav`,mimeType:blob.type||'audio/wav',source:'kokoro-js-jp',voiceId:voice,durationSec:duration,fingerprint:createNarrationFingerprint({text,voiceId:voice})};
+      scene.narration={mediaRef:stored.mediaRef,fileName:isCloudVoice(voice)?`MeloTTS_scene_${i+1}.mp3`:`Kokoro_${voice}_scene_${i+1}.wav`,mimeType:blob.type||(isCloudVoice(voice)?'audio/mpeg':'audio/wav'),source:isCloudVoice(voice)?'cloudflare-workers-ai-melotts':'kokoro-js-jp',voiceId:voice,durationSec:duration,fingerprint:createNarrationFingerprint({text,voiceId:voice})};
       total+=sceneDuration;generated++;results.push(`シーン${i+1}: 音声 ${duration.toFixed(2)}秒 → シーン ${sceneDuration.toFixed(2)}秒`);
       $('#sceneProg').value=Math.round(((i+1)/scenes.length)*100);
       project.updatedAt=new Date().toISOString();
@@ -260,7 +294,7 @@ $('#generateScenes').onclick=async()=>{
     }
 
     project.targetDurationSec=Math.round(total*100)/100;
-    project.narration={...(project.narration||{}),source:'kokoro-js-jp-scenes',voiceId:voice,sceneMode:true,sceneCount:scenes.length};
+    project.narration={...(project.narration||{}),source:isCloudVoice(voice)?'cloudflare-workers-ai-melotts-scenes':'kokoro-js-jp-scenes',voiceId:voice,sceneMode:true,sceneCount:scenes.length};
     if(generated>0||narrationVoiceBefore!==voice){
       recordNarrationVoiceDecision(project,{beforeVoiceId:narrationVoiceBefore,afterVoiceId:voice,generationMode:'scenes',hadProjectNarration:hadProjectNarrationBefore,sceneNarrationCountBefore});
     }
@@ -274,7 +308,7 @@ $('#generateScenes').onclick=async()=>{
       $('#sceneResult').after(box);
     }
   }catch(e){setLog('#sceneResult','シーン同期失敗:\n'+(e?.stack||e),'bad');}
-  finally{btn.disabled=!tts;}
+  finally{btn.disabled=!tts&&!isCloudVoice($('#voice').value);}
 };
 
 addEventListener('pagehide',()=>{if(sharedAudioContext&&sharedAudioContext.state!=='closed'){void sharedAudioContext.close().catch(()=>{});sharedAudioContext=null;}});

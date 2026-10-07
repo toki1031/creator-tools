@@ -24,7 +24,7 @@ test('one-click narration sync prepares only when needed and then runs existing 
   assert.match(handler,/const allReusable=scenes\.every/);
   assert.match(handler,/if\(allReusable\)\{/);
   assert.match(handler,/音声エンジンの準備を省略/);
-  assert.match(handler,/if\(!tts\)\{/);
+  assert.match(handler,/if\(!isCloudVoice\(voice\)&&!tts\)\{/);
   assert.match(handler,/await \$\('#prepare'\)\.onclick\(\);/);
   assert.match(handler,/if\(!tts\)throw new Error\('音声エンジンの準備に失敗しました/);
   assert.match(handler,/await \$\('#generateScenes'\)\.onclick\(\);/);
@@ -79,4 +79,14 @@ test('one-click sync checks reusable narration before starting the heavy TTS eng
   const prepareCall=handler.indexOf("await $('#prepare').onclick()");
   assert.ok(reuseCheck>=0&&prepareCall>reuseCheck);
   assert.match(handler,/if\(allReusable\)[\s\S]*location\.href=[\s\S]*return;/);
+});
+
+
+test('Voice Lab fast narration skips Kokoro preparation and limits cloud concurrency',()=>{
+  assert.match(html,/cloud_melotts_ja/);
+  assert.match(html,/generateCloudNarration/);
+  assert.match(html,/generateCloudBatch\(cloudItems,3\)/);
+  assert.match(html,/!isCloudVoice\(voice\)&&!tts/);
+  assert.match(html,/cloudflare-workers-ai-melotts/);
+  assert.match(html,/audio\/mpeg/);
 });
