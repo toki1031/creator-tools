@@ -246,7 +246,22 @@ $('#prepare').onclick=async()=>{
   }
 };
 
-async function wavDurationFromBuffer(arrayBuffer){
+async function audioDurationFromBlob(blob,arrayBuffer){
+  if(blob?.type==='audio/mpeg'){
+    const url=URL.createObjectURL(blob);
+    try{
+      const duration=await new Promise((resolve,reject)=>{
+        const audio=new Audio();
+        const cleanup=()=>{audio.removeAttribute('src');audio.load();};
+        const timer=setTimeout(()=>{cleanup();reject(new Error('MP3の音声尺取得がタイムアウトしました。'));},10000);
+        audio.preload='metadata';
+        audio.onloadedmetadata=()=>{clearTimeout(timer);const value=Number(audio.duration)||0;cleanup();value>0?resolve(value):reject(new Error('MP3の音声尺を取得できませんでした。'));};
+        audio.onerror=()=>{clearTimeout(timer);cleanup();reject(new Error('生成されたMP3をiPhoneで読み込めませんでした。'));};
+        audio.src=url;
+      });
+      return duration;
+    }finally{URL.revokeObjectURL(url);}
+  }
   const AC=globalThis.AudioContext||globalThis.webkitAudioContext;
   if(!AC)throw new Error('音声尺の取得に必要なWeb Audioを利用できません。');
   if(!sharedAudioContext||sharedAudioContext.state==='closed')sharedAudioContext=new AC();
@@ -292,7 +307,7 @@ $('#generateScenes').onclick=async()=>{
       if(!blob)throw new Error(`シーン${i+1}の音声を取得できませんでした。`);
       // Read the WAV bytes once and reuse them for duration analysis and stable MediaRef identity.
       const audioBuffer=await blob.arrayBuffer();
-      const duration=await wavDurationFromBuffer(audioBuffer);
+      const duration=await audioDurationFromBlob(blob,audioBuffer);
       if(!(duration>0))throw new Error(`シーン${i+1}の音声尺を取得できませんでした。`);
       const sceneDuration=Math.max(0.5,Math.round((duration+0.15)*100)/100);
       scene.speechText=text;
