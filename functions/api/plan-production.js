@@ -1,4 +1,4 @@
-const MODEL='@cf/meta/llama-3.1-8b-instruct';
+const MODEL='@cf/zai-org/glm-4.7-flash';
 const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json; charset=utf-8'}});
 const clean=v=>String(v??'').trim();
 function extractJson(value){
