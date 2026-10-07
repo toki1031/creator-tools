@@ -85,7 +85,7 @@ test('one-click sync checks reusable narration before starting the heavy TTS eng
 test('Voice Lab fast narration skips Kokoro preparation and limits cloud concurrency',()=>{
   assert.match(html,/cloud_melotts_ja/);
   assert.match(html,/generateCloudNarration/);
-  assert.match(html,/generateCloudBatch\(cloudItems,2\)/);
+  assert.match(html,/generateCloudBatch\(cloudItems,2(?:,\{[\s\S]*?\})?\)/);
   assert.match(html,/!isCloudVoice\(voice\)&&!tts/);
   assert.match(html,/cloudflare-workers-ai-melotts/);
   assert.match(html,/audio\/mpeg/);
@@ -95,7 +95,7 @@ test('Voice Lab fast narration skips Kokoro preparation and limits cloud concurr
 test('Voice Lab retries cloud narration and propagates Scene sync failures to one-click status',()=>{
   assert.match(html,/attempts=3/);
   assert.match(html,/Promise\.allSettled/);
-  assert.match(html,/generateCloudBatch\(cloudItems,2\)/);
+  assert.match(html,/generateCloudBatch\(cloudItems,2(?:,\{[\s\S]*?\})?\)/);
   assert.match(html,/const syncResult=await \$\('#generateScenes'\)\.onclick\(\)/);
   assert.match(html,/if\(syncResult\?\.ok===false\)throw syncResult\.error/);
   assert.match(html,/return \{ok:false,error:e\}/);
