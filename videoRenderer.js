@@ -515,10 +515,14 @@ function isIOSDevice(userAgent = globalThis.navigator?.userAgent || '') { return
 export function resolveExportProfile(project, { userAgent = globalThis.navigator?.userAgent || '' } = {}) {
   const requestedWidth = Math.max(2, Number(project?.output?.width) || 720);
   const requestedHeight = Math.max(2, Number(project?.output?.height) || 1280);
-  const iosSafeMode = isIOSDevice(userAgent);
+  const iosDevice = isIOSDevice(userAgent);
   const maxPixels = 720 * 1280;
+  const productionRenderJob = project?.__renderJob === true && project?.autoProduction?.mode === 'production-request';
+  const productionMaxPixels = 1080 * 1920;
+  const allowProduction1080 = iosDevice && productionRenderJob && requestedWidth * requestedHeight <= productionMaxPixels;
+  const iosSafeMode = iosDevice && !allowProduction1080;
   if (!iosSafeMode || requestedWidth * requestedHeight <= maxPixels) {
-    return { requestedWidth, requestedHeight, width: requestedWidth, height: requestedHeight, iosSafeMode: false };
+    return { requestedWidth, requestedHeight, width: requestedWidth, height: requestedHeight, iosSafeMode };
   }
   const scale = Math.sqrt(maxPixels / (requestedWidth * requestedHeight));
   const even = value => Math.max(2, Math.round(value / 2) * 2);
