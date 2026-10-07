@@ -130,3 +130,15 @@ test('Cloud MP3 duration uses browser metadata instead of Web Audio decoding',()
   assert.match(html,/onloadedmetadata/);
   assert.match(html,/audioDurationFromBlob\(blob,audioBuffer\)/);
 });
+
+
+test('Renderer reports the exact Scene when narration decoding fails',async()=>{
+  const source=await readFile(new URL('../videoRenderer.js',import.meta.url),'utf8');
+  assert.match(source,/ナレーションを動画用にデコードできませんでした/);
+  assert.match(source,/音声を再生成してください/);
+});
+
+test('Shorts runtime recognizes MediaRef-only Scene narration',async()=>{
+  const source=await readFile(new URL('../shortsRenderProject.js',import.meta.url),'utf8');
+  assert.match(source,/narration\?\.audioData \|\| scene\?\.narration\?\.mediaRef\?\.id/);
+});
