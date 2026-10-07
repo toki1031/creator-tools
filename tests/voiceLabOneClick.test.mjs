@@ -125,7 +125,8 @@ test('MeloTTS endpoint normalizes documented base64 Audio responses',async()=>{
 });
 
 test('Cloud MP3 duration uses browser metadata instead of Web Audio decoding',()=>{
-  assert.match(html,/blob\?\.type==='audio\/mpeg'/);
+  assert.match(html,/const mime=String\(blob\?\.type\|\|''\).*toLowerCase\(\)/);
+  assert.match(html,/mime==='audio\/mpeg'\|\|mime==='audio\/mp3'\|\|mime==='audio\/x-mp3'/);
   assert.match(html,/new Audio\(\)/);
   assert.match(html,/onloadedmetadata/);
   assert.match(html,/audioDurationFromBlob\(blob,audioBuffer\)/);
