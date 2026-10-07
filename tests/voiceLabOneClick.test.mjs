@@ -24,7 +24,7 @@ test('one-click narration sync prepares only when needed and then runs existing 
   assert.match(handler,/const allReusable=scenes\.every/);
   assert.match(handler,/if\(allReusable\)\{/);
   assert.match(handler,/音声エンジンの準備を省略/);
-  assert.match(handler,/if\(!tts\)\{/);
+  assert.match(handler,/if\(!isCloudVoice\(voice\)&&!tts\)\{/);
   assert.match(handler,/await \$\('#prepare'\)\.onclick\(\);/);
   assert.match(handler,/if\(!tts\)throw new Error\('音声エンジンの準備に失敗しました/);
   assert.match(handler,/await \$\('#generateScenes'\)\.onclick\(\);/);
