@@ -78,23 +78,38 @@ else returnLink.textContent='← Creator OSへ戻る';
 function setLog(id,msg,cls=''){const e=$(id);if(!e)return;e.textContent=msg;e.className=cls;}
 const sceneText=scene=>String(scene?.speechText||scene?.subtitleText||scene?.text||'').trim();
 const isCloudVoice=voice=>voice==='cloud_melotts_ja';
-async function generateCloudNarration(text){
-  const response=await fetch('./api/generate-narration',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text})});
-  if(!response.ok){
-    let reason='高速AI音声の生成に失敗しました。';
-    try{const data=await response.json();reason=data?.reason||reason}catch{}
-    throw new Error(reason);
+async function generateCloudNarration(text,{attempts=3}={}){
+  let lastError=null;
+  for(let attempt=1;attempt<=attempts;attempt++){
+    try{
+      const response=await fetch('./api/generate-narration',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text})});
+      if(!response.ok){
+        let reason='高速AI音声の生成に失敗しました。';
+        let detail='';
+        try{const data=await response.json();reason=data?.reason||reason;detail=data?.detail||''}catch{}
+        const error=new Error(detail?reason+'（'+detail+'）':reason);
+        error.status=response.status;
+        throw error;
+      }
+      const blob=await response.blob();
+      if(!blob.size)throw new Error('高速AI音声が空でした。');
+      return blob.type?blob:new Blob([blob],{type:'audio/mpeg'});
+    }catch(error){
+      lastError=error;
+      if(attempt>=attempts||Number(error?.status)===400||Number(error?.status)===403)break;
+      await new Promise(resolve=>setTimeout(resolve,350*attempt));
+    }
   }
-  const blob=await response.blob();
-  if(!blob.size)throw new Error('高速AI音声が空でした。');
-  return blob.type?blob:new Blob([blob],{type:'audio/mpeg'});
+  throw lastError||new Error('高速AI音声の生成に失敗しました。');
 }
-async function generateCloudBatch(items,concurrency=3){
+async function generateCloudBatch(items,concurrency=2){
   const results=new Map();
   for(let start=0;start<items.length;start+=concurrency){
     const batch=items.slice(start,start+concurrency);
-    const generated=await Promise.all(batch.map(async item=>[item.index,await generateCloudNarration(item.text)]));
-    for(const [index,blob] of generated)results.set(index,blob);
+    const settled=await Promise.allSettled(batch.map(async item=>[item.index,await generateCloudNarration(item.text)]));
+    const failed=settled.find(result=>result.status==='rejected');
+    for(const result of settled)if(result.status==='fulfilled')results.set(result.value[0],result.value[1]);
+    if(failed)throw failed.reason;
     await yieldToBrowser();
   }
   return results;
@@ -191,7 +206,8 @@ $('#autoSyncScenes').onclick=async()=>{
       if(!tts)throw new Error('音声エンジンの準備に失敗しました。上の準備ログを確認してください。');
     }
     setLog('#autoSyncStatus','[3/3] 未生成・変更Sceneだけ同期しています…','warn');
-    await $('#generateScenes').onclick();
+    const syncResult=await $('#generateScenes').onclick();
+    if(syncResult?.ok===false)throw syncResult.error;
     const ready=scenes.filter(scene=>Boolean(scene?.narration?.audioData||scene?.narration?.mediaRef?.id)).length;
     if(!scenes.length)throw new Error('シーンがありません。');
     if(ready<scenes.length)throw new Error(`ナレーション同期が完了していません：${ready}/${scenes.length} Scene`);
@@ -254,7 +270,7 @@ $('#generateScenes').onclick=async()=>{
     const results=[];
     const cloudItems=isCloudVoice(voice)?scenes.map((scene,index)=>({scene,index,text:sceneText(scene)})).filter(({scene,text})=>text&&!canReuseSceneNarration(scene,{text,voiceId:voice})):[];
     if(cloudItems.length)setLog('#sceneResult',`高速AI音声を生成中… 0/${cloudItems.length}`,'warn');
-    const cloudAudio=cloudItems.length?await generateCloudBatch(cloudItems,3):new Map();
+    const cloudAudio=cloudItems.length?await generateCloudBatch(cloudItems,2):new Map();
 
     for(let i=0;i<scenes.length;i++){
       const scene=scenes[i];
@@ -307,8 +323,9 @@ $('#generateScenes').onclick=async()=>{
       box.innerHTML=`<a class="btn" href="./index.html#/project/${encodeURIComponent(projectId)}/scenes">← シーン編集で確認</a><a class="btn" href="./index.html#/project/${encodeURIComponent(projectId)}/bgm">次へ：字幕・BGM →</a>`;
       $('#sceneResult').after(box);
     }
-  }catch(e){setLog('#sceneResult','シーン同期失敗:\n'+(e?.stack||e),'bad');}
+  }catch(e){setLog('#sceneResult','シーン同期失敗:\n'+(e?.message||e),'bad');return {ok:false,error:e};}
   finally{btn.disabled=!tts&&!isCloudVoice($('#voice').value);}
+  return {ok:true};
 };
 
 addEventListener('pagehide',()=>{if(sharedAudioContext&&sharedAudioContext.state!=='closed'){void sharedAudioContext.close().catch(()=>{});sharedAudioContext=null;}});
