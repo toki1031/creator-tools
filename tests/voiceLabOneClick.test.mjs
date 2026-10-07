@@ -100,3 +100,18 @@ test('Voice Lab retries cloud narration and propagates Scene sync failures to on
   assert.match(html,/if\(syncResult\?\.ok===false\)throw syncResult\.error/);
   assert.match(html,/return \{ok:false,error:e\}/);
 });
+
+
+test('Cloudflare MeloTTS uses the provider Japanese language code',async()=>{
+  const source=await readFile(new URL('../functions/api/generate-narration.js',import.meta.url),'utf8');
+  assert.match(source,/lang:'jp'/);
+  assert.doesNotMatch(source,/lang:'ja'/);
+});
+
+
+test('Cloud narration reuse fingerprints include the cloud source',()=>{
+  assert.match(html,/narrationSourceForVoice/);
+  assert.match(html,/cloudflare-workers-ai-melotts/);
+  assert.match(html,/canReuseNarration\(scene,text,voice\)/);
+  assert.match(html,/fingerprint:narrationFingerprintFor\(text,voice\)/);
+});

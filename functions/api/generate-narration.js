@@ -7,8 +7,10 @@ export async function onRequestPost({request,env}){
   const prompt=Array.from(String(body?.text||'').trim()).slice(0,MAX_TEXT_CHARS).join('');
   if(!prompt)return json({reason:'ナレーション文章がありません'},400);
   try{
-    const result=await env.AI.run(MODEL,{prompt,lang:'ja'});
-    return new Response(result,{headers:{'content-type':'audio/mpeg','cache-control':'no-store','x-creator-os-model':MODEL}});
+    const result=await env.AI.run(MODEL,{prompt,lang:'jp'});
+    const response=new Response(result,{headers:{'content-type':'audio/mpeg','cache-control':'no-store','x-creator-os-model':MODEL}});
+    if(!response.body)return json({reason:'高速AI音声が空でした'},502);
+    return response;
   }catch(error){
     const message=String(error?.message||'');
     const quota=/quota|limit|neurons|429/i.test(message);
