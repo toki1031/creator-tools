@@ -11,7 +11,7 @@ export function createShortsRenderProject(project, draftId) {
   if (!workspace.scenes.length) throw new Error('Shorts出力に使えるSceneがありません。');
 
   const scenes = workspace.scenes.map(item => clone(item.scene) || item.scene);
-  const hasSceneNarration = scenes.some(scene => Boolean(scene?.narration?.audioData));
+  const hasSceneNarration = scenes.some(scene => Boolean(scene?.narration?.audioData || scene?.narration?.mediaRef?.id));
   const sourceNarration = project?.narration && typeof project.narration === 'object' ? project.narration : {};
   const output = project?.output && typeof project.output === 'object' ? project.output : {};
 
@@ -30,6 +30,7 @@ export function createShortsRenderProject(project, draftId) {
       ...sourceNarration,
       // Whole-project narration cannot be time-shifted safely for an extracted segment.
       audioData: '',
+      mediaRef: null,
       fileName: '',
       mimeType: '',
       shortsSceneNarrationOnly: hasSceneNarration
@@ -46,7 +47,7 @@ export function createShortsRenderProject(project, draftId) {
       draftId: String(draftId || ''),
       sourceSceneIds: workspace.scenes.map(item => item.sceneId),
       missingSceneIds: [...workspace.missingSceneIds],
-      suppressedWholeNarration: Boolean(sourceNarration.audioData)
+      suppressedWholeNarration: Boolean(sourceNarration.audioData || sourceNarration.mediaRef?.id)
     }
   };
 }
@@ -56,7 +57,7 @@ export function summarizeShortsRenderProject(project) {
   return {
     sceneCount: scenes.length,
     durationSec: scenes.reduce((sum, scene) => sum + Math.max(0, Number(scene?.durationSec) || 0), 0),
-    sceneNarrationCount: scenes.filter(scene => Boolean(scene?.narration?.audioData)).length,
+    sceneNarrationCount: scenes.filter(scene => Boolean(scene?.narration?.audioData || scene?.narration?.mediaRef?.id)).length,
     suppressedWholeNarration: Boolean(project?.shortsRuntime?.suppressedWholeNarration),
     missingSceneCount: Array.isArray(project?.shortsRuntime?.missingSceneIds) ? project.shortsRuntime.missingSceneIds.length : 0,
     width: Number(project?.output?.width) || 0,
