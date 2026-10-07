@@ -107,3 +107,11 @@ test('Cloudflare MeloTTS uses the provider Japanese language code',async()=>{
   assert.match(source,/lang:'jp'/);
   assert.doesNotMatch(source,/lang:'ja'/);
 });
+
+
+test('Cloud narration reuse fingerprints include the cloud source',()=>{
+  assert.match(html,/narrationSourceForVoice/);
+  assert.match(html,/cloudflare-workers-ai-melotts/);
+  assert.match(html,/canReuseNarration\(scene,text,voice\)/);
+  assert.match(html,/fingerprint:narrationFingerprintFor\(text,voice\)/);
+});
