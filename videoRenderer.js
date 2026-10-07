@@ -47,7 +47,7 @@ function bgmLooksLikeVideo(project) {
 }
 
 function narrationDataMime(project) {
-  return String(project?.narration?.audioData || '').match(/^data:([^;,]+)/)?.[1]?.toLowerCase() || String(project?.narration?.mimeType || '').toLowerCase();
+  return String(project?.narration?.audioData || '').match(/^data:([^;,]+)/)?.[1]?.toLowerCase() || String(project?.narration?.mediaRef?.mimeType || project?.narration?.mimeType || '').toLowerCase();
 }
 
 function narrationLooksLikeVideo(project) {
@@ -73,7 +73,7 @@ export function validateVideoProject(project) {
   const bgmInvalid = Boolean(project.output?.bgmEnabled && (project.bgm?.audioData || project.bgm?.mediaRef?.id) && bgmLooksLikeVideo(project));
   if (bgmInvalid) errors.push('現在のBGMはMOV / MP4などの動画ファイルです。BGM・字幕画面でMP3・M4A・AAC・WAVなどの音声ファイルを再登録してください。');
   const sceneNarrationCount = scenes.filter(scene => scene?.narration?.audioData || scene?.narration?.mediaRef?.id).length;
-  const narrationInvalid = Boolean(project.narration?.audioData && narrationLooksLikeVideo(project));
+  const narrationInvalid = Boolean((project.narration?.audioData || project.narration?.mediaRef?.id) && narrationLooksLikeVideo(project));
   if (narrationInvalid) errors.push('現在のナレーションは動画ファイルです。台本・音声画面でMP3・M4A・AAC・WAVなどの音声ファイルを再登録してください。');
   if (project.output?.subtitles && !scenes.some(scene => scene.subtitleEnabled !== false && String(scene.subtitleText || '').trim())) warnings.push('表示できる字幕がありません。');
   if (project.autoProduction?.mode === 'production-request') {
@@ -279,17 +279,24 @@ export async function prepareVideoProject(project, { onStatus = () => {}, loadMe
   let narrationMimeType = narrationDataMime(project);
   let narrationFetchError = '';
   let narrationInvalid = false;
-  if (!hasSceneNarrations && project.narration?.audioData) {
+  if (!hasSceneNarrations && (project.narration?.audioData || project.narration?.mediaRef?.id)) {
     onStatus('ナレーション音声を確認しています…');
     if (narrationLooksLikeVideo(project)) {
       narrationInvalid = true;
       onStatus('ナレーションが動画ファイルです。音声ファイルを再登録してください。');
     } else {
       try {
-        const response = await fetch(project.narration.audioData);
-        if (!response.ok) throw new Error(`ナレーション取得エラー (${response.status})`);
-        narrationArrayBuffer = await response.arrayBuffer();
-        narrationMimeType = response.headers.get('content-type') || narrationMimeType || '';
+        if(project.narration.mediaRef?.id){
+          const resolved=await loadMedia({projectId:String(project.id||''),mediaId:project.narration.mediaRef.id});
+          if(resolved?.status!=='resolved'||!resolved.blob)throw new Error(resolved?.reason||'保存済みナレーションを読み出せませんでした');
+          narrationArrayBuffer=await resolved.blob.arrayBuffer();
+          narrationMimeType=resolved.blob.type||project.narration.mediaRef.mimeType||narrationMimeType||'';
+        }else{
+          const response = await fetch(project.narration.audioData);
+          if (!response.ok) throw new Error(`ナレーション取得エラー (${response.status})`);
+          narrationArrayBuffer = await response.arrayBuffer();
+          narrationMimeType = response.headers.get('content-type') || narrationMimeType || '';
+        }
       } catch (error) {
         narrationFetchError = error instanceof Error ? error.message : String(error);
         console.warn('Narration load failed', error);
@@ -536,7 +543,7 @@ export function validatePreparedAudioForExport(project, prepared) {
     const failed = [];
     scenes.forEach((scene, index) => { if ((scene?.narration?.audioData || scene?.narration?.mediaRef?.id) && !preparedScenes[index]?.available) failed.push(index + 1); });
     if (failed.length) errors.push(`シーン別ナレーションを読み込めませんでした（シーン${failed.join('・')}）`);
-  } else if (project?.narration?.audioData && !prepared?.narrationArrayBuffer) {
+  } else if ((project?.narration?.audioData || project?.narration?.mediaRef?.id) && !prepared?.narrationArrayBuffer) {
     errors.push(`ナレーションを読み込めませんでした${prepared?.narrationFetchError ? `（${prepared.narrationFetchError}）` : ''}`);
   }
   return errors;
