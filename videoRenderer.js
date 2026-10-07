@@ -520,8 +520,9 @@ export function resolveExportProfile(project, { userAgent = globalThis.navigator
   const productionRenderJob = project?.__renderJob === true && project?.autoProduction?.mode === 'production-request';
   const productionMaxPixels = 1080 * 1920;
   const allowProduction1080 = iosDevice && productionRenderJob && requestedWidth * requestedHeight <= productionMaxPixels;
-  const iosSafeMode = iosDevice && !allowProduction1080;
-  if (!iosSafeMode || requestedWidth * requestedHeight <= maxPixels) {
+  const iosResolutionCap = iosDevice && !allowProduction1080;
+  const iosSafeMode = iosDevice;
+  if (!iosResolutionCap || requestedWidth * requestedHeight <= maxPixels) {
     return { requestedWidth, requestedHeight, width: requestedWidth, height: requestedHeight, iosSafeMode };
   }
   const scale = Math.sqrt(maxPixels / (requestedWidth * requestedHeight));
