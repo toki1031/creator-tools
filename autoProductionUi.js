@@ -2,6 +2,7 @@ import { saveProject } from './db.js';
 import { goScenes, readRoute } from './router.js';
 import { createAutoProductionProject } from './autoProductionProject.js';
 import { planProductionRequest } from './productionPlanner.js';
+import { needsResearchStage, researchProductionRequest } from './productionResearch.js';
 
 const BUTTON_ID = 'openAutoProduction';
 const DIALOG_ID = 'autoProductionDialog';
@@ -87,8 +88,14 @@ function buildDialog() {
         targetDurationSec: 60
       });
       if (!result.ok && result.reason === 'no-scenes') {
+        let research=null;
+        if(needsResearchStage(requestText,studio.genre)){
+          status.textContent='Research AIが確認すべき事実と安全項目を整理しています…';
+          const researched=await researchProductionRequest(requestText,studio.genre);
+          if(researched.ok) research=researched.research;
+        }
         status.textContent = 'AIが依頼内容から構成・台本・Sceneを作っています…';
-        const planned = await planProductionRequest(requestText, studio.genre);
+        const planned = await planProductionRequest(requestText, studio.genre,{research});
         result = createAutoProductionProject({
           requestText,
           title: String(data.get('title') ?? ''),
